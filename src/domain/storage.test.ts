@@ -1,0 +1,179 @@
+import { describe, expect, it, vi } from 'vitest'
+import { emptyProfile, type Profile } from './types'
+import {
+  exportProfileBackup,
+  loadProfile,
+  MAX_PROFILE_BYTES,
+  migrateProfile,
+  parseProfileBackup,
+  PROFILE_STORAGE_KEY,
+  saveProfile,
+} from './storage'
+
+function populatedProfile(): Profile {
+  return {
+    version: 1,
+    catalogRevision: 'old-catalog',
+    epoch: 3,
+    purchases: {
+      known: { epoch: 3, active: true },
+      'removed-or-unknown': { epoch: 1, active: false },
+    },
+    milestones: { received: true, 'unknown-milestone': true },
+    showSpoilers: false,
+  }
+}
+
+describe('profile backups', () => {
+  it('round trips ownership, purchase epochs, activation, milestones and spoiler preference', () => {
+    const profile = populatedProfile()
+    profile.showSpoilers = true
+    const exported = exportProfileBackup(profile)
+    expect(exported.ok).toBe(true)
+    if (!exported.ok) throw new Error('Expected export success')
+    expect(parseProfileBackup(exported.text)).toEqual({ ok: true, profile })
+  })
+
+  it('starts with hidden spoilers and an empty, versioned profile', () => {
+    expect(emptyProfile('current')).toEqual({
+      version: 1,
+      catalogRevision: 'current',
+      epoch: 0,
+      purchases: {},
+      milestones: {},
+      showSpoilers: false,
+    })
+  })
+
+  it('rejects malformed JSON without returning replacement progress', () => {
+    expect(parseProfileBackup('{')).toMatchObject({ ok: false, error: { kind: 'invalid-json' } })
+  })
+
+  it.each([
+    ['unsupported version', { ...populatedProfile(), version: 2 }],
+    ['missing property', { version: 1 }],
+    ['unexpected property', { ...populatedProfile(), cost: '100' }],
+    ['numeric revision', { ...populatedProfile(), catalogRevision: 2 }],
+    ['empty revision', { ...populatedProfile(), catalogRevision: '' }],
+    ['negative epoch', { ...populatedProfile(), epoch: -1 }],
+    ['fractional epoch', { ...populatedProfile(), epoch: 1.5 }],
+    ['unsafe epoch', { ...populatedProfile(), epoch: Number.MAX_SAFE_INTEGER + 1 }],
+    ['string epoch', { ...populatedProfile(), epoch: '3' }],
+    ['string spoiler flag', { ...populatedProfile(), showSpoilers: 'false' }],
+    ['array purchases', { ...populatedProfile(), purchases: [] }],
+    ['null milestones', { ...populatedProfile(), milestones: null }],
+    ['future purchase epoch', { ...populatedProfile(), purchases: { future: { epoch: 4, active: false } } }],
+    ['invalid activation', { ...populatedProfile(), purchases: { invalid: { epoch: 0, active: 1 } } }],
+    ['extra purchase property', { ...populatedProfile(), purchases: { invalid: { epoch: 0, active: false, title: 'extra' } } }],
+    ['incomplete purchase', { ...populatedProfile(), purchases: { invalid: { epoch: 0 } } }],
+    ['false milestone', { ...populatedProfile(), milestones: { invalid: false } }],
+    ['empty purchase ID', { ...populatedProfile(), purchases: { ' ': { epoch: 0, active: false } } }],
+    ['array root', []],
+    ['null root', null],
+  ])('rejects %s', (_label, candidate) => {
+    expect(parseProfileBackup(JSON.stringify(candidate))).toMatchObject({ ok: false, error: { kind: 'invalid-profile' } })
+  })
+
+  it.each(['__proto__', 'constructor', 'prototype'])('rejects the reserved property %s at every record level', (key) => {
+    const root = JSON.stringify(populatedProfile()).replace('"version":1', `"${key}":{},"version":1`)
+    const purchaseId = { ...populatedProfile(), purchases: JSON.parse(`{"${key}":{"epoch":0,"active":false}}`) as Profile['purchases'] }
+    const milestoneId = { ...populatedProfile(), milestones: JSON.parse(`{"${key}":true}`) as Profile['milestones'] }
+    const purchaseProperty = { ...populatedProfile(), purchases: { item: JSON.parse(`{"epoch":0,"active":false,"${key}":true}`) as { epoch: number; active: boolean } } }
+    for (const text of [root, JSON.stringify(purchaseId), JSON.stringify(milestoneId), JSON.stringify(purchaseProperty)]) {
+      expect(parseProfileBackup(text)).toMatchObject({ ok: false, error: { kind: 'invalid-profile' } })
+    }
+    expect(Object.prototype).not.toHaveProperty('polluted')
+  })
+
+  it('limits UTF-8 bytes before parsing, including multibyte strings', () => {
+    const tooLarge = 'é'.repeat(MAX_PROFILE_BYTES / 2 + 1)
+    expect(tooLarge.length).toBeLessThan(MAX_PROFILE_BYTES)
+    expect(parseProfileBackup(tooLarge)).toMatchObject({ ok: false, error: { kind: 'too-large' } })
+  })
+
+  it('accepts an exactly 4 MiB JSON file', () => {
+    const text = JSON.stringify(emptyProfile('current'))
+    expect(parseProfileBackup(text + ' '.repeat(MAX_PROFILE_BYTES - text.length)).ok).toBe(true)
+  })
+
+  it('validates profiles before export instead of silently serializing unsupported fields', () => {
+    const candidate = { ...populatedProfile(), unexpected: true }
+    expect(exportProfileBackup(candidate)).toMatchObject({ ok: false, error: { kind: 'invalid-profile' } })
+  })
+})
+
+describe('catalog migration', () => {
+  it('retains unknown purchases and milestones while updating the catalog revision', () => {
+    const source = populatedProfile()
+    const migrated = migrateProfile(source, 'new-catalog')
+    expect(migrated).toEqual({ ...source, catalogRevision: 'new-catalog' })
+    expect(migrated.purchases['removed-or-unknown']).toEqual({ epoch: 1, active: false })
+    expect(migrated.milestones['unknown-milestone']).toBe(true)
+    expect(source.catalogRevision).toBe('old-catalog')
+    migrated.purchases.known!.active = false
+    expect(source.purchases.known!.active).toBe(true)
+  })
+})
+
+describe('device storage', () => {
+  it('creates a new profile only when the storage key is absent', () => {
+    const getItem = vi.fn(() => null)
+    expect(loadProfile({ getItem }, 'current')).toEqual({ ok: true, profile: emptyProfile('current'), source: 'new', migrated: false })
+    expect(getItem).toHaveBeenCalledWith(PROFILE_STORAGE_KEY)
+  })
+
+  it('loads and migrates stored progress without discarding IDs', () => {
+    const profile = populatedProfile()
+    expect(loadProfile({ getItem: () => JSON.stringify(profile) }, 'current')).toEqual({
+      ok: true,
+      profile: { ...profile, catalogRevision: 'current' },
+      source: 'stored',
+      migrated: true,
+    })
+  })
+
+  it('reports whether stored progress already uses the current revision', () => {
+    expect(loadProfile({ getItem: () => JSON.stringify(populatedProfile()) }, 'old-catalog')).toMatchObject({ ok: true, migrated: false })
+  })
+
+  it('reports read failures without returning empty replacement progress', () => {
+    const source = populatedProfile()
+    const result = loadProfile({ getItem: () => { throw new Error('blocked') } }, 'current')
+    expect(result).toMatchObject({ ok: false, error: { kind: 'storage-read' } })
+    expect(result).not.toHaveProperty('profile')
+    expect(source).toEqual(populatedProfile())
+  })
+
+  it('reports corrupt saved progress without overwriting it', () => {
+    const stored = '{corrupt}'
+    const storage = { getItem: () => stored, setItem: vi.fn() }
+    const result = loadProfile(storage, 'current')
+    expect(result).toMatchObject({ ok: false, error: { kind: 'invalid-json' } })
+    expect(result).not.toHaveProperty('profile')
+    expect(storage.setItem).not.toHaveBeenCalled()
+    expect(storage.getItem()).toBe(stored)
+  })
+
+  it('writes a validated round-trippable profile to the stable key', () => {
+    const profile = populatedProfile()
+    const setItem = vi.fn()
+    expect(saveProfile({ setItem }, profile)).toEqual({ ok: true })
+    const [key, text] = setItem.mock.calls[0] as unknown as [string, string]
+    expect(key).toBe(PROFILE_STORAGE_KEY)
+    expect(parseProfileBackup(text)).toEqual({ ok: true, profile })
+  })
+
+  it('reports quota/write failures while preserving the session profile', () => {
+    const profile = populatedProfile()
+    const storage = { setItem: () => { throw new Error('quota exceeded') } }
+    expect(saveProfile(storage, profile)).toMatchObject({ ok: false, error: { kind: 'storage-write' } })
+    expect(profile).toEqual(populatedProfile())
+  })
+
+  it('does not write a malformed runtime profile', () => {
+    const profile = { ...populatedProfile(), epoch: -1 }
+    const setItem = vi.fn()
+    expect(saveProfile({ setItem }, profile)).toMatchObject({ ok: false, error: { kind: 'invalid-profile' } })
+    expect(setItem).not.toHaveBeenCalled()
+  })
+})

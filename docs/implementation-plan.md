@@ -6,7 +6,7 @@ Build a static React and TypeScript app with Vite, Yarn and React Flow. Preserve
 
 Publish through GitHub Pages from `AustinGarrod/idle-slayer-ascension-map`. Progress stays in local storage, with JSON backup and restore.
 
-The current repository is a minimal bootstrap. It has a placeholder page, development/build commands and these handoff documents. It does not yet implement the map, catalog extraction, progress tracking or Pages deployment. Continue with the work below on Windows after providing game inputs.
+The map, offline extraction, complete reviewed 7.2.0 catalog and local progress contract are implemented. README.md lists checks; docs/architecture.md describes behavior; docs/data.md and extraction READMEs record provenance and exact Windows refresh commands. Requirements below remain the acceptance contract. Every refresh must pass the release gate before publication.
 
 ## Data and game rules
 

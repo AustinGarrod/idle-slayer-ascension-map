@@ -2,7 +2,7 @@
 
 ## Current task and repository state
 
-This is the bootstrap for a static Idle Slayer Ascension Map. It uses React, TypeScript, Vite and Yarn. The starter page is a placeholder. Map interactions, extracted game data, progress persistence and deployment are future work specified in `docs/implementation-plan.md`.
+This is a static React/TypeScript/Vite/Yarn/React Flow Ascension Map. Its reviewed catalog covers Idle Slayer 7.2.0 / Steam build 25551532: 288 upgrades, 318 connections and 288 icons. Map interactions and local progress are implemented. Read docs/architecture.md, docs/data.md and extraction/native-rule READMEs before changing those contracts. docs/implementation-plan.md preserves accepted scope and release gates.
 
 The public remote is `AustinGarrod/idle-slayer-ascension-map`. The existing Mac checkout has the spelling `idle-slayer-ascention-map`; do not rename it as incidental cleanup. Use the public repository spelling for fresh checkouts and URLs.
 
@@ -12,9 +12,9 @@ Read `README.md`, `design.md` and `docs/implementation-plan.md` before implement
 
 - Use Node.js 24 and the pinned `yarn@4.13.0`. Keep `yarn.lock` committed, use `yarn install --immutable`, and avoid other package-manager lockfiles. Preserve the `node-modules` linker in `.yarnrc.yml`.
 - Use React and TypeScript for application code. Keep game-rule evaluation and local persistence separate from rendering so they can be tested independently.
-- Use the existing package scripts: `yarn dev`, `yarn typecheck`, `yarn build` and `yarn preview`. On Windows PowerShell, invoke them as `corepack.cmd yarn <script>` if global Yarn shims are unavailable. This bootstrap has no test or lint script yet.
+- Use scripts `yarn dev`, `yarn validate:catalog`, `yarn typecheck`, `yarn test`, `yarn build`, `yarn test:e2e`, `yarn check:release` and `yarn preview`. On Windows use `corepack.cmd yarn <script>`. Install Chromium with `corepack.cmd yarn playwright install chromium`. No lint script exists.
 - Run `yarn typecheck` and `yarn build` for application changes. Add meaningful tests when implementing game rules, storage and interactions; report checks that exist and passed without implying absent test suites passed.
-- Keep the production site static. React Flow is the chosen map renderer for the full implementation, but is not needed by the bootstrap.
+- Keep the production site static. React Flow renders fixed native positions; never enable node dragging or connection edits.
 - Follow `design.md` for appearance and accessible interaction. Keep documentation updated when behavior, commands or interfaces change.
 
 ## Local game inputs and data provenance

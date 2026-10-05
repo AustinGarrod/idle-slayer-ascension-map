@@ -9,6 +9,8 @@ playwright-report/
 test-results/
 *.tsbuildinfo
 *.log
+__pycache__/
+*.py[cod]
 
 # Private Steam inputs; never commit or publish these
 .local-game/

@@ -1,13 +1,19 @@
+import { useEffect, useState } from 'react'
+import type { Catalog } from './domain/types'
+import MapApp from './MapApp'
+import { catalogErrors } from './domain/catalog'
+
 export default function App() {
-  return (
-    <main className="placeholder">
-      <p className="eyebrow">Unofficial Idle Slayer companion</p>
-      <h1>Idle Slayer<br />Ascension Map</h1>
-      <p className="description">
-        Your next ascension starts here. An interactive map of the Ascension tree
-        is on its way.
-      </p>
-      <span className="status">In development</span>
-    </main>
-  )
+  const [catalog, setCatalog] = useState<Catalog | null>(null)
+  const [error, setError] = useState('')
+  useEffect(() => {
+    const controller = new AbortController()
+    void fetch(`${import.meta.env.BASE_URL}catalog.json`, { signal: controller.signal })
+      .then((response) => { if (!response.ok) throw new Error('The verified game catalog is not available.'); return response.json() as Promise<Catalog> })
+      .then((data) => { const errors = catalogErrors(data); if (errors.length) throw new Error(`The catalog failed validation: ${errors[0]}`); setCatalog(data) })
+      .catch((reason: unknown) => { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : 'The catalog could not be loaded.') })
+    return () => controller.abort()
+  }, [])
+  if (catalog) return <MapApp catalog={catalog} />
+  return <main className="loading"><h1>Ascension Map</h1><p role="status">{error || 'Loading the native Ascension tree…'}</p>{error && <button onClick={() => window.location.reload()}>Try again</button>}</main>
 }

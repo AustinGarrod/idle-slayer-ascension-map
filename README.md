@@ -1,12 +1,12 @@
 # Idle Slayer Ascension Map
 
-A static web app for exploring and tracking Idle Slayer's Ascension upgrades. This repository currently contains a minimal React and TypeScript app built with Vite. The interactive map, game-data extraction, progress tracking and GitHub Pages deployment are planned, but are not implemented yet.
+A static, unofficial companion for the complete native Ascension tree: **288 upgrades, 318 connections and 288 bundled pixel icons** from **Idle Slayer 7.2.0 / Steam build 25551532**. React, TypeScript, Vite and React Flow render fixed game positions.
 
-The public repository is [AustinGarrod/idle-slayer-ascension-map](https://github.com/AustinGarrod/idle-slayer-ascension-map). The original Mac working directory uses the spelling `idle-slayer-ascention-map`; a fresh clone uses the repository's spelling, `idle-slayer-ascension-map`.
+Search titles, inspect details, record purchases and milestones, preview removals and Ultra Ascensions, undo changes, and back up one local profile as JSON. Spoilers are hidden by default across the map, connections, search, details, checklist and totals. OR paths require a choice; external items and Astral activation require explicit input. No backend, accounts, analytics, save import, SP balances or Stone allocation.
 
-## Windows setup
+## Windows setup and checks
 
-Install Git and the latest patch release of Node.js 24 LTS. Open PowerShell in the directory where you keep projects, then run:
+Use Node.js 24 and pinned Yarn 4.13.0 with the committed lockfile and node-modules linker. The public repository spelling is idle-slayer-ascension-map; leave the original Mac checkout spelling unchanged.
 
 ```powershell
 git clone https://github.com/AustinGarrod/idle-slayer-ascension-map.git
@@ -15,55 +15,31 @@ corepack.cmd yarn install --immutable
 corepack.cmd yarn dev
 ```
 
-Open the local URL printed by Vite. The `.cmd` commands work in PowerShell without changing its script execution policy. Corepack uses the pinned `yarn@4.13.0` from `package.json`; use the committed `yarn.lock` and immutable installs. The project uses Yarn's `node-modules` linker.
-
-Node.js 24 includes Corepack. If `corepack.cmd` is unavailable in your installation, install it with `npm.cmd install --global corepack` and rerun the commands above. Calling Yarn through Corepack does not require enabling global Yarn shims.
-
-Available commands:
-
-| Command | Purpose |
-| --- | --- |
-| `yarn dev` | Start the local development server. |
-| `yarn typecheck` | Check application and build-configuration TypeScript. |
-| `yarn build` | Check types and generate the production site in `dist/`. |
-| `yarn preview` | Serve the production build locally after running `yarn build`. |
-
-There is no test framework or lint script in this bootstrap. Add them alongside the behavior they need to verify during implementation.
-
-## Game files for the Windows implementation
-
-The accepted plan uses your Windows Steam installation to establish the complete catalog and game rules. Keep these inputs local; they must never be committed or copied into `public/` or the production build.
-
-Create an ignored working directory:
+Open the printed URL under `/idle-slayer-ascension-map/`. If Corepack is unavailable, install it with `npm.cmd install --global corepack`. Do not add npm/pnpm lockfiles.
 
 ```powershell
-New-Item -ItemType Directory -Force .local-game | Out-Null
+corepack.cmd yarn validate:catalog
+corepack.cmd yarn typecheck
+corepack.cmd yarn test
+corepack.cmd yarn build
+corepack.cmd yarn playwright install chromium
+corepack.cmd yarn test:e2e
+corepack.cmd yarn check:release
+corepack.cmd yarn preview
 ```
 
-Copy the installed game folder and its Steam manifest so the result is:
+Production browser tests start the preview on port 4173. Catalog tests compare every native ID, coordinate, cost, predicate and sprite hash with the reviewed receipt. Unit tests cover dependencies, reset epochs and storage; browser tests cover navigation, persistence, spoilers and responsive interaction. There is no lint script.
 
-```text
-.local-game/
-  Idle Slayer/                 # Complete copy of the installed game folder
-  appmanifest_1353300.acf      # Steam manifest for the installed game build
-```
+## Progress and data
 
-Use Steam's **Manage → Browse local files** action to locate the game folder. The manifest is in that Steam library's `steamapps` directory, alongside its `common` directory. Do not assume Steam is installed on `C:`; additional libraries may be on another drive.
+Milestones mean the actual required item received, crafted or purchased. Controls for isolated external branches require explicit **Show spoilers** for first entry because the game supplies no earlier tree gate. Enter existing Ultra Ascension history in Progress and confirm already activated Astrals in their details. The app never modifies the game.
 
-An implementation agent can also inspect the original installed paths directly instead of copying the files. It should read them without modifying the installation, player saves or game state. This bootstrap does not include an extractor or launch the game.
+[Architecture](docs/architecture.md) documents visibility, edits, resets and storage migrations. [Data provenance](docs/data.md), [asset extraction](scripts/extract/README.md) and [native logic inspection](scripts/logic/README.md) give exact Windows refresh commands. Keep installed files, Steam manifests, saves, raw exports, downloaded tools and reconstructed assemblies inside ignored `.local-game/` or outside the repository; never serve or commit them. Optional copies use `.local-game/Idle Slayer/` and `.local-game/appmanifest_1353300.acf`.
 
-`.local-game/` is ignored by Git and must remain outside anything served by the app. The development server is configured to deny the local game directory and sensitive files. Commit only reviewed, normalized catalog data, permitted assets, source provenance and the tools needed to reproduce extraction.
+Native English localization supplies descriptions and icons. Fourteen effects have accurate static descriptions with notes for player-dependent values. No wiki text or incomplete wiki prerequisites are substituted. [The coverage receipt](data/catalog-receipt.json) records game/build/tool versions, registry coverage, native fields and exact catalog/icon hashes. [design.md](design.md) records three reviewed layout concepts and Atlas styling; [AGENTS.md](AGENTS.md) states implementation boundaries.
 
-## Project guidance
+## Deployment and licensing
 
-- [AGENTS.md](AGENTS.md) gives future agents the project boundaries, data rules and verification commands.
-- [design.md](design.md) defines the initial game-inspired visual direction.
-- [Implementation plan](docs/implementation-plan.md) preserves the accepted map behavior and release requirements.
+GitHub Pages uses the Vite base `/idle-slayer-ascension-map/`. CI validates the reviewed catalog, checks types, runs unit and production-browser tests, builds and checks release verification before deploying successful main builds. Upload only dist. Re-review extraction and native methods after every game update; never publish a guessed or partial catalog. Smoke-test published assets, navigation and persistence after deployment.
 
-The planned app is entirely static: one local progress profile, no backend, no account system and no analytics. GitHub Pages is the intended host. Hosting is deferred until the map and catalog are verified.
-
-## Sources and attribution
-
-Use the installed game as the primary evidence for tree positions, IDs, requirements and reset rules. The [Idle Slayer Wiki](https://idleslayer.fandom.com/wiki/Idle_Slayer_Wiki) is a supplementary source for descriptions and icons. The [official Idle Slayer website](https://idleslayer.com/) and [official editor screenshot](https://idleslayer.com/img/press-kit/Editor%20Screenshot%202.png) are visual references. [UnityPy](https://github.com/K0lb3/UnityPy#monobehaviour) is an extraction candidate to assess during the Windows implementation.
-
-No game assets or wiki content are bundled in this bootstrap. Before adding them, record their source and attribution or licensing requirements separately from the application code. Do not infer permission to redistribute game binaries from their availability in a local installation.
+Application source and extraction tools use [the MIT license](LICENSE). Game text, data and icons are **excluded** from that code license and belong to Idle Slayer's rights holders. [Third-party notices](THIRD_PARTY_NOTICES.md) separate game attribution, software and the locally bundled Press Start 2P font's SIL OFL license.

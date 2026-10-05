@@ -48,3 +48,12 @@ The app records reset epochs and activation separately. It deliberately does not
 ## Refresh gate
 
 Hash changes require reviewing the affected method and updating the receipt, normalized predicates and tests together. Do not infer new rules from names, wiki progress screenshots or a successful dummy-assembly run. Keep dummy DLLs, disassembly, tools, Unity assets and local metadata in `.local-game/`, never browser imports or production output.
+
+Run the independent exhaustive comparison after normalization or public catalog promotion:
+
+```powershell
+python scripts/logic/validate_catalog_rules.py --export .local-game/asset-export/asset-export.json --catalog public/catalog.json --receipt data/native-rule-validation.json
+corepack.cmd yarn test src/domain/native-rules.test.ts
+```
+
+The comparison receipt contains hashes and counts only. It checks the reviewed control flow against all 288 normalized nodes in 10,574 boolean cases without importing the normalizer. [The native-rule documentation](../../docs/native-rules.md) also records app-only milestone presentation and manual-removal policy.

@@ -94,7 +94,7 @@ def main() -> None:
                     raise ValueError(f'Truncated native body: {type_name}.{method_name}')
                 file_name = re.sub(r'[^A-Za-z0-9_.-]', '_', f'{type_name}.{method_name}') + '.txt'
                 excerpt = f'Type: {type_name}\nRVA: 0x{rva:X}\nNative body SHA256: {sha256(body)}\nMethod: {block}'
-                (evidence_root / file_name).write_text(excerpt, encoding='utf-8')
+                (evidence_root / file_name).write_text(excerpt, encoding='utf-8', newline="\n")
                 records.append({'type': type_name, 'method': method_name, 'signature': signature, 'rva': f'0x{rva:X}', 'length': length, 'nativeBodySha256': sha256(body), 'evidenceFile': file_name})
     receipt = {
         'tool': 'Cpp2IL 2022.1.0-pre-release.21+58fc404ac503f4e512055cafc48c03088fc6e224',
@@ -107,7 +107,7 @@ def main() -> None:
         'semanticVerificationAutomatic': False,
         'methods': records,
     }
-    (evidence_root / 'receipt.json').write_text(json.dumps(receipt, indent=2) + '\n', encoding='utf-8')
+    (evidence_root / 'receipt.json').write_text(json.dumps(receipt, indent=2) + '\n', encoding='utf-8', newline="\n")
     print(f'Indexed {len(records)} native methods; local evidence: {evidence_root}')
     if args.check_receipt:
         reviewed = json.loads(args.check_receipt.read_text(encoding='utf-8'))
