@@ -1,0 +1,28 @@
+# Dependencies and generated output
+node_modules/
+.yarn/
+dist/
+dist-ssr/
+.cache/
+coverage/
+playwright-report/
+test-results/
+*.tsbuildinfo
+*.log
+
+# Private Steam inputs; never commit or publish these
+.local-game/
+Idle Slayer_Data/
+*.dll
+appmanifest_1353300.acf
+
+# Credentials and local configuration
+.env
+.env.*
+!.env.example
+*.local
+
+# Operating system files
+.DS_Store
+Thumbs.db
+Desktop.ini
