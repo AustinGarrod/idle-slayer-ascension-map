@@ -1,6 +1,6 @@
 # Architecture and progress contract
 
-`public/catalog.json` contains the complete reviewed catalog. Native IDs identify upgrades; titles may repeat. Decimal string costs format with `BigInt`, and positions are copied without a layout substitution. `catalog.ts` validates structure, references and reachable purchase/reveal paths before rendering. Build tests compare records and icon bytes against the independently reviewed native registry receipt.
+`public/catalog.json` contains the complete reviewed catalog. Native IDs identify upgrades; titles may repeat. Decimal string costs format with `BigInt`, and native positions remain unchanged in the catalog. Rendering converts Unity’s positive-up Y axis to the browser’s positive-down Y axis; pairwise game placement is preserved. `catalog.ts` validates structure, references and reachable purchase/reveal paths before rendering. Build tests compare records and icon bytes against the independently reviewed native registry receipt.
 
 ## Rules and spoilers
 

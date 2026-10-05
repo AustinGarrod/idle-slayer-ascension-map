@@ -6,7 +6,7 @@
   "catalogRevision": "steam-25551532-v1",
   "catalogSha256": "7d69b7808ebef5c1609590328d41c23331ffd81c4b09e3a4fb368d4719722b7b",
   "assetExportSha256": "dd3d012021948f9e9307bde6de109edacc91f0419831ef88ff536e404dc08d6f",
-  "nativeMethodReceiptSha256": "68ce7fbfbcfb3fbacc5f36930a751e5e8a97038e1cf290f25ebc8ba6a27a7ea4",
+  "nativeMethodReceiptSha256": "a592955ed8ec78189bec4aab664fb8f23f9c5182cd1fdfd92873afde36628500",
   "validatorSha256": "e3420a9c875f1b0f02822b30897bb36fed62203468fef31e87932ef6c62a402e",
   "checks": {
     "nativeNodes": 288,

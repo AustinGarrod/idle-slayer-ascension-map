@@ -107,18 +107,19 @@ function Atlas({ catalog }: { catalog: Catalog }) {
       const map = mapElement.current?.getBoundingClientRect()
       const sheet = mapElement.current?.parentElement?.querySelector('.details')?.getBoundingClientRect()
       const overlap = window.innerWidth <= 960 && map && sheet ? Math.max(0, map.bottom - sheet.top) : 0
-      void flow.setCenter(node.position.x, node.position.y + overlap / 2, { zoom: 1, duration: reducedMotion ? 0 : 220 })
+      void flow.setCenter(node.position.x, -node.position.y + overlap / 2, { zoom: 1, duration: reducedMotion ? 0 : 220 })
     }))
   }
   const state = (node: Upgrade) => satisfies({ kind: 'owned', id: node.id }, profile)
     ? satisfies({ kind: 'active', id: node.id }, profile) ? 'purchased' : 'pending'
     : satisfies(node.purchase, profile) ? 'available' : 'locked'
-  const nodes: UpgradeNode[] = visible.upgrades.map((node) => ({ id: node.id, type: 'upgrade', position: node.position,
+  // Unity UI local coordinates are positive-up; the browser canvas is positive-down.
+  const nodes: UpgradeNode[] = visible.upgrades.map((node) => ({ id: node.id, type: 'upgrade', position: { x: node.position.x, y: -node.position.y },
     data: { upgrade: node, state: state(node) }, selected: selected === node.id,
     ariaLabel: `${node.title}, ${state(node)}, ${cost(node.cost)} Slayer Points`, width: 132, height: 122 }))
   const edges = visible.connections.map((edge) => {
     const from = index.get(edge.from)!, to = index.get(edge.to)!
-    const dx = to.position.x - from.position.x, dy = to.position.y - from.position.y
+    const dx = to.position.x - from.position.x, dy = from.position.y - to.position.y
     const horizontal = Math.abs(dx) > Math.abs(dy)
     const sourceHandle = horizontal ? dx > 0 ? 'right-out' : 'left-out' : dy > 0 ? 'bottom-out' : 'top-out'
     const targetHandle = horizontal ? dx > 0 ? 'left-in' : 'right-in' : dy > 0 ? 'top-in' : 'bottom-in'
@@ -175,7 +176,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     {!verified && <div className="notice">Local preview · Catalog verification is incomplete. Publication is gated.</div>}
     <div className={`workspace ${detail ? 'has-details' : ''}`}>
       <section ref={mapElement} className="map" aria-label="Ascension tree">
-        {loaded && <ReactFlow<UpgradeNode> nodes={nodes} edges={edges} nodeTypes={nodeTypes} nodeOrigin={[0.5, 0.5]} nodesDraggable={false} nodesConnectable={false} edgesReconnectable={false} deleteKeyCode={null} selectionKeyCode={null} multiSelectionKeyCode={null} minZoom={0.15} maxZoom={2.5} defaultViewport={{ x: 0, y: 0, zoom: 0.7 }} onInit={(instance) => { const start = index.get(catalog.startId); if (start) void instance.setCenter(start.position.x, start.position.y, { zoom: 0.85 }) }} onNodesChange={(changes) => { const selection = changes.find((entry) => entry.type === 'select' && entry.selected); if (selection?.type === 'select' && selection.id !== selected) center(selection.id); else if (changes.some((entry) => entry.type === 'select' && !entry.selected && entry.id === selected)) setSelected(null) }} onNodeClick={(_, node) => center(node.id)} onPaneClick={() => setSearchOpen(false)} ariaLabelConfig={{ 'node.a11yDescription.default': 'Press Enter to select an upgrade. The tree positions are fixed.' }}><Background color="#514432" gap={32} size={1} /></ReactFlow>}
+        {loaded && <ReactFlow<UpgradeNode> nodes={nodes} edges={edges} nodeTypes={nodeTypes} nodeOrigin={[0.5, 0.5]} nodesDraggable={false} nodesConnectable={false} edgesReconnectable={false} deleteKeyCode={null} selectionKeyCode={null} multiSelectionKeyCode={null} minZoom={0.15} maxZoom={2.5} defaultViewport={{ x: 0, y: 0, zoom: 0.7 }} onInit={(instance) => { const start = index.get(catalog.startId); if (start) void instance.setCenter(start.position.x, -start.position.y, { zoom: 0.85 }) }} onNodesChange={(changes) => { const selection = changes.find((entry) => entry.type === 'select' && entry.selected); if (selection?.type === 'select' && selection.id !== selected) center(selection.id); else if (changes.some((entry) => entry.type === 'select' && !entry.selected && entry.id === selected)) setSelected(null) }} onNodeClick={(_, node) => center(node.id)} onPaneClick={() => setSearchOpen(false)} ariaLabelConfig={{ 'node.a11yDescription.default': 'Press Enter to select an upgrade. The tree positions are fixed.' }}><Background color="#514432" gap={32} size={1} /></ReactFlow>}
         <div className="map-summary"><span><b>{visible.owned}</b> / {visible.total} visible upgrades owned</span><span>Epoch {profile.epoch} · {profile.showSpoilers ? 'Spoilers shown' : 'Spoilers hidden'}</span></div>
         <div className="camera-controls"><button aria-label="Zoom out" onClick={() => { void flow.zoomOut({ duration: reducedMotion ? 0 : 150 }) }}>−</button><button aria-label="Zoom in" onClick={() => { void flow.zoomIn({ duration: reducedMotion ? 0 : 150 }) }}>+</button><button onClick={() => center(catalog.startId)}>Return to start</button><button aria-label="Pan map left" onClick={() => { const v = flow.getViewport(); void flow.setViewport({ ...v, x: v.x + 180 }) }}>←</button><button aria-label="Pan map right" onClick={() => { const v = flow.getViewport(); void flow.setViewport({ ...v, x: v.x - 180 }) }}>→</button><button aria-label="Pan map up" onClick={() => { const v = flow.getViewport(); void flow.setViewport({ ...v, y: v.y + 180 }) }}>↑</button><button aria-label="Pan map down" onClick={() => { const v = flow.getViewport(); void flow.setViewport({ ...v, y: v.y - 180 }) }}>↓</button></div>
       </section>

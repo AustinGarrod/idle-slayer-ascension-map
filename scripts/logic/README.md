@@ -8,7 +8,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/logic/extract-lo
 
 The pinned [Cpp2IL release](https://github.com/SamboyCoding/Cpp2IL/releases/tag/2022.1.0-pre-release.21) is downloaded into ignored `.local-game/logic/tools/` and checked against the recorded SHA-256. Cpp2IL reconstructs dummy assemblies, mapped declarations and disassembly into that ignored directory. It opens native files as data; it does not start Idle Slayer or load its methods into the game. Official Il2CppDumper 6.7.46 was assessed and rejected metadata version 39. Cpp2IL supports this version and mapped 80,517 native methods.
 
-`inspect-methods.py` indexes 26 relevant methods and checks their original PE byte ranges. The local `.local-game/logic/evidence/receipt.json` records native-input hashes, RVA, body length and body SHA-256, with raw excerpts alongside it. `native-method-receipt.json` contains only sanitized provenance and hashes. A successful extractor run alone does not verify semantics; the interpretations below were reviewed against both disassembly and the field offsets in generated declarations.
+`inspect-methods.py` indexes 27 relevant methods and checks their original PE byte ranges. The local `.local-game/logic/evidence/receipt.json` records native-input hashes, RVA, body length and body SHA-256, with raw excerpts alongside it. `native-method-receipt.json` contains only sanitized provenance and hashes. A successful extractor run alone does not verify semantics; the interpretations below were reviewed against both disassembly and the field offsets in generated declarations.
 
 ## Reviewed tree rules
 
@@ -25,10 +25,15 @@ The identities below are native `DataObject.id` values, not titles or asset file
 | `PermanentCraftableItem.IsActive` | `0x3A4090` | Tests the item's received/crafted flag. It does not test visibility, crafting prerequisites or the preceding boss/event. |
 | `AscensionManager+<>c__DisplayClass51_0.<Ascend>b__0` | `0x2E1700` | Ultra Ascension retains Astrals, activates owned pending Astral Locks, and clears other tree purchases except the conditional retention pairs below. |
 | `PlayerInventory.Awake` | `0x4D3600` | Loads `Resources.LoadAll<AscensionSkill>("Ascension Skills")` into the tree registry. The asset extraction checks all 288 registered assets against this resource path. |
+| `SkillTreeManager.AutoSizeContent` | `0x3B20A0` | Assigns raw skill X/Y plus a shared base offset minus a shared center directly to `Transform.localPosition`, preserving Unity's positive-up Y direction. |
 
 The native OR loop returns immediately when it finds an active prerequisite. That return precedes the `ultraAscensionsRequired` check. Preserve this behavior: for a nonempty OR list, do not add a separate Ultra Ascension purchase requirement. The reveal predicate still applies. For an empty list or an AND list, apply the Ultra Ascension purchase flag when set.
 
 The AND reveal predicates do not bypass an external Upgrade or a required Ascension Upgrade merely because the node is already owned. The own-ownership exception exists only inside the Astral branch of the reveal predicate. External milestones in the app record the required item received/crafted or Upgrade bought explicitly. How the manual-entry controls expose those milestones is app UI policy, not an additional native unlock rule.
+
+## Native coordinate convention
+
+`AutoSizeContent` reads `AscensionSkill.position` at offsets `0x70`/`0x74` and applies the same translation to every node; it does not negate Y. The serialized Content/Viewport/SkillTree ancestor chain has no negative Y scale or rotated frame. Its screen-space-camera Canvas uses a unit-scale, identity-rotation orthographic camera. The game therefore displays larger native Y values above smaller values. Preserve the raw catalog coordinates and convert only the renderer position to `{ x: native.x, y: -native.y }` for React Flow's positive-down screen coordinates. Apply the same conversion to camera targets and connection placement. [The detailed layout evidence](../../docs/native-rules.md#native-coordinate-convention) includes the method hash and serialized hierarchy references.
 
 ## Ultra Ascension retention
 

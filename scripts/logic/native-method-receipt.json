@@ -202,6 +202,14 @@
     },
     {
       "type": "SkillTreeManager",
+      "method": "AutoSizeContent",
+      "signature": "System.Void AutoSizeContent()",
+      "rva": "0x3B20A0",
+      "length": 2460,
+      "nativeBodySha256": "f89b509a12b8d60caac1b37c9a664e847a1942d5072d65d6d13f442717c4966a"
+    },
+    {
+      "type": "SkillTreeManager",
       "method": "BuyAscensionSkill",
       "signature": "System.Void BuyAscensionSkill(System.String id, System.Boolean showNotification = True, System.Boolean force = False)",
       "rva": "0x3B2BA0",

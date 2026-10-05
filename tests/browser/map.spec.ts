@@ -121,5 +121,13 @@ test('fixed map and responsive controls support keyboard details without overflo
   await expect(page.getByRole('button', { name: 'Close upgrade details' })).toBeInViewport()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   await expect.poll(() => page.locator('.upgrade-icon').evaluateAll((images) => images.every((image) => (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0))).toBe(true)
+  // Native Unity local Y is positive-up. Check the actual projected node
+  // coordinates, independently of camera pan/zoom and the stored catalog.
+  const higher = catalog.upgrades.find((upgrade) => upgrade.title === 'Reinvest')!
+  const projection = await page.locator(`.react-flow__node[data-id="${higher.id}"]`).evaluate((element) => {
+    const matrix = new DOMMatrix(getComputedStyle(element).transform)
+    return { x: matrix.e + element.clientWidth / 2, y: matrix.f + element.clientHeight / 2 }
+  })
+  expect(projection).toEqual({ x: higher.position.x, y: -higher.position.y })
   await page.screenshot({ path: `test-results/atlas-${test.info().project.name}.png`, fullPage: true })
 })

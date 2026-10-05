@@ -20,7 +20,7 @@ TARGETS = {
     'PlayerInventory': ['Awake', 'CalculateValues'],
     'PermanentCraftableItem': ['AdditionalInit', 'IsActive'],
     'TemporaryCraftableItem': ['IsActive'],
-    'SkillTreeManager': ['BuyAscensionSkill'],
+    'SkillTreeManager': ['BuyAscensionSkill', 'AutoSizeContent'],
     'BenefitReferences': ['GetDescription'],
 }
 

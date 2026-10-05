@@ -16,6 +16,19 @@ The complete sanitized coverage record is
 [`data/catalog-receipt.json`](../data/catalog-receipt.json), including native
 positions, decimal costs, rule fields, catalog hash and every icon hash.
 
+Native tree coordinates use positive Y upward. `SkillTreeManager.AutoSizeContent`
+(RVA `0x3B20A0`) passes the serialized X/Y through a shared origin and center
+translation to `Transform.set_localPosition`. The `level2` content hierarchy
+(`RectTransform` IDs 6984 → 6597 → 7012 → 5863 → 6046 → 7059 → 5974 → 5822)
+has identity rotations and no negative Y scale; the content's X/Y scale is
+approximately 0.4. The root Screen Space Camera canvas (ID 5324) uses camera
+2783, whose transform 2671 has unit scale and identity rotation. The native
+Ascension Skill prefab (`sharedassets2.assets`, component 2484, transform 2016)
+also has unit scale and identity rotation. There is no serialized reflection
+that changes the tree's Y direction. Catalog and receipt positions retain raw
+native coordinates; the React Flow renderer converts only display coordinates
+with `screenY = -nativeY` because browser Y increases downward.
+
 The extractor reads the Steam manifest only for app and build ID. It does not
 export installation paths, account IDs, play timestamps or the manifest text.
 Input hashes identify the exact game assets and native code used for this

@@ -2,9 +2,19 @@
 
 The catalog uses the installed Steam **build 25551532**, Idle Slayer **7.2.0**, Unity **6000.3.14f1**, IL2CPP metadata **39**. Native IDs, flags and references come from the complete 288-entry `Ascension Skills` resource registry. Native methods were inspected offline as PE bytes and IL2CPP metadata; no game process, player save, purchase, unlock or reset method was invoked.
 
-The native assembly SHA-256 is `89b90f5bcd8544cd2388460bd3df31481bc8e9cce562aaaa540b85322cb216e7`; metadata SHA-256 is `379bcc74503d616b88b404884c7bcfaaf6d496e1ecdbdef7bdec21e5ccc2911b`. [The sanitized native-method receipt](../scripts/logic/native-method-receipt.json) records all 26 selected signatures, RVAs, byte lengths and individual body hashes. RVAs below are relative to PE image base `0x180000000`.
+The native assembly SHA-256 is `89b90f5bcd8544cd2388460bd3df31481bc8e9cce562aaaa540b85322cb216e7`; metadata SHA-256 is `379bcc74503d616b88b404884c7bcfaaf6d496e1ecdbdef7bdec21e5ccc2911b`. [The sanitized native-method receipt](../scripts/logic/native-method-receipt.json) records all 27 selected signatures, RVAs, byte lengths and individual body hashes. RVAs below are relative to PE image base `0x180000000`.
 
 The offline tool is [Cpp2IL 2022.1.0-pre-release.21](https://github.com/SamboyCoding/Cpp2IL/releases/tag/2022.1.0-pre-release.21), revision `58fc404ac503f4e512055cafc48c03088fc6e224`. Its pinned Windows executable SHA-256 is `663fb432433b4371fd1ee0ebc321a8fff2a9aac5ac4230c843f9e03ddee4e04c`. See [the extraction command and tooling notes](../scripts/logic/README.md). Dummy assemblies, declaration dumps and disassembly stay in ignored `.local-game/logic/`.
+
+## Native coordinate convention
+
+`SkillTreeManager.AutoSizeContent` (`0x3B20A0`, byte length `0x99C`, body SHA-256 `f89b509a12b8d60caac1b37c9a664e847a1942d5072d65d6d13f442717c4966a`) reads the skill's serialized `position.x`/`position.y` at field offsets `0x70`/`0x74`. It adds `skillsBasePosition.x`/`.y` at manager offsets `0x20`/`0x24`, subtracts a shared content center and assigns the resulting `(x, y, 0)` directly to `Transform.localPosition`. The native method does not negate Y; pairwise coordinate differences preserve the serialized signs.
+
+The serialized `level2` hierarchy confirms that there is no compensating reflection. `SkillTreeManager#9007` refers to `ScrollRect#8713`, whose content is `RectTransform#6984`. Its ancestor chain is `6984 → 6597 → 7012 → 5863 → 6046 → 7059 → 5974 → 5822`: every rotation is the identity quaternion. Content's Y scale is approximately `0.4`; the intermediate ancestors have Y scale `1`. The UIManager root's initial scale is `0` while collapsed and contains no negative Y scale. The shared `AscensionSkillObject#2484` prefab's `RectTransform#2016` in `sharedassets2.assets` has unit scale and identity rotation. UIManager's `Canvas#5324` uses Screen Space Camera mode with `Camera#2783`; that orthographic camera's `Transform#2671` also has unit scale and identity rotation.
+
+Unity's positive Y is up, as its [version 6000.3 `Vector3.up` definition](https://docs.unity3d.com/6000.3/Documentation/ScriptReference/Vector3-up.html) confirms. For example, Soul Gatherer Bundle is at native `(-350, 100)` and Portals at `(0, 250)`: Portals appears 150 native units above it. Passing these coordinates straight into React Flow's positive-down display would mirror the native arrangement vertically.
+
+The catalog retains its exact raw `position` fields. Rendering converts them to `{ x: native.x, y: -native.y }`, with any pan translation applied uniformly. Camera centering and connection handle selection use that same display coordinate conversion. This preserves native arrangement without rewriting the source data.
 
 ## Ownership and activation
 
