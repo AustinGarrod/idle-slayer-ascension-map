@@ -2,7 +2,7 @@
 
 ## Summary and current state
 
-Build a static React and TypeScript app with Vite, Yarn and React Flow. Preserve the game's map positions, support title search and purchase tracking, and hide spoilers according to the game's reveal rules.
+Build a static React and TypeScript app with Vite, Yarn and React Flow. Preserve the game's map positions in the Game view, offer a clearer Web dependency layout, support title search and purchase tracking, and hide spoilers according to the game's reveal rules.
 
 Publish through GitHub Pages from `AustinGarrod/idle-slayer-ascension-map`. Progress stays in local storage, with JSON backup and restore.
 
@@ -23,16 +23,18 @@ Include every node belonging to the Ascension tree, including Ultra, Astral and 
 
 ## Map and progress behavior
 
-- Provide a fixed-position map with mouse and touch pan/zoom, zoom controls and a return-to-start action. Nodes cannot be rearranged.
+- Provide fixed Game and Web layouts with mouse and touch pan/zoom, zoom controls and a return-to-start action. Game preserves extracted native coordinates; Web arranges only the visible dependency graph. Nodes cannot be rearranged. Arrows and selected-path emphasis clarify connections, and visible neighbor buttons support direct navigation.
 - Search titles without case or apostrophe sensitivity. Results include icons and costs; selecting one centers the map and opens its details.
-- Details show title, description, cost, prerequisites, purchase/activation status and source references. Use a side panel on desktop and a bottom sheet on mobile.
+- Details show title, description, cost, prerequisites, purchase/activation status and source references. Use a side panel on desktop and a compact expandable docked panel on mobile. Compact controls must preserve useful map space on small portrait and landscape screens.
 - Default to hiding spoilers. Apply the game's reveal rules while retaining visible locked nodes. Filter search, milestone controls, details, connections and progress totals through the same visibility logic.
 - Provide a milestone checklist for unlocks outside the tree. Milestones represent the required item purchased or received—for example, Victor's Soul—not simply its preceding boss defeat.
 - Marking a purchase fills missing prerequisites. For an unsatisfied OR requirement, let the user choose the path before applying changes. Outside milestones and Astral activation require explicit user input.
 - Unmarking a prerequisite previews and clears purchases that lose their valid dependency path. Preserve retained Astral ownership from earlier Ultra Ascensions.
 - Model Ultra Ascension with a previewed reset: clear repeat purchases, retain permanent upgrades and milestones, activate eligible Astral locks, and recalculate permanent grants. Track purchase epoch and activation separately, and allow users to record already activated Astrals when entering existing progress.
 - Offer undo for progress changes and confirmation for clearing all progress. Do not simulate SP balances or Stone allocations.
+- Suggest the next eligible upgrade using reviewed wiki priority ordering and recorded purchases. Keep native costs and reveal/purchase gates authoritative; hide spoilers, skip owned upgrades and label any cost fallback explicitly. Explain benefits, provide source/version attribution, and use normal preview/undo for recording a suggestion. Guide ordering must not infer SP balance, total USP, equipment or personal play style.
 - Version saved data. Validate imports before replacing progress, preserve unknown IDs across catalog updates, and report storage failures without discarding the current session.
+- Import the current state of a user-selected Windows Steam 7.2.0 `savedata.sav` or `backup.sav` locally. Validate transport, native version and verified fields before a spoiler-aware preview; apply only after confirmation and retain undo. Import stable-ID ownership, activation, UA count and verified milestones, discard unrelated native preferences, preserve unknown map IDs, and document the synthetic retention baseline for missing purchase history. Do not access game files automatically or authenticate to cloud storage.
 
 ## Design and documentation
 
@@ -51,8 +53,8 @@ Maintain `AGENTS.md` and `README.md`, and add focused architecture and data docu
 - Configure CI for catalog validation, type checking, tests and build. Deploy successful `main` builds through GitHub Actions with the correct Pages base path.
 - Publish only after the complete catalog and reveal/reset behavior are verified. Then smoke-test the deployed site's assets, navigation and persistence.
 
-V1 defaults: English, one local progress profile, spoilers hidden, and no backend, accounts, analytics or game-save import.
+V1 defaults: English, one local progress profile, spoilers hidden, and no backend, accounts or analytics. User-authorized Steam save import follows the scoped contract above.
 
 ## Windows handoff
 
-See `README.md` for exact clone and Corepack/Yarn commands. Use Node.js 24 with `yarn@4.13.0`, the committed `yarn.lock` and Yarn's `node-modules` linker. Place optional copied inputs at `.local-game/Idle Slayer/` and `.local-game/appmanifest_1353300.acf`. Keep raw game inputs outside Git and outside the served site; do not infer that a public code repository authorizes redistribution of the complete game.
+See `README.md` for exact clone and plain `yarn` commands. Use Node.js 24 with the repository's Yarn 4.13.0 release, the committed `yarn.lock` and Yarn's `node-modules` linker. If no global launcher is installed, use `node .yarn/releases/yarn-4.13.0.cjs <command>`. Place optional copied inputs at `.local-game/Idle Slayer/` and `.local-game/appmanifest_1353300.acf`. Keep raw game inputs outside Git and outside the served site; do not infer that a public code repository authorizes redistribution of the complete game.

@@ -1,31 +1,58 @@
 # Idle Slayer Ascension Map
 
-A static, unofficial companion for the complete native Ascension tree: **288 upgrades, 318 connections and 288 bundled pixel icons** from **Idle Slayer 7.2.0 / Steam build 25551532**. React, TypeScript, Vite and React Flow render fixed game positions.
+A static, unofficial companion for the complete native Ascension tree: **288 upgrades, 318 connections and 288 bundled pixel icons** from **Idle Slayer 7.2.0 / Steam build 25551532**. React, TypeScript, Vite and React Flow render two fixed layouts: **Web**, a readable dependency graph, and **Game**, the original game positions.
 
-Search titles, inspect details, record purchases and milestones, preview removals and Ultra Ascensions, undo changes, and back up one local profile as JSON. Spoilers are hidden by default across the map, connections, search, details, checklist and totals. OR paths require a choice; external items and Astral activation require explicit input. No backend, accounts, analytics, save import, SP balances or Stone allocation.
+Search titles, inspect details, record purchases and milestones, preview removals and Ultra Ascensions, undo changes, and back up one local profile as JSON. Import current progress from a reviewed Steam game save through a local preview. Spoilers are hidden by default across the map, connections, search, details, checklist and totals. OR paths require a choice; external items and Astral activation require explicit input. No backend, accounts, analytics, SP balances or Stone allocation.
+
+Web arranges visible paths from left to right. Arrows point from a prerequisite toward the upgrade; selecting an upgrade emphasizes its incoming and outgoing connections. **Connected from** and **Leads to** in details jump directly to visible neighbors. The exact AND/OR and activation requirements remain in the details. Switching layouts preserves selection and progress, and does not change catalog coordinates.
+
+On small screens, **Map options** holds spoilers, milestones, progress, undo and source information. The selected upgrade appears in a compact panel with its cost and purchase action; **Show details** expands the scrollable requirements and connections. **Map navigation** exposes directional pan buttons alongside touch pan/zoom. Layout selection and panel expansion are session-only view settings.
+
+**Next upgrade** suggests the first remaining upgrade in the reviewed wiki order whose native reveal and purchase requirements are met. It shows the benefit, exact game cost, guide source and up to two alternatives. **Show on map** opens its details; **Record purchase…** uses the normal confirmation and undo flow. Suggestions recalculate from recorded purchases, milestones and activation after edits, restore or Ultra Ascension. Hidden, owned and blocked upgrades are excluded, including owned Astral locks awaiting activation.
+
+The wiki snapshot ranks 280 of 288 native upgrades and declares game 7.0.0; the catalog remains authoritative for 7.2.0 costs and gates. When no eligible upgrade has a wiki rank, suggestions explicitly use a native-cost **Catalog fallback**. General guide order does not account for SP balance, total USP, gear or personal play style. [Recommendation provenance and refresh](docs/wiki-recommendations.md) documents source revisions, identity mapping, eight unranked upgrades and licensing. The site bundles this data locally and makes no wiki requests.
+
+## Import Steam progress
+
+Open **Progress → Import game save…** (on phones, **Map options → Progress**). Choose `savedata.sav` or `backup.sav` from:
+
+```text
+%USERPROFILE%\AppData\LocalLow\Pablo Leban\Idle Slayer\
+```
+
+The importer supports the reviewed **Windows Steam 7.2.0** save format. Close the game before selecting the file. Review the visible ownership, Astral activation, milestone and Ultra Ascension counts, then choose **Apply import**. Cancel keeps the current profile; undo restores it after applying. Suggestions recalculate immediately. Existing unknown map IDs and the spoiler preference remain intact.
+
+The selected file is decoded entirely in the browser. It is never uploaded, modified, bundled or stored as a game save. Only the map's recognized progress is retained; account preferences and unrelated native data are discarded. Exact purchase history is unavailable, so active permanent and retained ownership use a documented snapshot baseline. Android progress can be imported from a Steam copy after the game's existing cross-platform sync; direct mobile file access and cloud login are outside this feature. [Format, native evidence and compatibility](docs/save-import.md).
 
 ## Windows setup and checks
 
-Use Node.js 24 and pinned Yarn 4.13.0 with the committed lockfile and node-modules linker. The public repository spelling is idle-slayer-ascension-map; leave the original Mac checkout spelling unchanged.
+Use Node.js 24. The repository includes Yarn 4.13.0, and `.yarnrc.yml` directs normal `yarn` commands to that pinned release, including when the installed launcher is Yarn Classic. Keep the committed lockfile and node-modules linker. The public repository spelling is idle-slayer-ascension-map; leave the original Mac checkout spelling unchanged.
 
 ```powershell
 git clone https://github.com/AustinGarrod/idle-slayer-ascension-map.git
 cd idle-slayer-ascension-map
-corepack.cmd yarn install --immutable
-corepack.cmd yarn dev
+yarn install --immutable
+yarn dev
 ```
 
-Open the printed URL under `/idle-slayer-ascension-map/`. If Corepack is unavailable, install it with `npm.cmd install --global corepack`. Do not add npm/pnpm lockfiles.
+Open the printed URL under `/idle-slayer-ascension-map/`. No Corepack command or global Yarn upgrade is needed. If a fresh machine has Node.js but no `yarn` launcher, invoke the included release directly:
 
 ```powershell
-corepack.cmd yarn validate:catalog
-corepack.cmd yarn typecheck
-corepack.cmd yarn test
-corepack.cmd yarn build
-corepack.cmd yarn playwright install chromium
-corepack.cmd yarn test:e2e
-corepack.cmd yarn check:release
-corepack.cmd yarn preview
+node .yarn/releases/yarn-4.13.0.cjs install --immutable
+node .yarn/releases/yarn-4.13.0.cjs dev
+```
+
+Do not add npm/pnpm lockfiles. [The bundled Yarn release](.yarn/releases/README.md) records its source, checksum and license. CI uses the direct Node invocation; Playwright starts Vite directly with Node.
+
+```powershell
+yarn validate:catalog
+yarn typecheck
+yarn test
+yarn build
+yarn playwright install chromium
+yarn test:e2e
+yarn check:release
+yarn preview
 ```
 
 Production browser tests start the preview on port 4173. Catalog tests compare every native ID, coordinate, cost, predicate and sprite hash with the reviewed receipt. Unit tests cover dependencies, reset epochs and storage; browser tests cover navigation, persistence, spoilers and responsive interaction. There is no lint script.
@@ -36,7 +63,7 @@ Milestones mean the actual required item received, crafted or purchased. Control
 
 [Architecture](docs/architecture.md) documents visibility, edits, resets and storage migrations. [Data provenance](docs/data.md), [asset extraction](scripts/extract/README.md) and [native logic inspection](scripts/logic/README.md) give exact Windows refresh commands. Keep installed files, Steam manifests, saves, raw exports, downloaded tools and reconstructed assemblies inside ignored `.local-game/` or outside the repository; never serve or commit them. Optional copies use `.local-game/Idle Slayer/` and `.local-game/appmanifest_1353300.acf`.
 
-Native English localization supplies descriptions and icons. Fourteen effects have accurate static descriptions with notes for player-dependent values. No wiki text or incomplete wiki prerequisites are substituted. [The coverage receipt](data/catalog-receipt.json) records game/build/tool versions, registry coverage, native fields and exact catalog/icon hashes. [design.md](design.md) records three reviewed layout concepts and Atlas styling; [AGENTS.md](AGENTS.md) states implementation boundaries.
+Native English localization supplies descriptions and icons. Fourteen effects have accurate static descriptions with notes for player-dependent values. Wiki priority ordering is separate from the native catalog; wiki descriptions and dependencies are not substituted. [The coverage receipt](data/catalog-receipt.json) records game/build/tool versions, registry coverage, native fields and exact catalog/icon hashes. [design.md](design.md) records reviewed layout concepts and Atlas styling; [AGENTS.md](AGENTS.md) states implementation boundaries.
 
 ## Deployment and licensing
 

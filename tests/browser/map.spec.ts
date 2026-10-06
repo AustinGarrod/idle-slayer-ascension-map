@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Locator, type Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import type { Catalog } from '../../src/domain/types'
 import { emptyProfile } from '../../src/domain/types'
@@ -12,6 +12,68 @@ const hidden = catalog.upgrades.find((node) => !initialVisibility.ids.has(node.i
 const runtimeErrors: Error[] = []
 test.beforeEach(({ page }) => { runtimeErrors.length = 0; page.on('pageerror', (error) => runtimeErrors.push(error)) })
 test.afterEach(() => expect(runtimeErrors).toEqual([]))
+
+async function exposeMapAction(page: Page, target: Locator) {
+  await expect(page.locator('.toolbar')).toBeVisible()
+  if (!await target.isVisible()) await page.getByRole('button', { name: 'Map options', exact: true }).click()
+}
+
+async function openProgress(page: Page) {
+  const action = page.getByRole('button', { name: 'Progress', exact: true })
+  await exposeMapAction(page, action)
+  await action.click()
+}
+
+async function showSpoilers(page: Page, shown: boolean) {
+  const checkbox = page.getByRole('checkbox', { name: 'Show spoilers', exact: true })
+  await exposeMapAction(page, checkbox)
+  await checkbox.setChecked(shown)
+  const options = page.getByRole('dialog', { name: 'Map options', exact: true })
+  if (await options.isVisible()) await options.getByRole('button', { name: 'Close dialog', exact: true }).click()
+}
+
+async function selectUpgrade(page: Page, title: string) {
+  await page.getByRole('searchbox').fill(title)
+  await page.locator('.search-result').filter({ hasText: title }).first().click()
+  await expect(page.locator('.details h2')).toHaveText(title)
+}
+
+async function chooseLayout(page: Page, name: 'Web' | 'Game') {
+  const action = page.getByRole('group', { name: 'Map layout', exact: true }).getByRole('button', { name, exact: true })
+  await action.click()
+  await expect(action).toHaveAttribute('aria-pressed', 'true')
+}
+
+async function noPageOverflow(page: Page) {
+  await expect.poll(() => page.evaluate(() => ({
+    width: document.documentElement.scrollWidth - window.innerWidth,
+    height: document.documentElement.scrollHeight - window.innerHeight,
+    x: window.scrollX,
+    y: window.scrollY,
+  }))).toEqual({ width: 0, height: 0, x: 0, y: 0 })
+}
+
+async function selectedNodeIsUsable(page: Page, id: string) {
+  const node = page.locator(`.react-flow__node[data-id="${id}"]`)
+  await expect(node).toBeInViewport()
+  await expect.poll(() => node.evaluate((element) => {
+    const rect = element.getBoundingClientRect()
+    const map = element.closest('.map')!.getBoundingClientRect()
+    const overlaps = [...document.querySelectorAll('.camera-controls, .pan-controls, .map-summary')].filter((control) => {
+      const box = control.getBoundingClientRect()
+      return box.width > 0 && box.height > 0 && rect.left < box.right && rect.right > box.left && rect.top < box.bottom && rect.bottom > box.top
+    }).map((control) => control.className)
+    return {
+      fullyInsideCanvas: rect.left >= map.left - 1 && rect.right <= map.right + 1 && rect.top >= map.top - 1 && rect.bottom <= map.bottom + 1,
+      overlaps,
+    }
+  })).toEqual({ fullyInsideCanvas: true, overlaps: [] })
+  await expect.poll(() => node.evaluate((element) => {
+    const rect = element.getBoundingClientRect()
+    const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)
+    return hit?.closest('.react-flow__node')?.getAttribute('data-id')
+  })).toBe(id)
+}
 
 test('search centers the native node, purchase persists, and undo works', async ({ page }) => {
   await page.goto('./')
@@ -29,7 +91,9 @@ test('search centers the native node, purchase persists, and undo works', async 
   await expect(page.locator('.state-label')).toHaveText('✓ Purchased and active')
   await page.getByRole('button', { name: 'Remove purchase…' }).click()
   await page.getByRole('button', { name: 'Apply changes', exact: true }).click()
-  await page.getByRole('button', { name: 'Undo', exact: true }).click()
+  const undo = page.getByRole('button', { name: 'Undo', exact: true })
+  await exposeMapAction(page, undo)
+  await undo.click()
   await expect(page.locator('.state-label')).toHaveText('✓ Purchased and active')
 })
 
@@ -39,27 +103,28 @@ test('spoilers share one boundary across nodes, search, details and totals', asy
   await expect(page.locator(`.react-flow__node[data-id="${hidden.id}"]`)).toHaveCount(0)
   await page.getByRole('searchbox').fill(hidden.title)
   await expect(page.locator('.search-result').filter({ hasText: hidden.title })).toHaveCount(0)
-  await page.getByRole('checkbox', { name: 'Show spoilers' }).check()
+  await showSpoilers(page, true)
   await expect(page.locator('.map-summary')).toContainText(`0 / ${catalog.upgrades.length}`)
+  await page.getByRole('searchbox').focus()
   await page.locator('.search-result').filter({ hasText: hidden.title }).first().click()
   await expect(page.locator('.details h2')).toHaveText(hidden.title)
-  await page.getByRole('checkbox', { name: 'Show spoilers' }).uncheck()
+  await showSpoilers(page, false)
   await expect(page.getByRole('complementary', { name: 'Upgrade details' })).toHaveCount(0)
   await expect(page.locator(`.react-flow__node[data-id="${hidden.id}"]`)).toHaveCount(0)
 })
 
 test('backup restore is previewed and malformed input leaves current progress intact', async ({ page }) => {
   await page.goto('./')
-  await page.getByRole('button', { name: 'Progress', exact: true }).click()
-  await page.locator('input[type=file]').setInputFiles({ name: 'invalid.json', mimeType: 'application/json', buffer: Buffer.from('{broken') })
+  await openProgress(page)
+  await page.getByLabel('Map progress JSON backup', { exact: true }).setInputFiles({ name: 'invalid.json', mimeType: 'application/json', buffer: Buffer.from('{broken') })
   await expect(page.getByRole('status')).toContainText('not valid JSON')
   const profile = { ...initial, purchases: { [start.id]: { epoch: 0, active: true }, 'unknown-future-id': { epoch: 0, active: true } } }
-  await page.locator('input[type=file]').setInputFiles({ name: 'backup.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(profile)) })
+  await page.getByLabel('Map progress JSON backup', { exact: true }).setInputFiles({ name: 'backup.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(profile)) })
   await expect(page.getByRole('dialog')).toContainText('Restore progress?')
   await expect(page.locator('.map-summary')).toContainText('0 /')
   await page.getByRole('button', { name: 'Apply changes', exact: true }).click()
   await expect(page.locator('.map-summary')).toContainText('1 /')
-  await page.getByRole('button', { name: 'Progress', exact: true }).click()
+  await openProgress(page)
   const downloadPromise = page.waitForEvent('download')
   await page.getByRole('button', { name: 'Export JSON backup', exact: true }).click()
   const download = await downloadPromise
@@ -82,7 +147,7 @@ test('corrupt stored data cannot be overwritten by ordinary edits', async ({ pag
   await page.addInitScript(() => localStorage.setItem('idle-slayer-ascension-map.profile.v1', '{corrupt'))
   await page.goto('./')
   await expect(page.getByRole('alert')).toContainText('not valid JSON')
-  await page.getByRole('checkbox', { name: 'Show spoilers' }).check()
+  await showSpoilers(page, true)
   expect(await page.evaluate(() => localStorage.getItem('idle-slayer-ascension-map.profile.v1'))).toBe('{corrupt')
   await expect(page.getByRole('alert')).toContainText('Changes stay in memory')
 })
@@ -92,7 +157,7 @@ test('entering history keeps repeat purchases current and removal still cascades
   const seed = { ...initial, purchases: { [start.id]: { epoch: 0, active: true }, [child.id]: { epoch: 0, active: true } } }
   await page.addInitScript((profile) => localStorage.setItem('idle-slayer-ascension-map.profile.v1', JSON.stringify(profile)), seed)
   await page.goto('./')
-  await page.getByRole('button', { name: 'Progress', exact: true }).click()
+  await openProgress(page)
   await page.getByRole('spinbutton', { name: 'Previous Ultra Ascensions' }).fill('1')
   await page.getByRole('spinbutton', { name: 'Previous Ultra Ascensions' }).press('Tab')
   await page.getByRole('button', { name: 'Close dialog', exact: true }).click()
@@ -107,6 +172,7 @@ test('entering history keeps repeat purchases current and removal still cascades
 
 test('fixed map and responsive controls support keyboard details without overflow', async ({ page }) => {
   await page.goto('./')
+  await chooseLayout(page, 'Game')
   const node = page.locator(`.react-flow__node[data-id="${start.id}"]`)
   await expect(page.getByRole('complementary', { name: 'Upgrade details' })).toHaveCount(0)
   await node.focus(); await page.keyboard.press('Enter')
@@ -131,3 +197,144 @@ test('fixed map and responsive controls support keyboard details without overflo
   expect(projection).toEqual({ x: higher.position.x, y: -higher.position.y })
   await page.screenshot({ path: `test-results/atlas-${test.info().project.name}.png`, fullPage: true })
 })
+
+test('Web and Game layouts preserve selection, ownership and the spoiler boundary', async ({ page }) => {
+  const branch = catalog.upgrades.find((upgrade) => upgrade.title === 'Reinvest')!
+  const seed = { ...initial, purchases: { [start.id]: { epoch: 0, active: true } } }
+  await page.addInitScript((profile) => localStorage.setItem('idle-slayer-ascension-map.profile.v1', JSON.stringify(profile)), seed)
+  await page.goto('./')
+  const layout = page.getByRole('group', { name: 'Map layout', exact: true })
+  await expect(layout.getByRole('button', { name: 'Web', exact: true })).toHaveAttribute('aria-pressed', 'true')
+  await selectUpgrade(page, branch.title)
+  const selectedNode = page.locator(`.react-flow__node[data-id="${branch.id}"]`)
+  await expect(selectedNode).toHaveClass(/selected/)
+  const webPosition = await selectedNode.getAttribute('style')
+  const overlaps = await page.locator('.react-flow__node').evaluateAll((elements) => {
+    const rectangles = elements.map((element) => {
+      const matrix = new DOMMatrix(getComputedStyle(element).transform)
+      return { id: element.getAttribute('data-id'), x: matrix.e, y: matrix.f, width: element.clientWidth, height: element.clientHeight }
+    })
+    const collisions: string[] = []
+    for (let i = 0; i < rectangles.length; i++) for (let j = i + 1; j < rectangles.length; j++) {
+      const a = rectangles[i], b = rectangles[j]
+      if (a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y) collisions.push(`${a.id}:${b.id}`)
+    }
+    return collisions
+  })
+  expect(overlaps).toEqual([])
+  const progress = await page.evaluate(() => localStorage.getItem('idle-slayer-ascension-map.profile.v1'))
+  await chooseLayout(page, 'Game')
+  await expect(selectedNode).toHaveClass(/selected/)
+  await expect(page.locator('.details h2')).toHaveText(branch.title)
+  await expect.poll(() => selectedNode.getAttribute('style')).not.toBe(webPosition)
+  await selectedNodeIsUsable(page, branch.id)
+  await chooseLayout(page, 'Web')
+  await expect(selectedNode).toHaveClass(/selected/)
+  await expect.poll(() => selectedNode.getAttribute('style')).toBe(webPosition)
+  await selectedNodeIsUsable(page, branch.id)
+  expect(await page.evaluate(() => localStorage.getItem('idle-slayer-ascension-map.profile.v1'))).toBe(progress)
+  await expect(page.locator('.map-summary')).toContainText('1 /')
+  await expect(page.locator(`.react-flow__node[data-id="${hidden.id}"]`)).toHaveCount(0)
+  await page.getByRole('searchbox').fill(hidden.title)
+  await expect(page.locator('.search-result').filter({ hasText: hidden.title })).toHaveCount(0)
+})
+
+test('selected connections show direction and navigate directly to visible neighbors', async ({ page }) => {
+  const branch = catalog.upgrades.find((upgrade) => upgrade.title === 'Reinvest')!
+  const incoming = catalog.connections.find((edge) => edge.to === branch.id && initialVisibility.ids.has(edge.from))!
+  const outgoing = catalog.connections.find((edge) => edge.from === branch.id && initialVisibility.ids.has(edge.to))!
+  const prerequisite = catalog.upgrades.find((upgrade) => upgrade.id === incoming.from)!
+  const next = catalog.upgrades.find((upgrade) => upgrade.id === outgoing.to)!
+  await page.goto('./')
+  await selectUpgrade(page, branch.title)
+  const fromEdge = page.locator(`.react-flow__edge[data-id="${incoming.from}:${incoming.to}"]`)
+  const toEdge = page.locator(`.react-flow__edge[data-id="${outgoing.from}:${outgoing.to}"]`)
+  await expect(fromEdge).toHaveClass(/connection-incoming/)
+  await expect(toEdge).toHaveClass(/connection-outgoing/)
+  await expect(fromEdge.locator('.react-flow__edge-path')).toHaveAttribute('marker-end', /.+/)
+  await expect(toEdge.locator('.react-flow__edge-path')).toHaveAttribute('marker-end', /.+/)
+  const muted = page.locator('.react-flow__edge.connection-muted').first()
+  await expect(muted).toBeAttached()
+  const incomingStyle = await fromEdge.locator('.react-flow__edge-path').evaluate((element) => ({ stroke: getComputedStyle(element).stroke, width: Number.parseFloat(getComputedStyle(element).strokeWidth) }))
+  const outgoingStyle = await toEdge.locator('.react-flow__edge-path').evaluate((element) => ({ stroke: getComputedStyle(element).stroke, width: Number.parseFloat(getComputedStyle(element).strokeWidth) }))
+  const backgroundWidth = await muted.locator('.react-flow__edge-path').evaluate((element) => Number.parseFloat(getComputedStyle(element).strokeWidth))
+  expect(incomingStyle.stroke).not.toBe(outgoingStyle.stroke)
+  expect(incomingStyle.width).toBeGreaterThan(backgroundWidth)
+  expect(outgoingStyle.width).toBeGreaterThan(backgroundWidth)
+  await expect(page.locator('.react-flow__node.node-muted').first()).toBeAttached()
+  await expect(page.locator(`.react-flow__node[data-id="${prerequisite.id}"]`)).toHaveClass(/node-related/)
+  await expect(page.locator(`.react-flow__node[data-id="${next.id}"]`)).toHaveClass(/node-related/)
+  const expand = page.getByRole('button', { name: 'Show details', exact: true })
+  if (await expand.isVisible()) await expand.click()
+  await page.getByRole('region', { name: 'Connected from', exact: true }).getByRole('button', { name: prerequisite.title, exact: true }).click()
+  await expect(page.locator('.details h2')).toHaveText(prerequisite.title)
+  await expect(page.locator(`.react-flow__node[data-id="${prerequisite.id}"]`)).toHaveClass(/selected/)
+  await selectedNodeIsUsable(page, prerequisite.id)
+  await selectUpgrade(page, branch.title)
+  if (await expand.isVisible()) await expand.click()
+  await page.getByRole('region', { name: 'Leads to', exact: true }).getByRole('button', { name: next.title, exact: true }).click()
+  await expect(page.locator('.details h2')).toHaveText(next.title)
+  await expect(page.locator(`.react-flow__node[data-id="${next.id}"]`)).toHaveClass(/selected/)
+  await selectedNodeIsUsable(page, next.id)
+})
+
+test('connection navigation keeps native AND and OR purchase requirements explicit', async ({ page }) => {
+  await page.addInitScript((profile) => localStorage.setItem('idle-slayer-ascension-map.profile.v1', JSON.stringify(profile)), { ...initial, showSpoilers: true })
+  await page.goto('./')
+  for (const kind of ['all', 'any'] as const) {
+    const upgrade = catalog.upgrades.find((node) => node.purchase.kind === kind && node.purchase.requirements.length > 1 && node.purchase.requirements.every((requirement) => requirement.kind === 'active'))!
+    if (upgrade.purchase.kind !== kind) throw new Error(`Missing native ${kind} fixture`)
+    const expected = upgrade.purchase.requirements.map((requirement) => {
+      if (requirement.kind !== 'active') throw new Error('Expected active prerequisite')
+      return `${catalog.upgrades.find((node) => node.id === requirement.id)!.title} (active)`
+    }).join(kind === 'all' ? ' AND ' : ' OR ')
+    await selectUpgrade(page, upgrade.title)
+    const expand = page.getByRole('button', { name: 'Show details', exact: true })
+    if (await expand.isVisible()) await expand.click()
+    const requirement = page.locator('.detail-content dt').filter({ hasText: /^Purchase requirements$/ }).locator('xpath=following-sibling::dd[1]')
+    await expect(requirement).toHaveText(expected)
+    await expect(page.getByRole('region', { name: 'Connected from', exact: true })).toBeVisible()
+    await expect(page.getByRole('region', { name: 'Leads to', exact: true })).toBeVisible()
+  }
+})
+
+for (const viewport of [{ width: 320, height: 568 }, { width: 844, height: 390 }]) {
+  test(`map and details stay usable at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+    await page.setViewportSize(viewport)
+    await page.goto('./')
+    await noPageOverflow(page)
+    const map = page.getByRole('region', { name: 'Ascension tree', exact: true })
+    const mapBox = (await map.boundingBox())!
+    expect(mapBox.width).toBeGreaterThanOrEqual(viewport.width === 320 ? 280 : 400)
+    expect(mapBox.height).toBeGreaterThanOrEqual(180)
+    await page.getByRole('button', { name: 'Return to start', exact: true }).click()
+    const details = page.getByRole('complementary', { name: 'Upgrade details', exact: true })
+    await expect(details).toBeVisible()
+    await expect(details.getByRole('button', { name: 'Record purchase…', exact: true })).toBeInViewport()
+    await expect(page.getByRole('button', { name: 'Show details', exact: true })).toBeVisible()
+    await expect(page.locator('.detail-content')).not.toBeVisible()
+    await selectedNodeIsUsable(page, start.id)
+    await noPageOverflow(page)
+    await page.getByRole('button', { name: 'Show details', exact: true }).click()
+    await expect(page.locator('.detail-content')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Hide details', exact: true })).toBeInViewport()
+    await expect(page.getByRole('button', { name: 'Close upgrade details', exact: true })).toBeInViewport()
+    await selectedNodeIsUsable(page, start.id)
+    await details.getByRole('button', { name: 'Record purchase…', exact: true }).click()
+    await expect(page.getByRole('dialog')).toContainText('Record purchase?')
+    await page.getByRole('button', { name: 'Apply purchases', exact: true }).click()
+    await expect(page.locator('.state-label')).toHaveText('✓ Purchased and active')
+    await noPageOverflow(page)
+    await page.getByRole('button', { name: 'Hide details', exact: true }).click()
+    await expect(page.locator('.detail-content')).not.toBeVisible()
+    await page.getByRole('button', { name: 'Close upgrade details', exact: true }).click()
+    await expect(details).toHaveCount(0)
+    await page.getByRole('button', { name: 'Map navigation', exact: true }).click()
+    await expect(page.getByRole('button', { name: 'Pan map right', exact: true })).toBeInViewport()
+    await page.getByRole('button', { name: 'Pan map right', exact: true }).click()
+    await page.getByRole('button', { name: 'Map navigation', exact: true }).click()
+    await selectUpgrade(page, start.title)
+    await noPageOverflow(page)
+    await page.screenshot({ path: `test-results/atlas-${viewport.width}x${viewport.height}-${test.info().project.name}.png` })
+  })
+}

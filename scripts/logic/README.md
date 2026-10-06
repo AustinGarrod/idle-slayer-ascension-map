@@ -58,7 +58,7 @@ Run the independent exhaustive comparison after normalization or public catalog 
 
 ```powershell
 python scripts/logic/validate_catalog_rules.py --export .local-game/asset-export/asset-export.json --catalog public/catalog.json --receipt data/native-rule-validation.json
-corepack.cmd yarn test src/domain/native-rules.test.ts
+yarn test src/domain/native-rules.test.ts
 ```
 
 The comparison receipt contains hashes and counts only. It checks the reviewed control flow against all 288 normalized nodes in 10,574 boolean cases without importing the normalizer. [The native-rule documentation](../../docs/native-rules.md) also records app-only milestone presentation and manual-removal policy.

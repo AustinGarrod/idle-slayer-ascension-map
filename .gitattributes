@@ -2,3 +2,5 @@
 *.png binary
 *.woff binary
 *.woff2 binary
+# Keep the official vendored CLI byte-for-byte, including template whitespace.
+/.yarn/releases/yarn-*.cjs -whitespace

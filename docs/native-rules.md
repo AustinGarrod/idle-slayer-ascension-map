@@ -73,7 +73,7 @@ This is spoiler policy for manual entry, not a guessed native dependency. The sa
 
 ```powershell
 python scripts/logic/validate_catalog_rules.py --export .local-game/asset-export/asset-export.json --catalog public/catalog.json --receipt data/native-rule-validation.json
-corepack.cmd yarn test src/domain/native-rules.test.ts
+yarn test src/domain/native-rules.test.ts
 ```
 
 The [independent validator](../scripts/logic/validate_catalog_rules.py) reconstructs the reviewed native control flow directly from serialized requirements without importing the normalizer. It compares every purchase truth table and all relevant reveal booleans, exact IDs and connections, retention, activation, Ultra Ascension eligibility and four retention mappings. This build yields **10,574** purchase/reveal cases over **288** nodes and **318** connections. [The sanitized comparison receipt](../data/native-rule-validation.json) binds those checks to catalog, export, validator and native-receipt hashes. App regression tests exercise the actual public catalog's reveal, hidden prerequisite, ownership exception, activation and historical-retention behavior.

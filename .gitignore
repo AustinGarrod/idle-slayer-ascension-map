@@ -1,6 +1,7 @@
 # Dependencies and generated output
 node_modules/
-.yarn/
+.yarn/*
+!.yarn/releases/
 dist/
 dist-ssr/
 .cache/
@@ -17,6 +18,7 @@ __pycache__/
 Idle Slayer_Data/
 *.dll
 appmanifest_1353300.acf
+*.sav
 
 # Credentials and local configuration
 .env

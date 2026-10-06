@@ -1,8 +1,40 @@
 # Idle Slayer Ascension Map — design direction
 
-This document defines the visual direction and reviewed Atlas layout for the app. The map preserves extracted native coordinates; responsive design changes the surrounding controls and camera, not the tree layout. Catalog completeness and game-rule verification remain independent release requirements.
+This document defines the visual direction and reviewed Atlas layout for the app. Game preserves extracted native coordinates; Web provides a separate visible-only dependency arrangement. Responsive design changes controls and inspector placement without mutating either layout's source data. Catalog completeness and game-rule verification remain independent release requirements.
 
-## Concepts and independent layout review
+## Connection clarity and mobile feedback
+
+Three new arrangements received an independent spacing and interaction review after feedback on crowded connections and small screens:
+
+1. **Dual Atlas — selected:** Web orders prerequisite paths left to right; Game retains familiar native positions. A compact toolbar keeps the two choices visible. The review found that 320–359 px screens cannot accommodate a footer and three toolbar rows; compact screens now use two rows, a Map options dialog and a docked summary. Short landscape screens use one toolbar row and a side inspector, preserving a useful canvas.
+2. **Branch lens:** Focus the map on a selected upgrade, its ancestors and immediate dependents. The review found clearer paths but an additional navigation state that needs an explicit return to the whole map. The implemented Atlas borrows incident-path emphasis and the expandable summary, while keeping the whole visible graph available.
+3. **Upgrade navigator:** A visible-upgrade list becomes the primary navigation with a Map/List switch. The review found this strong for keyboards and narrow phones, but permanent list and detail rails would crowd tablets. Atlas retains title search and direct neighbor buttons without adding another browsing mode.
+
+The chosen design uses directed paths with arrowheads, gold dashed incoming connections and magenta solid outgoing connections for the selected upgrade. Unrelated cards and paths become less prominent but remain available. Connected from and Leads to buttons navigate to visible neighbors; the exact purchase AND/OR and activation rules remain separate text. Web routing uses visible-only layered ranks and crossing minimization. Hidden nodes contribute neither spaces nor routes.
+
+Compact details show the upgrade's icon, title, cost, status and purchase action. Show details expands the internally scrollable description, requirements, connections and sources. The inspector occupies an actual layout row or column so selected nodes cannot center behind it. The full footer moves into Map options. Four directional camera buttons appear only after opening Map navigation, while zoom and return-to-start remain immediately available. Browser acceptance includes 320×568 portrait, 844×390 landscape, compact/expanded details, internal scrolling and selected-node hit testing.
+
+## Next-upgrade guidance
+
+Three presentations were independently reviewed for the wiki-based suggestion feature:
+
+1. **On-demand dialog — selected:** a visible Next upgrade button opens one main suggestion and two alternatives. The phone search row splits between search and a 94 px recommendation button without adding a toolbar row. The dialog scrolls internally; its first suggestion shows native benefit, exact cost, prerequisites-recorded status, guide priority and source. Show on map and Record purchase remain 44 px actions and appear before longer order/source details.
+2. **Inline folding card:** keeping a suggested upgrade above or below the canvas improves discovery, but the added 60–140 px surface crowds the map and expanded inspector at 320×568 and in landscape. It was rejected for this iteration.
+3. **Recommended node badge:** a map badge provides context without a new panel, but is hard to discover when offscreen or zoomed out and competes with purchase-state symbols. The chosen dialog instead offers Show on map, preserving current layout and progress.
+
+The dialog says Prerequisites recorded rather than claiming an upgrade is affordable or universally optimal. A guide snapshot/native-version line makes the source distinction clear. Owned, hidden and gated upgrades cannot enter a suggestion or explanation; no upcoming hidden-node counts are exposed. New Astral locks identify their deferred activation. Empty states distinguish owned visible upgrades from blocked progress. Closing with Escape restores focus to the trigger, and selecting a map suggestion closes the dialog before centering and opening details. General ordering assumes mixed play; unrecorded SP/USP, equipment and play style are not optimized.
+
+## Game-progress import
+
+Three arrangements received an independent spacing and interaction review:
+
+1. **Progress action and dedicated preview — selected:** Import game save opens the file picker, followed by a comparison dialog. Current and After import columns show only visible map counts plus the explicit UA counter. The header and 44 px Apply import/Cancel actions remain reachable while the content scrolls at 320×568 and 844×390. Labels and the generic Windows path wrap, and closing restores focus to the Progress import action.
+2. **Inline file zone in Progress:** placing selection, comparison and warnings among backup/reset actions crowds phones and makes the apply action harder to distinguish. The selected design keeps the review in its own dialog.
+3. **Map before/after overlay:** a graphical comparison adds a browsing state and reveals incoming topology before confirmation. Split maps also reduce the available phone canvas. The dialog instead uses the same visibility calculation as the map.
+
+The preview explains replacement, retained unknown map entries and spoiler preference. It describes the retained-ownership baseline because exact purchase epochs are absent from the save. Other native data and hidden titles/counts do not appear. Errors are generic and retryable; choosing a file or cancelling never applies progress. The scope is the reviewed Steam format and local browser processing, with normal undo after confirmation.
+
+## Initial concepts and independent layout review
 
 Three distinct arrangements were reviewed before choosing Atlas. All three use the same spoiler-safe visibility result for the canvas, connections, search, details, milestones and totals. None adds hidden-node silhouettes or a miniature view that discloses hidden topology.
 
@@ -28,7 +60,7 @@ Spacing and accessibility review: overlays can conceal selected nodes and camera
 
 ## Visual reference
 
-Use the [official Idle Slayer editor screenshot](https://idleslayer.com/img/press-kit/Editor%20Screenshot%202.png) and the installed game's Ascension tree as references. Inspect the installation before treating any screenshot or wiki diagram as a current layout. Preserve extracted game coordinates rather than arranging nodes for an invented diagram.
+Use the [official Idle Slayer editor screenshot](https://idleslayer.com/img/press-kit/Editor%20Screenshot%202.png) and the installed game's Ascension tree as references. Inspect the installation before treating any screenshot or wiki diagram as a current layout. Preserve extracted game coordinates in the catalog and Game view; the Web diagram changes only presentation.
 
 The app should feel related to Idle Slayer through charcoal and cocoa surfaces, gold framing, magenta tree connections and crisp pixel icons. Surround those game elements with readable controls and descriptions that work on desktop and mobile.
 
@@ -60,9 +92,9 @@ Avoid broad gradients, glossy surfaces and oversized decoration. Use restrained 
 
 ## Map and controls
 
-- Keep the tree fixed in its native arrangement. Pan and zoom the viewport instead of moving nodes. Give the starting region a clear return action.
+- Keep each layout fixed. Game uses the native arrangement; Web uses the visible dependency graph. Pan and zoom the viewport instead of moving nodes. Give the starting region a clear return action.
 - Place title search, the spoiler toggle and progress controls in a compact toolbar that remains reachable while exploring.
-- Use a details side panel on desktop and a bottom sheet on mobile. Show the selected upgrade's title, icon, cost, description, prerequisites, purchase/activation state and provenance clearly.
+- Use a details side panel on desktop and a compact expandable docked panel on mobile. Show the selected upgrade's title, icon, cost, description, prerequisites, purchase/activation state and provenance clearly.
 - Separate visible locked, available, purchased and pending-activation states with distinct symbols and outlines. Color can reinforce a state but must not be its only cue.
 - Filter hidden upgrades and their connections out of the map and related UI consistently. Do not show placeholder silhouettes or search hints that reveal hidden branches unless the game's reveal rules call for them.
 - Use clear preview dialogs for cascading removal and Ultra Ascension. Name the changes before the user applies them and provide undo for progress edits.

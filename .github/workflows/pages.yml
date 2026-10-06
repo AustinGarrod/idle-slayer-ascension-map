@@ -21,15 +21,14 @@ jobs:
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '24'
-      - run: corepack enable
-      - run: yarn install --immutable
-      - run: yarn validate:catalog
-      - run: yarn typecheck
-      - run: yarn test
-      - run: yarn build
-      - run: yarn playwright install --with-deps chromium
-      - run: yarn test:e2e
-      - run: yarn check:release
+      - run: node .yarn/releases/yarn-4.13.0.cjs install --immutable
+      - run: node .yarn/releases/yarn-4.13.0.cjs validate:catalog
+      - run: node .yarn/releases/yarn-4.13.0.cjs typecheck
+      - run: node .yarn/releases/yarn-4.13.0.cjs test
+      - run: node .yarn/releases/yarn-4.13.0.cjs build
+      - run: node .yarn/releases/yarn-4.13.0.cjs playwright install --with-deps chromium
+      - run: node .yarn/releases/yarn-4.13.0.cjs test:e2e
+      - run: node .yarn/releases/yarn-4.13.0.cjs check:release
       - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         with:

@@ -4,7 +4,13 @@
 
 This unofficial companion is unaffiliated with Idle Slayer or its creator. Game text, upgrade data and pixel icons belong to Pablo Leban and their respective rights holders, and are excluded from the application MIT license. No game binaries are redistributed.
 
-The normalized catalog and 288 individual icons were extracted offline from Idle Slayer 7.2.0, Steam app 1353300, build 25551532. Native English localization supplies text, with plain-text formatting and documented static projections for player-dependent effects. Sources: [Steam](https://store.steampowered.com/app/1353300/Idle_Slayer/), [official site](https://idleslayer.com/) and [visual reference](https://idleslayer.com/img/press-kit/Editor%20Screenshot%202.png). Exact native/catalog/icon hashes are in data/catalog-receipt.json. No wiki content is bundled; future wiki additions need individual URLs, revisions, attribution and licenses.
+The normalized catalog and 288 individual icons were extracted offline from Idle Slayer 7.2.0, Steam app 1353300, build 25551532. Native English localization supplies text, with plain-text formatting and documented static projections for player-dependent effects. Sources: [Steam](https://store.steampowered.com/app/1353300/Idle_Slayer/), [official site](https://idleslayer.com/) and [visual reference](https://idleslayer.com/img/press-kit/Editor%20Screenshot%202.png). Exact native/catalog/icon hashes are in data/catalog-receipt.json. Wiki ordering is licensed and attributed separately below; wiki descriptions and icons are not bundled.
+
+## Wiki recommendation priorities
+
+The ordering in `src/data/wiki-priorities.json` is adapted from the [Idle Slayer Wiki Ascension Tree Tier List, revision 7187](https://idleslayer.fandom.com/wiki/Ascension_Tree_Tier_List?oldid=7187), by Idle Slayer Wiki contributors, dated 2026-07-05. It is licensed under [Creative Commons Attribution-ShareAlike 3.0 Unported](https://creativecommons.org/licenses/by-sa/3.0/), separately from the application's MIT code license. [Source history](https://idleslayer.fandom.com/wiki/Ascension_Tree_Tier_List?action=history) identifies contributors. The wiki declares game 7.0.0; current costs and gates come from the extracted 7.2.0 game catalog.
+
+Changes: purchase-order facts were mapped to stable native IDs, repeated recommendations use their earliest general-guide rank, supplementary quick-UA tables supply identity evidence, and documented spelling/table syntax differences were reconciled. Brief notes were written from native effects; wiki paragraphs and images were not copied. Exact source hashes, revisions, mapping evidence and the Fandom licensing-policy witness are in the generated data and [provenance documentation](docs/wiki-recommendations.md). The refresh script is original MIT-licensed code.
 
 ## Press Start 2P
 
@@ -13,3 +19,7 @@ Copyright 2012 The Press Start 2P Project Authors (cody@zone38.net), with Reserv
 ## Software
 
 React/React DOM, React Flow and Vite retain their MIT licenses. TypeScript and Playwright retain their Apache 2.0 licenses; Vitest retains its MIT license. Pinned package versions and transitive dependencies are recorded in yarn.lock. UnityPy and Cpp2IL retain their MIT licenses; extraction docs record upstream versions and checksums. Downloaded tools and reconstructed game assemblies remain private local inputs.
+
+Dagre and its Graphlib dependency supply the Web graph layout under the MIT license. Their license texts are bundled in public/licenses/.
+
+The repository-local Yarn 4.13.0 CLI is development tooling under the BSD 2-Clause license, copyright Yarn Contributors. Its official distribution, checksum and full license are in `.yarn/releases/`. It is not included in the deployed browser application.

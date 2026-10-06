@@ -14,6 +14,7 @@ export default defineConfig({
         '**/.local-game/**',
         '**/Idle Slayer_Data/**',
         '**/*.dll',
+        '**/*.sav',
         '**/appmanifest_1353300.acf',
       ],
     },

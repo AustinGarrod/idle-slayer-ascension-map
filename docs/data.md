@@ -32,7 +32,9 @@ with `screenY = -nativeY` because browser Y increases downward.
 The extractor reads the Steam manifest only for app and build ID. It does not
 export installation paths, account IDs, play timestamps or the manifest text.
 Input hashes identify the exact game assets and native code used for this
-review. Player saves were neither inspected nor imported. All tooling ran
+review. Catalog extraction neither inspected nor imported player saves. The
+separate user-selected progress importer is documented in [save-import.md](save-import.md).
+All catalog tooling ran
 offline without launching the game or invoking its methods.
 
 ## Native rules and their representation
@@ -110,8 +112,8 @@ then promote only the normalized catalog and individual reviewed sprites:
 Copy-Item -LiteralPath .local-game\catalog-candidate.json -Destination public\catalog.json
 Get-ChildItem -LiteralPath .local-game\asset-export\icons -Filter *.png | Copy-Item -Destination public\assets\upgrades
 .\.local-game\extract-venv\Scripts\python.exe scripts\extract\write_coverage_receipt.py --export .local-game\asset-export\asset-export.json --catalog public\catalog.json --sprite-review .local-game\sprite-review\sprite-review-inventory.json --icons public\assets\upgrades --output data\catalog-receipt.json
-corepack.cmd yarn typecheck
-corepack.cmd yarn build
+yarn typecheck
+yarn build
 ```
 
 Also run the repository's catalog, rule, storage and production-browser checks
