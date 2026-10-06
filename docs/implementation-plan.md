@@ -2,7 +2,7 @@
 
 ## Summary and current state
 
-Build a static React and TypeScript app with Vite, Yarn and React Flow. Preserve the game's map positions in the Game view, offer a clearer Web dependency layout, support title search and purchase tracking, and hide spoilers according to the game's reveal rules.
+Build a static React and TypeScript app with Vite, Yarn and React Flow. Preserve the game's map positions in Game Layout, offer a clearer Detailed Layout (formerly Web), support title search and purchase tracking, and hide spoilers according to the game's reveal rules. Default to Game Layout and remember the user's last explicit layout selection in separate local storage.
 
 Publish through GitHub Pages from `AustinGarrod/idle-slayer-ascension-map`. Progress stays in local storage, with JSON backup and restore.
 
@@ -23,7 +23,7 @@ Include every node belonging to the Ascension tree, including Ultra, Astral and 
 
 ## Map and progress behavior
 
-- Provide fixed Game and Web layouts with mouse and touch pan/zoom, zoom controls and a return-to-start action. Game preserves extracted native coordinates; Web arranges only the visible dependency graph. Nodes cannot be rearranged. Arrows and selected-path emphasis clarify connections, and visible neighbor buttons support direct navigation.
+- Provide fixed Game and Web layouts with mouse and touch pan/zoom, zoom controls and a return-to-start action. Game preserves extracted native coordinates with native circular icon proportions and thick straight center-vector lines; Web arranges only the visible dependency graph. Nodes cannot be rearranged. Web arrows and selected-path arrows/emphasis clarify connections, and visible neighbor buttons support direct navigation.
 - Search titles without case or apostrophe sensitivity. Results include icons and costs; selecting one centers the map and opens its details.
 - Details show title, description, cost, prerequisites, purchase/activation status and source references. Use a side panel on desktop and a compact expandable docked panel on mobile. Compact controls must preserve useful map space on small portrait and landscape screens.
 - Default to hiding spoilers. Apply the game's reveal rules while retaining visible locked nodes. Filter search, milestone controls, details, connections and progress totals through the same visibility logic.

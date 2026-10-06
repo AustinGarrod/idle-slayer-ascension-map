@@ -20,7 +20,7 @@ export interface MapLayoutOptions {
 export interface MapLayout {
   /** Centers match React Flow's nodeOrigin={[0.5, 0.5]}. */
   centers: ReadonlyMap<string, MapCenter>
-  /** Web routes follow Dagre's rank corridors, keyed by `${from}:${to}`. */
+  /** Routes keyed by `${from}:${to}`; native lines retain the center-to-center angle. */
   edgePaths: ReadonlyMap<string, readonly MapCenter[]>
   /** Card-inclusive bounds; hidden nodes cannot contribute to these bounds. */
   bounds: { minX: number; minY: number; maxX: number; maxY: number }
@@ -30,6 +30,8 @@ export interface MapLayout {
 
 export const MAP_NODE_WIDTH = 132
 export const MAP_NODE_HEIGHT = 122
+// Ascension Skill / Container RectTransforms in the reviewed native prefab.
+export const GAME_NODE_SIZE = 100
 export const WEB_RANK_GAP = 100
 export const WEB_NODE_GAP = 48
 
@@ -48,9 +50,9 @@ function dimension(value: number): number {
  * Dagre uses layered ranking and crossing minimization, with left-to-right
  * ranks. Sorted insertion makes placement independent of source array order.
  */
-export function createMapLayout({ mode, upgrades, connections, nodeWidth = MAP_NODE_WIDTH, nodeHeight = MAP_NODE_HEIGHT }: MapLayoutOptions): MapLayout {
-  const width = dimension(nodeWidth)
-  const height = dimension(nodeHeight)
+export function createMapLayout({ mode, upgrades, connections, nodeWidth, nodeHeight }: MapLayoutOptions): MapLayout {
+  const width = dimension(nodeWidth ?? (mode === 'native' ? GAME_NODE_SIZE : MAP_NODE_WIDTH))
+  const height = dimension(nodeHeight ?? (mode === 'native' ? GAME_NODE_SIZE : MAP_NODE_HEIGHT))
   const centers = new Map<string, MapCenter>()
   const edgePaths = new Map<string, readonly MapCenter[]>()
   const nodes = [...upgrades].sort((left, right) => compareIds(left.id, right.id))
@@ -62,6 +64,19 @@ export function createMapLayout({ mode, upgrades, connections, nodeWidth = MAP_N
     for (const node of nodes) {
       if (!Number.isFinite(node.position.x) || !Number.isFinite(node.position.y)) throw new Error('Native map coordinates must be finite')
       centers.set(node.id, Object.freeze({ x: node.position.x, y: -node.position.y }))
+    }
+    for (const edge of connections) {
+      const source = centers.get(edge.from), target = centers.get(edge.to)
+      if (!source || !target) continue
+      const dx = target.x - source.x, dy = target.y - source.y
+      // Native lines run between circular frame centers, behind the icons.
+      // Trim along that same ray so selected arrowheads end at the frame.
+      const distance = Math.hypot(dx / (width / 2), dy / (height / 2))
+      const inset = distance > 0 ? Math.min(1 / distance, 0.5) : 0
+      edgePaths.set(`${edge.from}:${edge.to}`, Object.freeze([
+        Object.freeze({ x: source.x + dx * inset, y: source.y + dy * inset }),
+        Object.freeze({ x: target.x - dx * inset, y: target.y - dy * inset }),
+      ]))
     }
   } else {
     const graph = new Graph<GraphLabel, NodeLabel, EdgeLabel>({ directed: true })

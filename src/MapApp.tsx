@@ -8,8 +8,10 @@ import type { Catalog, Profile, Requirement, Upgrade } from './domain/types'
 import { emptyProfile } from './domain/types'
 import { planPurchase, planRemoval, planUltraAscension, satisfies, searchVisible, visibility } from './domain/rules'
 import { exportProfileBackup, loadProfile, parseProfileBackup, saveProfile } from './domain/storage'
-import { createMapLayout, MAP_NODE_HEIGHT, MAP_NODE_WIDTH } from './domain/map-layout'
+import { createMapLayout, GAME_NODE_SIZE, MAP_NODE_HEIGHT, MAP_NODE_WIDTH } from './domain/map-layout'
 import { DependencyEdge } from './DependencyEdge'
+import { NativeEdge } from './NativeEdge'
+import { loadLayoutPreference, saveLayoutPreference } from './domain/layout-preference'
 import { recommendUpgrades } from './domain/recommendations'
 import { schemaVersion, source as wikiSource, rows as wikiRows } from './data/wiki-priorities.json'
 import { RecommendationPanel } from './RecommendationPanel'
@@ -46,7 +48,7 @@ function UpgradeCard({ data }: NodeProps<UpgradeNode>) {
   </div>
 }
 const nodeTypes = { upgrade: UpgradeCard }
-const edgeTypes = { dependency: DependencyEdge }
+const edgeTypes = { dependency: DependencyEdge, native: NativeEdge }
 const wikiPriorities = { schemaVersion, source: wikiSource, rows: wikiRows }
 const cost = (value: string) => BigInt(value).toLocaleString('en')
 
@@ -83,7 +85,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
   const gameImportRequest = useRef(0)
   const currentProfile = useRef(profile)
   currentProfile.current = profile
-  const [layoutMode, setLayoutMode] = useState<'native' | 'web'>('web')
+  const [layoutMode, setLayoutMode] = useState(() => loadLayoutPreference(() => window.localStorage))
   const [detailExpanded, setDetailExpanded] = useState(false)
   const [navigationOpen, setNavigationOpen] = useState(false)
   const [preview, setPreviewState] = useState<Preview | null>(null)
@@ -220,7 +222,12 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     } catch { setStorageError('Local storage remains unavailable. Export a backup to keep this session.'); trackEvent('storage_error', { reason: 'unavailable', action: 'retry' }) }
   }
   useEffect(() => { if (selected && !visible.ids.has(selected)) clearSelection() }, [selected, visible.ids])
-  function moveCamera(id: string, zoom = 1) {
+  const gameLayout = layoutMode === 'native'
+  const nodeWidth = gameLayout ? GAME_NODE_SIZE : MAP_NODE_WIDTH
+  const nodeHeight = gameLayout ? GAME_NODE_SIZE : MAP_NODE_HEIGHT
+  const startZoom = gameLayout ? 0.6 : 0.85
+  const selectionZoom = gameLayout ? 0.85 : 1
+  function moveCamera(id: string, zoom = selectionZoom) {
     const position = layout.centers.get(id)
     if (!position) return
     // Docked details resize the canvas. Wait for its new dimensions before centering.
@@ -228,12 +235,20 @@ function Atlas({ catalog }: { catalog: Catalog }) {
       const map = mapElement.current?.getBoundingClientRect()
       const camera = mapElement.current?.querySelector('.camera-controls')?.getBoundingClientRect()
       let inset = 0
-      if (map && camera && camera.right > map.left + map.width / 2 - MAP_NODE_WIDTH * zoom / 2) {
-        const safeCenter = Math.max(MAP_NODE_HEIGHT * zoom / 2 + 8,
-          Math.min(map.height / 2, camera.top - map.top - MAP_NODE_HEIGHT * zoom / 2 - 12))
+      if (map && camera && camera.right > map.left + map.width / 2 - nodeWidth * zoom / 2) {
+        const safeCenter = Math.max(nodeHeight * zoom / 2 + 8,
+          Math.min(map.height / 2, camera.top - map.top - nodeHeight * zoom / 2 - 12))
         inset = (map.height / 2 - safeCenter) / zoom
       }
-      void flow.setCenter(position.x, position.y + inset, { zoom, duration: reducedMotion ? 0 : 220 })
+      const duration = reducedMotion ? 0 : 220
+      // The expanded phone inspector can resize the DOM before React Flow's
+      // container observer updates. Use the actual canvas for Game centering.
+      if (gameLayout && map) void flow.setViewport({
+        x: map.width / 2 - position.x * zoom,
+        y: map.height / 2 - (position.y + inset) * zoom,
+        zoom,
+      }, { duration })
+      else void flow.setCenter(position.x, position.y + inset, { zoom, duration })
     }))
   }
   function center(id: string, source: SelectionSource = 'map') {
@@ -251,6 +266,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
   function changeLayout(mode: 'native' | 'web') {
     if (mode !== layoutMode) trackEvent('map_layout_changed', { layout: mode === 'native' ? 'game' : 'web' })
     setLayoutMode(mode)
+    if (!saveLayoutPreference(mode, () => window.localStorage)) setMessage('Layout selected for this visit. Your browser could not save the layout preference.')
   }
   function undo() {
     const previous = history.at(-1)
@@ -268,12 +284,23 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     else { setMenu(null); setTrackingReload(enabled) }
   }
   useEffect(() => {
-    if (loaded) moveCamera(selected && visible.ids.has(selected) ? selected : catalog.startId, selected ? 1 : 0.85)
+    if (loaded) moveCamera(selected && visible.ids.has(selected) ? selected : catalog.startId, selected ? selectionZoom : startZoom)
   }, [layout, loaded, detailExpanded])
   useEffect(() => {
-    const resize = () => { if (loaded) moveCamera(selected && visible.ids.has(selected) ? selected : catalog.startId, selected ? 1 : 0.85) }
+    const resize = () => { if (loaded) moveCamera(selected && visible.ids.has(selected) ? selected : catalog.startId, selected ? selectionZoom : startZoom) }
     window.addEventListener('resize', resize)
     return () => window.removeEventListener('resize', resize)
+  }, [layout, loaded, selected])
+  useEffect(() => {
+    if (!gameLayout || !loaded || !mapElement.current) return
+    // Grid rows can finish resizing after the initial camera frames, including
+    // late font metrics. Recenter on actual canvas size changes, never on pan.
+    const observer = new ResizeObserver(() => moveCamera(
+      selected && visible.ids.has(selected) ? selected : catalog.startId,
+      selected ? selectionZoom : startZoom,
+    ))
+    observer.observe(mapElement.current)
+    return () => observer.disconnect()
   }, [layout, loaded, selected])
   const state = (node: Upgrade) => satisfies({ kind: 'owned', id: node.id }, profile)
     ? satisfies({ kind: 'active', id: node.id }, profile) ? 'purchased' : 'pending'
@@ -281,7 +308,8 @@ function Atlas({ catalog }: { catalog: Catalog }) {
   const nodes: UpgradeNode[] = visible.upgrades.map((node) => ({ id: node.id, type: 'upgrade', position: layout.centers.get(node.id)!,
     data: { upgrade: node, state: state(node) }, selected: selected === node.id,
     className: detail && node.id !== detail.id ? related.has(node.id) ? 'node-related' : 'node-muted' : '',
-    ariaLabel: `${node.title}, ${state(node)}, ${cost(node.cost)} Slayer Points`, width: MAP_NODE_WIDTH, height: MAP_NODE_HEIGHT }))
+    ariaLabel: `${node.title}, ${state(node)}, ${cost(node.cost)} Slayer Points`, width: nodeWidth, height: nodeHeight,
+    ...(gameLayout ? { zIndex: 2 } : {}) }))
   const edges = visible.connections.map((edge) => {
     const from = layout.centers.get(edge.from)!, to = layout.centers.get(edge.to)!
     const dx = to.x - from.x, dy = to.y - from.y
@@ -289,13 +317,15 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     const sourceHandle = layoutMode === 'web' ? 'right-out' : horizontal ? dx > 0 ? 'right-out' : 'left-out' : dy > 0 ? 'bottom-out' : 'top-out'
     const targetHandle = layoutMode === 'web' ? 'left-in' : horizontal ? dx > 0 ? 'left-in' : 'right-in' : dy > 0 ? 'top-in' : 'bottom-in'
     const direction = edge.to === detail?.id ? 'incoming' : edge.from === detail?.id ? 'outgoing' : null
-    const color = direction === 'incoming' ? '#f1d79b' : '#b860af'
+    const color = direction === 'incoming' ? '#f1d79b' : gameLayout
+      ? direction === 'outgoing' || satisfies({ kind: 'owned', id: edge.from }, profile) ? '#ff00be' : '#7d7d7d'
+      : '#b860af'
     return { id: `${edge.from}:${edge.to}`, source: edge.from, target: edge.to, sourceHandle, targetHandle,
-      type: layoutMode === 'web' ? 'dependency' : 'straight', focusable: false, selectable: false,
+      type: gameLayout ? 'native' : 'dependency', focusable: false, selectable: false,
       data: { points: layout.edgePaths.get(`${edge.from}:${edge.to}`) },
       className: detail ? direction ? `connection-${direction}` : 'connection-muted' : '',
-      style: { stroke: color, strokeWidth: direction ? 4 : 2 }, zIndex: direction ? 1 : 0,
-      markerEnd: { type: MarkerType.ArrowClosed, markerUnits: 'userSpaceOnUse', width: 32, height: 32, color } }
+      style: { stroke: color, strokeWidth: gameLayout ? direction ? 14 : 12 : direction ? 4 : 2 }, zIndex: direction ? 1 : 0,
+      markerEnd: gameLayout && !direction ? undefined : { type: MarkerType.ArrowClosed, markerUnits: 'userSpaceOnUse', width: gameLayout ? 24 : 32, height: gameLayout ? 24 : 32, color } }
   })
   function label(requirement: Requirement): string {
     switch (requirement.kind) {
@@ -383,7 +413,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
         {searchOpen && <div className="search-results" aria-label="Visible upgrade results"><div className="results-heading"><span>{results.length} visible results</span><button onClick={() => setSearchOpen(false)} aria-label="Close search results">×</button></div>{results.slice(0, 40).map((node) => <button className="search-result" key={node.id} onClick={() => center(node.id, 'search')}><Icon node={node} /><span>{node.title}<small>{cost(node.cost)} SP</small></span></button>)}{results.length > 40 && <p>Refine your search to see more results.</p>}{results.length === 0 && <p>No visible upgrades match.</p>}</div>}
       </div>
       <button className="next-upgrade" onClick={() => { setSearchOpen(false); setMenu('recommendations') }}>Next upgrade</button>
-      <div className="layout-control" role="group" aria-label="Map layout"><button aria-pressed={layoutMode === 'web'} onClick={() => changeLayout('web')} title="Readable dependency layout">Web</button><button aria-pressed={layoutMode === 'native'} onClick={() => changeLayout('native')} title="Original game positions">Game</button></div>
+      <div className="layout-control" role="group" aria-label="Map layout"><button aria-pressed={layoutMode === 'native'} onClick={() => changeLayout('native')} title="Original game positions">Game Layout</button><button aria-pressed={layoutMode === 'web'} onClick={() => changeLayout('web')} title="Readable dependency layout">Detailed Layout</button></div>
       <label className="spoiler-control desktop-action"><input type="checkbox" checked={profile.showSpoilers} onChange={(event) => toggleSpoilers(event.target.checked)} />Show spoilers</label>
       <button className="desktop-action" onClick={() => setMenu('milestones')}>Milestones</button><button className="desktop-action" onClick={() => setMenu('progress')}>Progress</button>
       <button className="mobile-options" aria-label="Map options" onClick={() => { setSearchOpen(false); setMenu('options') }}>☰</button>
@@ -391,9 +421,9 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     {storageError && <div className="notice" role="alert">{storageError} <button onClick={retryStorage}>{storageWritable ? 'Retry saving' : 'Retry recovery'}</button><button onClick={backup}>Export backup</button></div>}
     {!verified && <div className="notice">Local preview · Catalog verification is incomplete. Publication is gated.</div>}
     <div className={`workspace ${detail ? 'has-details' : ''} ${detailExpanded ? 'details-expanded' : ''}`}>
-      <section ref={mapElement} className="map" aria-label="Ascension tree" onKeyDownCapture={(event) => { keyboardSelection.current = (event.key === 'Enter' || event.key === ' ') && event.target instanceof HTMLElement && Boolean(event.target.closest('.react-flow__node')) }}>
-        {loaded && <ReactFlow<UpgradeNode> nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} nodeOrigin={[0.5, 0.5]} nodesDraggable={false} nodesConnectable={false} edgesReconnectable={false} deleteKeyCode={null} selectionKeyCode={null} multiSelectionKeyCode={null} minZoom={0.15} maxZoom={2.5} defaultViewport={{ x: 0, y: 0, zoom: 0.7 }} onInit={(instance) => { const start = layout.centers.get(catalog.startId); if (start) void instance.setCenter(start.x, start.y, { zoom: 0.85 }) }} onNodesChange={(changes) => { const selection = changes.find((entry) => entry.type === 'select' && entry.selected); if (selection?.type === 'select') { if (keyboardSelection.current && selection.id !== selected) center(selection.id, 'keyboard'); keyboardSelection.current = false } else if (changes.some((entry) => entry.type === 'select' && !entry.selected && entry.id === selected)) clearSelection() }} onNodeClick={(_, node) => { keyboardSelection.current = false; center(node.id) }} onMoveStart={(event, viewport) => { if (event) cameraStart.current = viewport }} onMoveEnd={(event, viewport) => { const start = cameraStart.current; cameraStart.current = null; if (event && start) { const pan = start.x !== viewport.x || start.y !== viewport.y; const zoom = start.zoom !== viewport.zoom; if (pan || zoom) trackEvent('map_camera_used', { action: pan && zoom ? 'pan_zoom' : zoom ? 'zoom' : 'pan', source: 'pointer' }) } }} onPaneClick={() => setSearchOpen(false)} ariaLabelConfig={{ 'node.a11yDescription.default': 'Press Enter to select an upgrade. The tree positions are fixed.' }}><Background color="#514432" gap={32} size={1} /></ReactFlow>}
-        <div className="map-summary"><span><b>{visible.owned}</b> / {visible.total} visible upgrades owned</span><span>Epoch {profile.epoch} · {profile.showSpoilers ? 'Spoilers shown' : 'Spoilers hidden'}</span><span className="connection-hint">{detail ? 'Dashed: connected from · Solid: leads to' : layoutMode === 'web' ? 'Prerequisite → upgrade · Select to trace connections' : 'Game positions · Select to trace connections'}</span></div>
+      <section ref={mapElement} className={`map ${gameLayout ? 'map-game' : ''}`} aria-label="Ascension tree" onKeyDownCapture={(event) => { keyboardSelection.current = (event.key === 'Enter' || event.key === ' ') && event.target instanceof HTMLElement && Boolean(event.target.closest('.react-flow__node')) }}>
+        {loaded && <ReactFlow<UpgradeNode> nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} elevateEdgesOnSelect={!gameLayout} nodeOrigin={[0.5, 0.5]} nodesDraggable={false} nodesConnectable={false} edgesReconnectable={false} deleteKeyCode={null} selectionKeyCode={null} multiSelectionKeyCode={null} minZoom={0.15} maxZoom={2.5} defaultViewport={{ x: 0, y: 0, zoom: 0.7 }} onInit={(instance) => { const start = layout.centers.get(catalog.startId); if (start) void instance.setCenter(start.x, start.y, { zoom: startZoom }) }} onNodesChange={(changes) => { const selection = changes.find((entry) => entry.type === 'select' && entry.selected); if (selection?.type === 'select') { if (keyboardSelection.current && selection.id !== selected) center(selection.id, 'keyboard'); keyboardSelection.current = false } else if (changes.some((entry) => entry.type === 'select' && !entry.selected && entry.id === selected)) clearSelection() }} onNodeClick={(_, node) => { keyboardSelection.current = false; center(node.id) }} onMoveStart={(event, viewport) => { if (event) cameraStart.current = viewport }} onMoveEnd={(event, viewport) => { const start = cameraStart.current; cameraStart.current = null; if (event && start) { const pan = start.x !== viewport.x || start.y !== viewport.y; const zoom = start.zoom !== viewport.zoom; if (pan || zoom) trackEvent('map_camera_used', { action: pan && zoom ? 'pan_zoom' : zoom ? 'zoom' : 'pan', source: 'pointer' }) } }} onPaneClick={() => setSearchOpen(false)} ariaLabelConfig={{ 'node.a11yDescription.default': 'Press Enter to select an upgrade. The tree positions are fixed.' }}><Background color="#514432" gap={32} size={1} /></ReactFlow>}
+        <div className="map-summary"><span><b>{visible.owned}</b> / {visible.total} visible upgrades owned</span><span>Epoch {profile.epoch} · {profile.showSpoilers ? 'Spoilers shown' : 'Spoilers hidden'}</span><span className="connection-hint">{detail ? 'Dashed: connected from · Solid: leads to' : layoutMode === 'web' ? 'Prerequisite → upgrade · Select to trace connections' : 'Grey: unowned prerequisite · Magenta: owned · Select to trace'}</span></div>
         <div className="camera-controls"><button aria-label="Zoom out" onClick={() => { trackEvent('map_camera_used', { action: 'zoom_out', source: 'controls' }); void flow.zoomOut({ duration: reducedMotion ? 0 : 150 }) }}>−</button><button aria-label="Zoom in" onClick={() => { trackEvent('map_camera_used', { action: 'zoom_in', source: 'controls' }); void flow.zoomIn({ duration: reducedMotion ? 0 : 150 }) }}>+</button><button onClick={() => { trackEvent('map_camera_used', { action: 'return_start', source: 'controls' }); center(catalog.startId, 'start') }}>Return to start</button><button aria-label="Map navigation" aria-expanded={navigationOpen} aria-controls="pan-controls" onClick={() => { trackEvent('map_camera_used', { action: 'navigation_toggle', expanded: !navigationOpen }); setNavigationOpen(!navigationOpen) }}>↔</button></div>
         {navigationOpen && <div className="pan-controls" id="pan-controls" aria-label="Map navigation controls"><button aria-label="Pan map left" onClick={() => { trackEvent('map_camera_used', { action: 'pan', source: 'controls', direction: 'left' }); const v = flow.getViewport(); void flow.setViewport({ ...v, x: v.x + 180 }) }}>←</button><button aria-label="Pan map right" onClick={() => { trackEvent('map_camera_used', { action: 'pan', source: 'controls', direction: 'right' }); const v = flow.getViewport(); void flow.setViewport({ ...v, x: v.x - 180 }) }}>→</button><button aria-label="Pan map up" onClick={() => { trackEvent('map_camera_used', { action: 'pan', source: 'controls', direction: 'up' }); const v = flow.getViewport(); void flow.setViewport({ ...v, y: v.y + 180 }) }}>↑</button><button aria-label="Pan map down" onClick={() => { trackEvent('map_camera_used', { action: 'pan', source: 'controls', direction: 'down' }); const v = flow.getViewport(); void flow.setViewport({ ...v, y: v.y - 180 }) }}>↓</button></div>}
       </section>

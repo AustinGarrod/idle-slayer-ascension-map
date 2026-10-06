@@ -29,14 +29,14 @@ async function undo(page: Page) {
 
 test('wiki suggestion follows recorded purchases and undo without changing layout', async ({ page }) => {
   await page.goto('./')
-  await page.getByRole('group', { name: 'Map layout' }).getByRole('button', { name: 'Game', exact: true }).click()
+  await page.getByRole('group', { name: 'Map layout' }).getByRole('button', { name: 'Game Layout', exact: true }).click()
   let dialog = await openSuggestions(page)
   await expect(dialog.locator('.recommendation-main')).toHaveAttribute('data-upgrade-id', start.id)
   await expect(dialog.locator('.recommendation-main')).toContainText('2 SP')
   await dialog.locator('.recommendation-main').getByRole('button', { name: 'Show on map', exact: true }).click()
   await expect(dialog).toHaveCount(0)
   await expect(page.locator('.details h2')).toHaveText(start.title)
-  await expect(page.getByRole('group', { name: 'Map layout' }).getByRole('button', { name: 'Game', exact: true })).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByRole('group', { name: 'Map layout' }).getByRole('button', { name: 'Game Layout', exact: true })).toHaveAttribute('aria-pressed', 'true')
   expect(await page.evaluate(() => localStorage.getItem('idle-slayer-ascension-map.profile.v1'))).toBeNull()
 
   dialog = await openSuggestions(page)

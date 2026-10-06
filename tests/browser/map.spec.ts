@@ -38,7 +38,7 @@ async function selectUpgrade(page: Page, title: string) {
   await expect(page.locator('.details h2')).toHaveText(title)
 }
 
-async function chooseLayout(page: Page, name: 'Web' | 'Game') {
+async function chooseLayout(page: Page, name: 'Detailed Layout' | 'Game Layout') {
   const action = page.getByRole('group', { name: 'Map layout', exact: true }).getByRole('button', { name, exact: true })
   await action.click()
   await expect(action).toHaveAttribute('aria-pressed', 'true')
@@ -172,7 +172,7 @@ test('entering history keeps repeat purchases current and removal still cascades
 
 test('fixed map and responsive controls support keyboard details without overflow', async ({ page }) => {
   await page.goto('./')
-  await chooseLayout(page, 'Game')
+  await chooseLayout(page, 'Game Layout')
   const node = page.locator(`.react-flow__node[data-id="${start.id}"]`)
   await expect(page.getByRole('complementary', { name: 'Upgrade details' })).toHaveCount(0)
   await node.focus(); await page.keyboard.press('Enter')
@@ -204,7 +204,8 @@ test('Web and Game layouts preserve selection, ownership and the spoiler boundar
   await page.addInitScript((profile) => localStorage.setItem('idle-slayer-ascension-map.profile.v1', JSON.stringify(profile)), seed)
   await page.goto('./')
   const layout = page.getByRole('group', { name: 'Map layout', exact: true })
-  await expect(layout.getByRole('button', { name: 'Web', exact: true })).toHaveAttribute('aria-pressed', 'true')
+  await chooseLayout(page, 'Detailed Layout')
+  await expect(layout.getByRole('button', { name: 'Detailed Layout', exact: true })).toHaveAttribute('aria-pressed', 'true')
   await selectUpgrade(page, branch.title)
   const selectedNode = page.locator(`.react-flow__node[data-id="${branch.id}"]`)
   await expect(selectedNode).toHaveClass(/selected/)
@@ -223,12 +224,12 @@ test('Web and Game layouts preserve selection, ownership and the spoiler boundar
   })
   expect(overlaps).toEqual([])
   const progress = await page.evaluate(() => localStorage.getItem('idle-slayer-ascension-map.profile.v1'))
-  await chooseLayout(page, 'Game')
+  await chooseLayout(page, 'Game Layout')
   await expect(selectedNode).toHaveClass(/selected/)
   await expect(page.locator('.details h2')).toHaveText(branch.title)
   await expect.poll(() => selectedNode.getAttribute('style')).not.toBe(webPosition)
   await selectedNodeIsUsable(page, branch.id)
-  await chooseLayout(page, 'Web')
+  await chooseLayout(page, 'Detailed Layout')
   await expect(selectedNode).toHaveClass(/selected/)
   await expect.poll(() => selectedNode.getAttribute('style')).toBe(webPosition)
   await selectedNodeIsUsable(page, branch.id)
@@ -246,6 +247,7 @@ test('selected connections show direction and navigate directly to visible neigh
   const prerequisite = catalog.upgrades.find((upgrade) => upgrade.id === incoming.from)!
   const next = catalog.upgrades.find((upgrade) => upgrade.id === outgoing.to)!
   await page.goto('./')
+  await chooseLayout(page, 'Detailed Layout')
   await selectUpgrade(page, branch.title)
   const fromEdge = page.locator(`.react-flow__edge[data-id="${incoming.from}:${incoming.to}"]`)
   const toEdge = page.locator(`.react-flow__edge[data-id="${outgoing.from}:${outgoing.to}"]`)

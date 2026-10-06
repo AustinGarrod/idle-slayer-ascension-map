@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { dependencyPath } from '../DependencyEdge'
-import { createMapLayout, MAP_NODE_HEIGHT, MAP_NODE_WIDTH, WEB_NODE_GAP, WEB_RANK_GAP, type MapCenter, type MapLayout } from './map-layout'
+import { createMapLayout, GAME_NODE_SIZE, MAP_NODE_HEIGHT, MAP_NODE_WIDTH, WEB_NODE_GAP, WEB_RANK_GAP, type MapCenter, type MapLayout } from './map-layout'
 import { visibility } from './rules'
 import { emptyProfile, type Catalog } from './types'
 
@@ -54,9 +54,10 @@ describe('visible map layout', () => {
     const result = createMapLayout({ mode: 'native', upgrades: catalog.upgrades, connections: catalog.connections })
     for (const upgrade of catalog.upgrades) expect(result.centers.get(upgrade.id)).toEqual({ x: upgrade.position.x, y: -upgrade.position.y })
     expect(result.centers.size).toBe(288)
-    expect(result.width).toBe(3732)
-    expect(result.height).toBe(3222)
-    expect(result.edgePaths.size).toBe(0)
+    expect(result.width).toBe(3700)
+    expect(result.height).toBe(3200)
+    expect(result.edgePaths.size).toBe(318)
+    expectNoOverlaps(result, GAME_NODE_SIZE, GAME_NODE_SIZE)
     expect(catalog).toEqual(before)
   })
 
@@ -64,7 +65,34 @@ describe('visible map layout', () => {
     const visible = graph.upgrades.slice(0, 2)
     const result = createMapLayout({ mode: 'native', upgrades: visible, connections: graph.connections })
     expect([...result.centers.keys()]).toEqual(['a', 'b'])
-    expect(result.bounds).toEqual({ minX: -666, minY: -361, maxX: 566, maxY: 261 })
+    expect(result.bounds).toEqual({ minX: -650, minY: -350, maxX: 550, maxY: 250 })
+    expect([...result.edgePaths.keys()]).toEqual(['a:b'])
+  })
+
+  it('clips native straight lines at circular frames without changing the centers angle', () => {
+    const result = createMapLayout({ mode: 'native', upgrades: catalog.upgrades, connections: catalog.connections })
+    for (const edge of catalog.connections) {
+      const source = result.centers.get(edge.from)!, target = result.centers.get(edge.to)!
+      const points = result.edgePaths.get(`${edge.from}:${edge.to}`)!
+      expect(points).toHaveLength(2)
+      const [from, to] = points
+      expect(Math.hypot(from.x - source.x, from.y - source.y)).toBeCloseTo(50)
+      expect(Math.hypot(to.x - target.x, to.y - target.y)).toBeCloseTo(50)
+      const dx = target.x - source.x, dy = target.y - source.y
+      for (const point of points) expect((point.x - source.x) * dy - (point.y - source.y) * dx).toBeCloseTo(0)
+      expect((to.x - from.x) * dx + (to.y - from.y) * dy).toBeGreaterThan(0)
+    }
+  })
+
+  it('keeps native routes finite for coincident or overlapping custom nodes', () => {
+    const upgrades = [{ id: 'a', position: { x: 0, y: 0 } }, { id: 'b', position: { x: 0, y: 0 } }]
+    const result = createMapLayout({ mode: 'native', upgrades, connections: [{ from: 'a', to: 'b' }] })
+    for (const point of result.edgePaths.get('a:b')!) expect(Math.hypot(point.x, point.y)).toBe(0)
+    upgrades[1].position.x = 20
+    for (const point of createMapLayout({ mode: 'native', upgrades, connections: [{ from: 'a', to: 'b' }] }).edgePaths.get('a:b')!) {
+      expect(point.x).toBe(10)
+      expect(Math.abs(point.y)).toBe(0)
+    }
   })
 
   it.each([

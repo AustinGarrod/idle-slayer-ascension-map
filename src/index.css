@@ -105,6 +105,20 @@ small { display: block; font-size: .8125rem; color: var(--muted); line-height: 1
 .upgrade-node.pending { border-color: #d6a2cb; border-style: dashed; }
 .upgrade-node.pending .node-symbol { color: #e3b7da; }
 .atlas .react-flow__node.selected .upgrade-node { box-shadow: 0 0 0 3px var(--canvas), 0 0 0 5px var(--bright-gold); }
+/* Game uses the native 100-unit circular frame and 64-unit pixel icon.
+   Web cards, routes and camera scale keep their existing presentation. */
+.map-game .upgrade-node { width: 100px; height: 100px; justify-content: center; padding: 15px; border-width: 3px; border-radius: 50%; background: #302a24; box-shadow: 0 0 0 3px #080605; }
+.map-game .upgrade-node > .upgrade-icon { width: 64px; height: 64px; margin: 0; flex: 0 0 64px; }
+.map-game .node-symbol { top: -3px; right: -1px; }
+.map-game .node-title { position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%); width: max-content; max-width: 220px; padding: 7px 10px; border: 1px solid var(--frame); border-radius: 4px; background: var(--surface); color: #f8efd9; font-size: 16px; line-height: 1.4; box-shadow: 0 3px 8px #000a; visibility: hidden; pointer-events: none; }
+.map-game .react-flow__node:hover .node-title,
+.map-game .react-flow__node:focus-visible .node-title { visibility: visible; }
+.map-game .react-flow__node:hover,
+.map-game .react-flow__node:focus-visible { z-index: 1001 !important; }
+.atlas .map-game .react-flow__node:focus-visible { border-radius: 50%; }
+.atlas .map-game .node-related .upgrade-node { box-shadow: 0 0 0 3px #080605, 0 0 0 5px #a98a55; }
+.atlas .map-game .connection-incoming .react-flow__edge-path { stroke-dasharray: 18 10; }
+.native-connection-outline { pointer-events: none; }
 .map-summary { position: absolute; top: 12px; left: 12px; z-index: 5; display: flex; flex-direction: column; gap: 3px; max-width: min(370px, calc(100% - 24px)); padding: 8px 10px; border: 1px solid #574631; border-radius: 5px; background: #231e19f2; font-size: .75rem; line-height: 1.4; pointer-events: none; }
 .map-summary > span + span { color: var(--muted); }
 .map-summary b { color: var(--bright-gold); }
@@ -185,7 +199,7 @@ dialog > button { margin: 6px 8px 0 0; }
   .brand-mark, .brand p, .toolbar .desktop-action, .atlas > footer { display: none; }
   .brand h1 { margin: 0; font-size: .625rem; }
   .layout-control { grid-column: 2; grid-row: 1; }
-  .layout-control button { padding: 6px; font-size: .75rem; }
+  .layout-control button { flex: 1 1 0; padding: 4px 5px; font-size: .75rem; line-height: 1.2; white-space: normal; }
   .mobile-options { display: block; grid-column: 3; grid-row: 1; padding: 0; font-size: 1.25rem !important; }
   .search-box { position: static; grid-column: 1 / -1; grid-row: 2; }
   .search-results { top: calc(100% + 6px); left: 8px; right: 8px; width: auto; max-width: none; max-height: min(55dvh, calc(100dvh - 122px)); }
@@ -270,7 +284,8 @@ dialog > button { margin: 6px 8px 0 0; }
 .recommendation-method dd a { display: inline-block; min-height: 44px; padding: 10px 0; }
 
 @media (max-width: 1100px), (max-height: 540px) {
-  .toolbar { grid-template-columns: minmax(0, 1fr) 44px 44px 44px; }
+  /* Two-line layout names retain both compact toolbar rows and 44px targets. */
+  .toolbar { grid-template-columns: minmax(0, 1fr) 64px 64px 44px; }
   .brand { grid-column: 1; }
   .layout-control { grid-column: 2 / 4; }
   .mobile-options { grid-column: 4; }
@@ -285,6 +300,7 @@ dialog > button { margin: 6px 8px 0 0; }
   .search-box { grid-column: 2; }
   .next-upgrade { grid-column: 3; grid-row: 1; width: auto; min-width: 94px; white-space: nowrap; }
   .layout-control { grid-column: 4; }
+  .layout-control button { flex: 0 0 auto; padding: 6px; white-space: nowrap; }
   .mobile-options { grid-column: 5; }
 }
 

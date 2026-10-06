@@ -38,7 +38,7 @@ test('game save preview is atomic, replaces known state, updates suggestions and
   const original = { ...initial, purchases: { [quests]: { epoch: 0, active: true }, 'legacy-test-id': { epoch: 0, active: false } }, milestones: { 'legacy-item-test': true as const } }
   await page.addInitScript(({ key, profile }) => localStorage.setItem(key, JSON.stringify(profile)), { key: storageKey, profile: original })
   await page.goto('./')
-  await page.getByRole('group', { name: 'Map layout' }).getByRole('button', { name: 'Game', exact: true }).click()
+  await page.getByRole('group', { name: 'Map layout' }).getByRole('button', { name: 'Game Layout', exact: true }).click()
   const before = await stored(page)
   await openProgress(page)
   const bytes = encodeGameSaveFixture(nativeSaveFixture({ integers: { [start]: 1, [gatherer]: 1 }, strings: { 'Unrelated fixture preference': 'fixture-private-marker@example.invalid' } }))
@@ -56,7 +56,7 @@ test('game save preview is atomic, replaces known state, updates suggestions and
   expect(imported.milestones).toEqual({ 'legacy-item-test': true })
   expect(imported.showSpoilers).toBe(false)
   expect(JSON.stringify(imported)).not.toContain('fixture-private-marker')
-  await expect(page.getByRole('group', { name: 'Map layout' }).getByRole('button', { name: 'Game', exact: true })).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByRole('group', { name: 'Map layout' }).getByRole('button', { name: 'Game Layout', exact: true })).toHaveAttribute('aria-pressed', 'true')
   await page.getByRole('button', { name: 'Next upgrade', exact: true }).click()
   await expect(page.locator('.recommendation-main')).toHaveAttribute('data-upgrade-id', quests)
   await page.getByRole('button', { name: 'Close dialog', exact: true }).click()

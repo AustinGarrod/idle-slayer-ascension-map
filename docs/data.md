@@ -37,6 +37,14 @@ separate user-selected progress importer is documented in [save-import.md](save-
 All catalog tooling ran
 offline without launching the game or invoking its methods.
 
+## Native UI presentation
+
+Read-only inspection of the same installed 7.2.0 / build 25551532 assets also establishes Game's visual proportions. In `sharedassets2.assets`, Ascension Skill RectTransform 2016 and Container RectTransform 1997 have 100×100 bounds; centered Skill RectTransform 1845 is 64×64. Background Image 2480 references sprite 827 (`circle`), and Legendary Outline Image 2214 references sprite 874 (`circle-outline`). Both 32×32 sprites have a pixel-stepped circular silhouette. The prefab has no title label. The app recreates the circular frame with CSS and retains the already reviewed upgrade icons; no additional raw game assets are bundled.
+
+AscensionSkillObject component 2484 supplies `lineSize=12`. Its native `Start` implementation calculates distance and rotation from node center differences, places the line at its own center and moves it behind the icons. Game routes preserve that vector, with endpoints clipped to the circle so selected arrowheads remain outside the icon. This replaces cardinal-side attachment without changing any catalog position. The native Colors component 7880 in `level2` supplies ordinary unowned grey `#7d7d7d` and owned-prerequisite purple `#ff00be`. The app uses these two ownership cues and adds accessible selection highlighting; it does not claim to reproduce every native special-category color or native pixel border exactly.
+
+The evidence was inspected offline from installed assets and reconstructed `AscensionSkillObject.Start` instructions, without launching the game, invoking native methods or reading player saves. Node dimensions, icon proportions, fixed centers and straight connection angles have independent browser regression coverage. Presentation is separate from the catalog receipt and game-rule semantics.
+
 ## Native rules and their representation
 
 [`scripts/logic/README.md`](../scripts/logic/README.md) records native method

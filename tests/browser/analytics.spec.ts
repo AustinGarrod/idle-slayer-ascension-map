@@ -481,6 +481,29 @@ test('actual application handlers count confirmed purchase and recommendation on
   expect(capture.unexpected).toEqual([])
 })
 
+test('renamed layout controls retain bounded game and web analytics values', async ({ page, context, baseURL }) => {
+  const origin = new URL(baseURL!).origin
+  const capture = await installLocalRoutes(context, origin, { recorderBody: '' })
+  await serveIsolatedApplication(context, origin)
+  await page.goto(`${origin}${appFixturePath}`)
+  await expect(page.locator('.toolbar')).toBeVisible()
+  await waitForActive(page)
+  const events = (name: string) => capture.submissions.filter((submission) => submission.type === 'event' && submission.payload.name === name)
+  await expect.poll(() => events('app_ready').length).toBe(1)
+  expect((events('app_ready')[0].payload.data as Record<string, unknown>).layout).toBe('game')
+  const layout = page.getByRole('group', { name: 'Map layout', exact: true })
+  await expect(layout.getByRole('button')).toHaveText(['Game Layout', 'Detailed Layout'])
+  await layout.getByRole('button', { name: 'Detailed Layout', exact: true }).click()
+  await expect.poll(() => events('map_layout_changed').map((event) => (event.payload.data as Record<string, unknown>).layout)).toEqual(['web'])
+  await layout.getByRole('button', { name: 'Game Layout', exact: true }).click()
+  await expect.poll(() => events('map_layout_changed').map((event) => (event.payload.data as Record<string, unknown>).layout)).toEqual(['web', 'game'])
+  await layout.getByRole('button', { name: 'Game Layout', exact: true }).click()
+  expect(events('map_layout_changed')).toHaveLength(2)
+  expect(await page.evaluate(() => localStorage.getItem('idle-slayer-ascension-map.layout.v1'))).toBe('native')
+  expect(await page.evaluate((key) => localStorage.getItem(key), profileKey)).toBeNull()
+  expect(capture.unexpected).toEqual([])
+})
+
 test('actual import cancellation never applies and confirmation emits one applied event', async ({ page, context, baseURL }) => {
   const origin = new URL(baseURL!).origin
   const capture = await installLocalRoutes(context, origin, { recorderBody: '' })
