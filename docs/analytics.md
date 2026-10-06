@@ -85,7 +85,15 @@ The page stores steps/start/end/view only in component state. Umami 3.4 has no n
 
 Manual Chrome readback verified the installed Umami 3.4 website settings: replays and heatmaps enabled, both sampling at `1`, moderate masking, maximum duration `1200000` and `.telemetry-private` block selector. The five goals, three ten-minute funnels, private board's 14 widgets and three rolling Last 30 days cohorts listed above were saved and read back. The Journey tab was configured and verified with Steps 5, Events selected, Start Step `app_ready` and empty End Step; its transient-view limitation remains as documented. Configuration and normal-view screenshots are retained outside Git.
 
-Only data-dependent device/session-property segments remain deferred until real visitor values are available. No production collection or GitHub Pages deployment is claimed by these configuration receipts. Add the separate deployment/manual production readbacks when available; retain capability limits and empty-data states.
+Only data-dependent device/session-property segments remain deferred until real visitor values are available. These configuration receipts establish saved settings and reports; deployment and manual app inspection are recorded separately below.
+
+### Deployment and manual readback: October 6, 2026
+
+Implementation commit [`eae6ecc7a02d6e5b6f9bdb829f99feb15291ccce`](https://github.com/AustinGarrod/idle-slayer-ascension-map/commit/eae6ecc7a02d6e5b6f9bdb829f99feb15291ccce) was pushed to `main`. The [GitHub Pages workflow](https://github.com/AustinGarrod/idle-slayer-ascension-map/actions/runs/37413647900) completed validation and deployment successfully. Local checks passed: typecheck, catalog validation, 201 unit tests, production build, 66 browser cases and release checks. Browser tests used local builds and isolated telemetry endpoints.
+
+Deliberate manual Chrome inspection of the [live app](https://austingarrod.github.io/idle-slayer-ascension-map/) verified rendering, search, upgrade details, Game/Web layouts, Next upgrade recommendations and the privacy disclosure. No progress changes were applied. The privacy panel reported **Your browser privacy setting prevents tracking**, so this Chrome profile correctly remained excluded from collection.
+
+The user accepted finishing without live ingestion proof. Production page views, events, performance data, recordings and heatmaps remain unverified; successful deployment and app inspection do not establish their arrival. Device/session-property segments still await values from an eligible visitor. Manual screenshots are retained outside Git.
 
 ## Local verification and Windows handoff
 
