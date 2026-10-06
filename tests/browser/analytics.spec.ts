@@ -111,6 +111,8 @@ function parseSubmission(request: Request): Submission {
   return value
 }
 
+class IncompleteReplayError extends Error {}
+
 function replayEvents(capture: Capture): ReplayEvent[] {
   const events: ReplayEvent[] = []
   const fragments = new Map<string, { total: number; parts: Map<number, string> }>()
@@ -127,7 +129,7 @@ function replayEvents(capture: Capture): ReplayEvent[] {
     }
   }
   for (const group of fragments.values()) {
-    if (group.parts.size !== group.total) throw new Error('Incomplete recorder event; privacy assertion would be inconclusive')
+    if (group.parts.size !== group.total) throw new IncompleteReplayError('Incomplete recorder event; privacy assertion would be inconclusive')
     const parts = Array.from({ length: group.total }, (_, index) => {
       const part = group.parts.get(index)
       if (part === undefined) throw new Error('Missing recorder event fragment')
@@ -136,6 +138,24 @@ function replayEvents(capture: Capture): ReplayEvent[] {
     events.push(JSON.parse(parts.join('')) as ReplayEvent)
   }
   return events
+}
+
+async function waitForReplayEvents(capture: Capture, ready: (events: ReplayEvent[]) => boolean): Promise<ReplayEvent[]> {
+  let completed: ReplayEvent[] = []
+  await expect.poll(() => {
+    try {
+      const events = replayEvents(capture)
+      if (!ready(events)) return false
+      completed = events
+      return true
+    } catch (error) {
+      // One rrweb event can span sequential HTTP submissions. Await the rest
+      // before reconstruction; malformed or inconsistent evidence still fails.
+      if (error instanceof IncompleteReplayError) return false
+      throw error
+    }
+  }, { timeout: 15_000, message: 'Recorder evidence must arrive with every fragment before privacy assertions' }).toBe(true)
+  return completed
 }
 
 function blockedReplayNodes(value: unknown): { tagName: string; attributes: Record<string, string>; childNodes?: unknown[] }[] {
@@ -427,7 +447,7 @@ test('real recorder proves moderate input masking, blocking and safe application
   }, { publicMarker, blocked: secrets.blocked })
   await waitForActive(page)
   releaseRecorder()
-  await expect.poll(() => replayEvents(capture).some((event) => event.type === 2)).toBe(true)
+  await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 2))
   await page.locator('#replay-mask-proof').fill(secrets.query)
   await page.locator('#replay-public-proof').click()
   await page.getByRole('searchbox').fill(secrets.query)
@@ -446,9 +466,8 @@ test('real recorder proves moderate input masking, blocking and safe application
     controller.trackEvent('upgrade_selected', { upgrade_id: secrets.unknown, source: 'map' })
     controller.trackEvent('runtime_error', { reason: 'runtime', message: secrets.error })
   }, { secrets, visibleId: catalog.startId })
-  await expect.poll(() => replayEvents(capture).some((event) => event.type === 3 && event.data?.source === 5)).toBe(true)
   await expect.poll(() => capture.submissions.some((item) => item.type === 'heatmap' && Array.isArray(item.payload.events) && item.payload.events.some((event: { type: string }) => event.type === 'click'))).toBe(true)
-  const events = replayEvents(capture)
+  const events = await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 3 && event.data?.source === 5))
   expect(events.some((event) => event.type === 2 && JSON.stringify(event).includes(publicMarker))).toBe(true)
   expect(events.some((event) => event.type === 2 && JSON.stringify(event).includes(firstUpgrade.title))).toBe(true)
   expect(events.some((event) => event.type === 3 && event.data?.source === 5 && typeof event.data.text === 'string' && /^\*+$/.test(event.data.text))).toBe(true)
