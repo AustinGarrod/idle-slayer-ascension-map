@@ -42,6 +42,8 @@ Read `README.md`, `design.md` and `docs/implementation-plan.md` before implement
 
 ## Verification and handoff
 
+Keep automated browser/API checks on local or isolated CI builds. Never point automated suites, probes or scheduled checks at the live production site. Production confirmation must be deliberate manual inspection; do not retry or work around hosting rate limits. A deployment success and local/CI checks are distinct from manual production readback.
+
 When implementing the full app, validate catalog coverage, references, asset presence, coordinates and reachable dependency paths against the game export. Test dependency/reveal/reset/storage rules independently, then verify map interactions and spoiler behavior in a production browser build. Add GitHub Pages deployment only when requested implementation reaches its documented release gate.
 
 In the final handoff, report what changed, relevant passing checks, remaining unverified behavior and whether anything was pushed or deployed. Include exact commands needed for the next Windows agent rather than assuming it has the Mac environment.

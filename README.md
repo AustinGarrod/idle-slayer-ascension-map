@@ -55,7 +55,7 @@ yarn check:release
 yarn preview
 ```
 
-Production browser tests start the preview on port 4173. Catalog tests compare every native ID, coordinate, cost, predicate and sprite hash with the reviewed receipt. Unit tests cover dependencies, reset epochs and storage; browser tests cover navigation, persistence, spoilers and responsive interaction. There is no lint script.
+Browser tests exercise a production build on the local preview at port 4173. Keep all automated tests and probes on local or isolated CI builds; production confirmation is manual only. Never point the suite or scheduled checks at the live site. Catalog tests compare every native ID, coordinate, cost, predicate and sprite hash with the reviewed receipt. Unit tests cover dependencies, reset epochs and storage; browser tests cover navigation, persistence, spoilers and responsive interaction. There is no lint script.
 
 ## Progress and data
 
