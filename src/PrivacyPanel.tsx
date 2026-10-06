@@ -6,12 +6,13 @@ export function PrivacyPanel({ status, onChange }: {
   status: ReturnType<typeof getTrackingStatus>
   onChange: (enabled: boolean) => void
 }) {
-  const preferenceEnabled = status.preference === 'enabled' && status.reason !== 'opt-out'
+  const preferenceEnabled = status.preference === 'enabled' && !['opt-out', 'reload-required'].includes(status.reason)
   const urlOnlyOptOut = status.reason === 'opt-out' && status.preference !== 'disabled'
   const explanation = ['development', 'unsupported-origin'].includes(status.reason) ? 'Tracking is off in this local preview.'
     : status.reason === 'embedded' ? 'Embedded previews are not tracked.'
       : ['global-privacy-control', 'do-not-track', 'umami-disabled'].includes(status.reason) ? 'Your browser privacy setting prevents tracking.'
         : status.reason === 'storage-unavailable' ? 'Your tracking preference could not be read. Tracking is off for this visit.'
+          : status.reason === 'reload-required' ? 'Tracking remains off in this tab after a privacy preference changed. Reload to start a new recording with your current preference.'
           : urlOnlyOptOut ? 'Tracking is off for this visit. The disabled preference was not saved in this browser; keep this page URL to retain the choice.'
             : status.reason === 'script-unavailable' ? 'Tracking could not load. Your map remains usable.'
             : status.enabled ? 'Usage analytics and recording are enabled for this visit.' : 'Usage analytics and recording are disabled.'

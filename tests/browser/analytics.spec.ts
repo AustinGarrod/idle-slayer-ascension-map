@@ -308,6 +308,73 @@ test('opt-out stops recorder sends and reload never restarts scripts', async ({ 
   expect(capture.unexpected).toEqual([])
 })
 
+test('cross-tab opt-out never uploads disabled-period replay activity after another tab enables tracking', async ({ page, context, baseURL }) => {
+  const origin = new URL(baseURL!).origin
+  const capture = await installLocalRoutes(context, origin)
+  await page.addInitScript(() => Object.assign(window, { analyticsDocumentInstance: Math.random().toString() }))
+  await page.goto(`${origin}${fixturePath}`)
+  const originalDocument = await page.evaluate(() => (window as unknown as { analyticsDocumentInstance: string }).analyticsDocumentInstance)
+  await injectHarness(page)
+  await initializeHarness(page)
+  await waitForActive(page)
+  await expect.poll(() => capture.submissions.some((item) => item.type === 'record')).toBe(true)
+  const otherTab = await context.newPage()
+  await otherTab.goto(`${origin}${fixturePath}`)
+  await otherTab.evaluate((key) => localStorage.setItem(key, 'disabled'), preferenceKey)
+  const status = () => page.evaluate(() => (window as unknown as { analyticsHarness: { getTrackingStatus: () => { active: boolean; reason: string } } }).analyticsHarness.getTrackingStatus())
+  await expect.poll(status).toMatchObject({ active: false, reason: 'opt-out' })
+  const disabledMarker = 'SENTINEL-disabled-period-replay-51793'
+  await page.evaluate((marker) => {
+    const progress = document.createElement('p')
+    progress.id = 'session-progress'
+    progress.textContent = marker
+    document.body.appendChild(progress)
+  }, disabledMarker)
+  await otherTab.evaluate((key) => localStorage.setItem(key, 'enabled'), preferenceKey)
+  await expect.poll(() => page.evaluate((key) => localStorage.getItem(key), preferenceKey)).toBe('enabled')
+  // A real rrweb upload after re-enabling used to contain the mutation above.
+  // Wait through two recorder flush intervals and use a trusted click to also
+  // exercise heatmap collection after the preference changed.
+  await page.locator('#public-action').click()
+  await page.waitForTimeout(6000)
+  expect(JSON.stringify(replayEvents(capture))).not.toContain(disabledMarker)
+  expect(await status()).toMatchObject({ active: false, reason: 'reload-required' })
+  expect(await page.evaluate(() => (window as unknown as { analyticsDocumentInstance: string }).analyticsDocumentInstance)).toBe(originalDocument)
+  await expect(page.locator('#session-progress')).toHaveText(disabledMarker)
+  const beforeReload = capture.submissions.length
+  await page.reload()
+  await injectHarness(page)
+  await initializeHarness(page)
+  await waitForActive(page)
+  await expect.poll(() => capture.submissions.slice(beforeReload).some((item) => item.type === 'record')).toBe(true)
+  expect(await page.evaluate(() => (window as unknown as { analyticsDocumentInstance: string }).analyticsDocumentInstance)).not.toBe(originalDocument)
+  expect(JSON.stringify(replayEvents(capture))).not.toContain(disabledMarker)
+  expect(capture.unexpected).toEqual([])
+})
+
+test('cross-tab opt-out also suspends a recorder whose configuration finishes loading later', async ({ page, context, baseURL }) => {
+  const origin = new URL(baseURL!).origin
+  let releaseRecorder!: () => void
+  const recorderReady = new Promise<void>((resolve) => { releaseRecorder = resolve })
+  const capture = await installLocalRoutes(context, origin, { recorderReady })
+  await page.goto(`${origin}${fixturePath}`)
+  await injectHarness(page)
+  await initializeHarness(page)
+  await waitForActive(page)
+  const otherTab = await context.newPage()
+  await otherTab.goto(`${origin}${fixturePath}`)
+  await otherTab.evaluate((key) => localStorage.setItem(key, 'disabled'), preferenceKey)
+  await expect.poll(() => page.evaluate(() => (window as unknown as { analyticsHarness: { getTrackingStatus: () => { active: boolean } } }).analyticsHarness.getTrackingStatus().active)).toBe(false)
+  releaseRecorder()
+  const disabledMarker = 'SENTINEL-delayed-recorder-50826'
+  await page.evaluate((marker) => { document.querySelector('#public-action')!.textContent = marker }, disabledMarker)
+  await otherTab.evaluate((key) => localStorage.setItem(key, 'enabled'), preferenceKey)
+  await page.waitForTimeout(6000)
+  expect(JSON.stringify(replayEvents(capture))).not.toContain(disabledMarker)
+  expect(await page.evaluate(() => (window as unknown as { analyticsHarness: { getTrackingStatus: () => { active: boolean; reason: string } } }).analyticsHarness.getTrackingStatus())).toMatchObject({ active: false, reason: 'reload-required' })
+  expect(capture.unexpected).toEqual([])
+})
+
 test('failed preference writes provide a disabled reload URL without claiming persistence', async ({ page, context, baseURL }) => {
   const origin = new URL(baseURL!).origin
   const capture = await installLocalRoutes(context, origin)
