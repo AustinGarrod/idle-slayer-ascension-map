@@ -2,6 +2,8 @@
 
 The importer reads a user-selected copy of `savedata.sav` or `backup.sav` locally in the browser. It extracts the map's current upgrade ownership, Astral activation, Ultra Ascension count and nine external milestones. The preview replaces known map progress only after confirmation; undo remains available. The app does not write a game save, run the game, authenticate to cloud storage or upload the selected file.
 
+The app separately uses self-hosted Umami usage analytics and session recording. File inputs, import previews, counters and import warnings are excluded from replay contents, and events describe only bounded import stages/outcomes. The selected file, filename, path, bytes, native preferences and imported ownership snapshot are never uploaded. After applying, ordinary visible map progress can appear in recordings. Excluded elements can still contribute coarse heatmap click/scroll coordinates. The separate persistent tracking opt-out in About & sources is unchanged by import or undo; see [analytics.md](analytics.md).
+
 The reviewed input is **Windows Steam Idle Slayer 7.2.0, build 25551532**, using Unity **6000.3.14f1** and IL2CPP metadata version **39**. Native `FileBasedPrefs.GetSaveFilePath` combines `Application.persistentDataPath` with `savedata.sav`; the backup uses `backup.sav`. For this Windows installation the directory is:
 
 ```text

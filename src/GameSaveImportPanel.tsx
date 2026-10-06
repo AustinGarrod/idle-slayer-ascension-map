@@ -37,13 +37,13 @@ export function GameSaveImportPanel({ catalog, currentProfile, preview, onApply,
   return <div className="game-save-import-panel">
     <p className="game-save-import-intro">Recorded map progress is replaced. Existing unrecognized entries and your spoiler setting are kept.</p>
     <p className="game-save-import-version">Save version {preview.sourceVersion} · Native catalog {catalog.gameVersion}</p>
-    <table className="game-save-import-comparison" aria-describedby={scopeId}>
+    <table className="game-save-import-comparison telemetry-private rr-block" aria-describedby={scopeId}>
       <caption>Map progress preview</caption>
       <thead><tr><th scope="col">Progress</th><th scope="col">Current</th><th scope="col">After import</th></tr></thead>
       <tbody>{rows.map((row) => <tr key={row.label}><th scope="row">{row.label}</th><td>{row.current.toLocaleString('en')}</td><td>{row.incoming.toLocaleString('en')}</td></tr>)}</tbody>
     </table>
     <p className="game-save-import-scope" id={scopeId}>Upgrade and milestone counts follow the map's current spoiler setting.</p>
-    {preview.warnings.length > 0 && <section className="game-save-import-notes" aria-labelledby={notesId}>
+    {preview.warnings.length > 0 && <section className="game-save-import-notes telemetry-private rr-block" aria-labelledby={notesId}>
       <h3 id={notesId}>Import notes</h3>
       <ul>{preview.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>
     </section>}
@@ -55,6 +55,7 @@ export function GameSaveImportPanel({ catalog, currentProfile, preview, onApply,
       <p>This importer was reviewed against Idle Slayer 7.2.0, Steam build 25551532.</p>
       <p>Exact per-upgrade purchase epochs cannot be reconstructed by this import. Current ownership and activation use a conservative mapping.</p>
       <p>Save contents are processed locally in this browser and are never uploaded. Applying updates only this map's profile; the game save is unchanged.</p>
+      <p>This site uses usage analytics and session recordings. File inputs, import comparisons and notes are excluded from recordings; your visible map progress may appear after applying an import. Manage this in Privacy &amp; tracking.</p>
       <p>Only reviewed map purchases, activation and required milestones are imported. Other game progress stays outside this map.</p>
     </details>
     <div className="game-save-import-actions">

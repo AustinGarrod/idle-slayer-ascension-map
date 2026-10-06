@@ -2,7 +2,7 @@
 
 A static, unofficial companion for the complete native Ascension tree: **288 upgrades, 318 connections and 288 bundled pixel icons** from **Idle Slayer 7.2.0 / Steam build 25551532**. React, TypeScript, Vite and React Flow render two fixed layouts: **Web**, a readable dependency graph, and **Game**, the original game positions.
 
-Search titles, inspect details, record purchases and milestones, preview removals and Ultra Ascensions, undo changes, and back up one local profile as JSON. Import current progress from a reviewed Steam game save through a local preview. Spoilers are hidden by default across the map, connections, search, details, checklist and totals. OR paths require a choice; external items and Astral activation require explicit input. No backend, accounts, analytics, SP balances or Stone allocation.
+Search titles, inspect details, record purchases and milestones, preview removals and Ultra Ascensions, undo changes, and back up one local profile as JSON. Import current progress from a reviewed Steam game save through a local preview. Spoilers are hidden by default across the map, connections, search, details, checklist and totals. OR paths require a choice; external items and Astral activation require explicit input. The app remains static, without accounts, an application backend, SP balances or Stone allocation. Self-hosted Umami collects usage analytics and session recordings as described below.
 
 Web arranges visible paths from left to right. Arrows point from a prerequisite toward the upgrade; selecting an upgrade emphasizes its incoming and outgoing connections. **Connected from** and **Leads to** in details jump directly to visible neighbors. The exact AND/OR and activation requirements remain in the details. Switching layouts preserves selection and progress, and does not change catalog coordinates.
 
@@ -23,6 +23,14 @@ Open **Progress → Import game save…** (on phones, **Map options → Progress
 The importer supports the reviewed **Windows Steam 7.2.0** save format. Close the game before selecting the file. Review the visible ownership, Astral activation, milestone and Ultra Ascension counts, then choose **Apply import**. Cancel keeps the current profile; undo restores it after applying. Suggestions recalculate immediately. Existing unknown map IDs and the spoiler preference remain intact.
 
 The selected file is decoded entirely in the browser. It is never uploaded, modified, bundled or stored as a game save. Only the map's recognized progress is retained; account preferences and unrelated native data are discarded. Exact purchase history is unavailable, so active permanent and retained ownership use a documented snapshot baseline. Android progress can be imported from a Steam copy after the game's existing cross-platform sync; direct mobile file access and cloud login are outside this feature. [Format, native evidence and compatibility](docs/save-import.md).
+
+## Usage analytics and recordings
+
+The production app uses self-hosted [Umami](https://analytics.garrod.house) for page views, bounded interaction events, browser/device and referral/campaign information, approximate location when available, performance data and session recordings. Recordings can include the visible map and its recorded progress. Selected game saves and JSON backups are never uploaded; file inputs, search text, counters and import/restore previews are excluded from replay contents. Heatmaps still collect coarse click and scroll coordinates, including over excluded elements.
+
+Tracking starts automatically unless disabled through **About & sources → Privacy & tracking** or the browser's privacy signals. The preference is separate from map progress and survives reloads, undo, restore and clearing progress. If it cannot be read, tracking stays off. Changing it reloads the page; if map progress cannot be saved first, choose export-and-reload, reload without backup or cancel. A failed tracking-preference write reloads with `#analytics=off`, which disables tracking for that URL/visit without claiming a durable preference. Keep or bookmark that URL if storage remains unavailable. [Analytics setup and operator guide](docs/analytics.md) documents the settings, event contract, URL safeguards, reports and local verification.
+
+The private Umami setup includes a [product overview board](https://analytics.garrod.house/boards/f10ebd6f-2e22-4148-983a-ecb405e6524d), five conversion goals, three ten-minute funnels and three rolling 30-day cohorts. The native five-step `app_ready` journey is configured as an Events view; Umami 3.4 keeps that recipe only in the current view, so it must be reapplied after reopening. Dedicated Performance, Replays and Heatmaps screens provide deeper inspection.
 
 ## Windows setup and checks
 
@@ -67,6 +75,6 @@ Native English localization supplies descriptions and icons. Fourteen effects ha
 
 ## Deployment and licensing
 
-GitHub Pages uses the Vite base `/idle-slayer-ascension-map/`. CI validates the reviewed catalog, checks types, runs unit and production-browser tests, builds and checks release verification before deploying successful main builds. Upload only dist. Re-review extraction and native methods after every game update; never publish a guessed or partial catalog. Smoke-test published assets, navigation and persistence after deployment.
+GitHub Pages uses the Vite base `/idle-slayer-ascension-map/`. CI validates the reviewed catalog, checks types, runs unit and local production-bundle browser tests, builds and checks release verification before deploying successful main builds. Upload only dist. Re-review extraction and native methods after every game update; never publish a guessed or partial catalog. Manually smoke-test published assets, navigation and persistence after an authorized deployment; automated suites remain local or isolated in CI.
 
 Application source and extraction tools use [the MIT license](LICENSE). Game text, data and icons are **excluded** from that code license and belong to Idle Slayer's rights holders. [Third-party notices](THIRD_PARTY_NOTICES.md) separate game attribution, software and the locally bundled Press Start 2P font's SIL OFL license.

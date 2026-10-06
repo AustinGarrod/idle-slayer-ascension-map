@@ -36,6 +36,14 @@ Include every node belonging to the Ascension tree, including Ultra, Astral and 
 - Version saved data. Validate imports before replacing progress, preserve unknown IDs across catalog updates, and report storage failures without discarding the current session.
 - Import the current state of a user-selected Windows Steam 7.2.0 `savedata.sav` or `backup.sav` locally. Validate transport, native version and verified fields before a spoiler-aware preview; apply only after confirmation and retain undo. Import stable-ID ownership, activation, UA count and verified milestones, discard unrelated native preferences, preserve unknown map IDs, and document the synthetic retention baseline for missing purchase history. Do not access game files automatically or authenticate to cloud storage.
 
+## Authorized usage analytics
+
+- Use only the self-hosted Umami website `f5c9bfd4-7ab5-4f82-a543-9357dcea1566` at `analytics.garrod.house`. Collect page views, bounded usage events, performance data and session recordings using the contract in [analytics.md](analytics.md); keep domain rules and progress storage independent.
+- Start automatically after reading a separate persistent opt-out, honoring browser privacy signals. Reading failures keep tracking off. Changing the setting reloads the page; if map progress cannot be saved, offer export-and-reload, reload without backup or cancel. A failed tracking-preference write uses a disabled `#analytics=off` URL for the visit without claiming persistence. Undo, restore, clearing progress and catalog migration do not change the stored preference.
+- Disclose that recordings can show visible map progress. Exclude search/file/counter inputs, import/restore previews, unrelated native data and raw error details from replay contents. Never upload saves or backups. Do not claim replay blocking prevents coarse heatmap click/scroll coordinates.
+- Keep recorded URLs on the canonical map path. Strip arbitrary query/hash values and pass only bounded allowlisted campaign values. Exclude iframe recording. Never identify visitors through game saves, accounts or progress.
+- Configure a private native Umami overview, conversion goals, ten-minute funnels and a five-step journey using documented event names. Verify server capabilities and saved report readbacks in Chrome; an empty report is not evidence of incoming production data. Public report sharing and deployment require their own authorization.
+
 ## Design and documentation
 
 Follow `design.md` around the game's [official visual reference](https://idleslayer.com/img/press-kit/Editor%20Screenshot%202.png): dark brown and charcoal surfaces, gold framing, magenta connections and crisp pixel icons.
@@ -49,11 +57,11 @@ Maintain `AGENTS.md` and `README.md`, and add focused architecture and data docu
 - Validate catalog coverage against the game export, unique IDs, references, icons, coordinates and reachable prerequisite paths.
 - Test AND/OR dependencies, story gates, hidden search results, prerequisite filling, cascading removal, pending Astrals, permanent grants and repeated Ultra Ascensions.
 - Test backup round trips, malformed imports, storage failures and catalog migrations.
-- Use Playwright to verify search-to-node navigation, persistence, spoiler toggling and responsive interactions against the production build.
+- Use Playwright to verify search-to-node navigation, persistence, spoiler toggling and responsive interactions against the production bundle on local or isolated CI builds. Intercept analytics in those builds; never run automated suites or probes against the live production site.
 - Configure CI for catalog validation, type checking, tests and build. Deploy successful `main` builds through GitHub Actions with the correct Pages base path.
-- Publish only after the complete catalog and reveal/reset behavior are verified. Then smoke-test the deployed site's assets, navigation and persistence.
+- Publish only after the complete catalog and reveal/reset behavior are verified and publication is authorized. Then manually smoke-test the deployed site's assets, navigation and persistence without automated production probes or rate-limit workarounds.
 
-V1 defaults: English, one local progress profile, spoilers hidden, and no backend, accounts or analytics. User-authorized Steam save import follows the scoped contract above.
+V1 defaults: English, one local progress profile, spoilers hidden, no application backend or accounts, and the explicitly authorized Umami analytics with persistent opt-out. User-authorized Steam save import follows the scoped contract above.
 
 ## Windows handoff
 

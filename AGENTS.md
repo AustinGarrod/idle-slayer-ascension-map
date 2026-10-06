@@ -38,7 +38,8 @@ Read `README.md`, `design.md` and `docs/implementation-plan.md` before implement
 - Model Ultra Ascension and Astrals with separate ownership, purchase epoch and activation state. Preview resets, clear repeat purchases, retain permanent upgrades and milestones, activate eligible locks and recompute permanent grants according to extracted game rules.
 - Store one profile in versioned local storage, with validated JSON backup/restore and undo. Preserve unknown IDs during catalog updates and keep the current session usable when storage fails.
 - User-authorized game-save import is limited to the reviewed Windows Steam 7.2.0 format. Read a selected file locally, validate before preview, apply only on confirmation, and support undo. Import current ownership, activation, UA count and verified milestones; never persist unrelated native preferences. Document the synthetic retained-ownership baseline because purchase history is absent. Review native semantics again before supporting another version or platform.
-- Do not add SP-balance simulation, Stone allocation, accounts, a backend, analytics, cloud authentication or automatic game-file access.
+- User-authorized analytics is limited to the self-hosted Umami website `f5c9bfd4-7ab5-4f82-a543-9357dcea1566` at `analytics.garrod.house`, with bounded usage events and session recording. Follow `docs/analytics.md` for startup, persistent opt-out, replay exclusions, event properties and report definitions. Keep analytics separate from game rules and profile storage; never transmit selected saves, JSON backups, unrelated native preferences or hidden topology. Visible map progress can appear in recordings and must be disclosed accurately.
+- Do not add SP-balance simulation, Stone allocation, accounts, an application backend, cloud authentication or automatic game-file access. Adding Umami does not authorize other analytics providers, publishing or deployment.
 
 ## Verification and handoff
 

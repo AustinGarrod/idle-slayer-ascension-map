@@ -34,6 +34,12 @@ Three arrangements received an independent spacing and interaction review:
 
 The preview explains replacement, retained unknown map entries and spoiler preference. It describes the retained-ownership baseline because exact purchase epochs are absent from the save. Other native data and hidden titles/counts do not appear. Errors are generic and retryable; choosing a file or cancelling never applies progress. The scope is the reviewed Steam format and local browser processing, with normal undo after confirmation.
 
+## Analytics disclosure and preference
+
+About & sources explains self-hosted usage analytics and session recordings in plain language, including that ordinary visible map progress can be recorded. Privacy & tracking keeps the separate tracking preference reachable on desktop and through Map options on compact screens. The control distinguishes persistent preference, browser privacy signals and the disabled `#analytics=off` URL, and explains that changing it reloads the page. If current progress cannot be saved first, explicit export-and-reload, reload without backup and cancel actions protect the in-memory session; do not automatically choose one. A tracking-preference write failure reloads to the disabled URL and describes this as a visit opt-out that can be kept/bookmarked, without claiming persistence.
+
+Keep the disclosure inside existing scrollable dialog space with 44 px actions and keyboard focus support at 320×568 and 844×390. Avoid promising that replay exclusions remove all interaction metadata: blocked elements still contribute coarse heatmap click/scroll coordinates. File/import/restore/counter/search surfaces and raw error details receive replay exclusions without changing ordinary map usability. Analytics preference changes, progress undo and resets remain separate controls. [Analytics behavior and operator setup](docs/analytics.md) defines the exact contract.
+
 ## Initial concepts and independent layout review
 
 Three distinct arrangements were reviewed before choosing Atlas. All three use the same spoiler-safe visibility result for the canvas, connections, search, details, milestones and totals. None adds hidden-node silhouettes or a miniature view that discloses hidden topology.

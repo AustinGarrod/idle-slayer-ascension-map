@@ -2,6 +2,7 @@ import { useId } from 'react'
 import type { UpgradeRecommendation, UpgradeRecommendations } from './domain/recommendations'
 import type { Catalog } from './domain/types'
 import { source as wikiSource } from './data/wiki-priorities.json'
+import { trackEvent } from './analytics'
 
 interface RecommendationPanelProps {
   catalog: Catalog
@@ -32,7 +33,7 @@ function RecommendationCard({ suggestion, primary, onSelect, onPurchase }: {
       {primary && <button className="primary" onClick={() => onPurchase(upgrade.id)}>Record purchase…</button>}
     </div>
     <p className="recommendation-reason">{suggestion.reason}</p>
-    {suggestion.source && <a className="recommendation-source" href={suggestion.source.url} target="_blank" rel="noreferrer">{suggestion.source.label}</a>}
+    {suggestion.source && <a className="recommendation-source" onClick={() => trackEvent('source_link_opened', { source: 'recommendation', action: 'wiki', upgrade_id: upgrade.id })} href={suggestion.source.url} target="_blank" rel="noreferrer">{suggestion.source.label}</a>}
   </article>
 }
 
@@ -57,7 +58,7 @@ export function RecommendationPanel({ catalog, recommendations, onSelect, onPurc
       <dl>
         <dt>Wiki snapshot</dt><dd>Game {wikiSource.gameVersion} · revision {wikiSource.revision} · {wikiSource.revisionTimestamp.slice(0, 10)}</dd>
         <dt>Native catalog</dt><dd>Game {catalog.gameVersion} · {catalog.revision}</dd>
-        <dt>Guide and attribution</dt><dd><a href={wikiSource.revisionUrl} target="_blank" rel="noreferrer">Wiki strategy guide snapshot</a> · <a href={wikiSource.licenseUrl} target="_blank" rel="noreferrer">{wikiSource.license}</a></dd>
+        <dt>Guide and attribution</dt><dd><a onClick={() => trackEvent('source_link_opened', { source: 'recommendation', action: 'wiki' })} href={wikiSource.revisionUrl} target="_blank" rel="noreferrer">Wiki strategy guide snapshot</a> · <a onClick={() => trackEvent('source_link_opened', { source: 'recommendation', action: 'license' })} href={wikiSource.licenseUrl} target="_blank" rel="noreferrer">{wikiSource.license}</a></dd>
       </dl>
     </details>
   </div>
