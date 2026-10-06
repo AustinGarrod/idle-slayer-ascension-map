@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Background, Handle, MarkerType, Position, ReactFlow, ReactFlowProvider, useReactFlow } from '@xyflow/react'
 import type { Node, NodeProps } from '@xyflow/react'
@@ -96,6 +96,8 @@ function Atlas({ catalog }: { catalog: Catalog }) {
   const lastSelection = useRef<string | null>(null)
   const keyboardSelection = useRef(false)
   const cameraStart = useRef<{ x: number; y: number; zoom: number } | null>(null)
+  const cameraRequest = useRef(0)
+  const recenterOnMapResize = useRef(true)
   const appReadyReported = useRef(false)
   const storageLoadReported = useRef(false)
   const [choices, setChoices] = useState<Record<string, number>>({})
@@ -230,8 +232,11 @@ function Atlas({ catalog }: { catalog: Catalog }) {
   function moveCamera(id: string, zoom = selectionZoom) {
     const position = layout.centers.get(id)
     if (!position) return
+    const request = ++cameraRequest.current
+    recenterOnMapResize.current = true
     // Docked details resize the canvas. Wait for its new dimensions before centering.
     window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+      if (request !== cameraRequest.current) return
       const map = mapElement.current?.getBoundingClientRect()
       const camera = mapElement.current?.querySelector('.camera-controls')?.getBoundingClientRect()
       let inset = 0
@@ -260,6 +265,11 @@ function Atlas({ catalog }: { catalog: Catalog }) {
   }
   function clearSelection() { lastSelection.current = null; setSelected(null) }
   function toggleSpoilers(enabled: boolean) {
+    // Changing visibility must not recenter, including when a hidden selection's
+    // inspector closes and resizes the canvas. Cancel pending camera work too.
+    cameraRequest.current += 1
+    recenterOnMapResize.current = false
+    void flow.setViewport(flow.getViewport())
     trackEvent('spoilers_changed', { enabled })
     change({ ...profile, showSpoilers: enabled }, enabled ? 'Spoilers shown.' : 'Spoilers hidden.')
   }
@@ -283,25 +293,29 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     if (persist(profile)) finishTrackingChange(enabled)
     else { setMenu(null); setTrackingReload(enabled) }
   }
+  const recenterCamera = useEffectEvent(() => {
+    if (loaded) moveCamera(detail?.id ?? catalog.startId, detail ? selectionZoom : startZoom)
+  })
+  const resizeMapCamera = useEffectEvent(() => {
+    if (gameLayout && recenterOnMapResize.current) recenterCamera()
+  })
   useEffect(() => {
-    if (loaded) moveCamera(selected && visible.ids.has(selected) ? selected : catalog.startId, selected ? selectionZoom : startZoom)
-  }, [layout, loaded, detailExpanded])
+    recenterCamera()
+  }, [layoutMode, loaded, detailExpanded])
   useEffect(() => {
-    const resize = () => { if (loaded) moveCamera(selected && visible.ids.has(selected) ? selected : catalog.startId, selected ? selectionZoom : startZoom) }
+    const resize = () => recenterCamera()
     window.addEventListener('resize', resize)
     return () => window.removeEventListener('resize', resize)
-  }, [layout, loaded, selected])
+  }, [])
   useEffect(() => {
-    if (!gameLayout || !loaded || !mapElement.current) return
+    if (!loaded || !mapElement.current) return
     // Grid rows can finish resizing after the initial camera frames, including
-    // late font metrics. Recenter on actual canvas size changes, never on pan.
-    const observer = new ResizeObserver(() => moveCamera(
-      selected && visible.ids.has(selected) ? selected : catalog.startId,
-      selected ? selectionZoom : startZoom,
-    ))
+    // late font metrics. Keep this observer stable across visibility changes;
+    // its initial callback must not reset the user's view on each new graph.
+    const observer = new ResizeObserver(() => resizeMapCamera())
     observer.observe(mapElement.current)
     return () => observer.disconnect()
-  }, [layout, loaded, selected])
+  }, [loaded])
   const state = (node: Upgrade) => satisfies({ kind: 'owned', id: node.id }, profile)
     ? satisfies({ kind: 'active', id: node.id }, profile) ? 'purchased' : 'pending'
     : satisfies(node.purchase, profile) ? 'available' : 'locked'

@@ -58,7 +58,16 @@ small { display: block; font-size: .8125rem; color: var(--muted); line-height: 1
 .brand h1 { margin: 0 0 3px; font-size: .6875rem; line-height: 1.7; color: var(--bright-gold); }
 .brand p { margin: 0; color: var(--muted); font-size: .75rem; line-height: 1.4; }
 .toolbar > button, .spoiler-control { font-size: .8125rem; }
-.spoiler-control { display: flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; white-space: nowrap; }
+.spoiler-control { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 10px; border: 1px solid #79603b; border-radius: 5px; background: var(--raised); line-height: 1.35; cursor: pointer; white-space: nowrap; }
+.spoiler-control:hover { border-color: var(--frame); background: #3b3025; }
+.spoiler-control:has(input:checked) { border-color: var(--frame); color: var(--bright-gold); }
+.spoiler-control:has(input:focus-visible) { outline: 3px solid var(--bright-gold); outline-offset: 3px; }
+.spoiler-control input { appearance: none; padding: 0; border-color: var(--frame); border-radius: 3px; cursor: pointer; }
+.spoiler-control input:focus-visible { outline: none; }
+.spoiler-control input:checked { background: var(--frame) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='m4 10 4 4 8-8' fill='none' stroke='%2321190e' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 18px 18px no-repeat; }
+@media (forced-colors: active) {
+  .spoiler-control input, .spoiler-control input:checked { appearance: auto; background: none; }
+}
 .layout-control { display: flex; gap: 4px; }
 .layout-control button { padding: 8px 10px; font-size: .8125rem; }
 .layout-control button[aria-pressed='true'] { border-color: var(--frame); color: #21190e; background: var(--frame); font-weight: 700; }
@@ -184,6 +193,7 @@ dialog > button { margin: 6px 8px 0 0; }
 .progress-actions > label { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; font-size: .875rem; }
 .progress-actions > label input { width: 108px; flex: 0 0 108px; }
 .map-options p { margin-bottom: 2px; font-size: .875rem; }
+.map-options .spoiler-control { white-space: normal; }
 .milestone { display: flex; align-items: flex-start; gap: 12px; min-height: 44px; padding: 14px 0; border-top: 1px solid #574631; cursor: pointer; }
 .milestone > input { margin-top: 3px; }
 .milestone > span { min-width: 0; font-size: .9375rem; line-height: 1.5; }

@@ -114,6 +114,7 @@ Avoid broad gradients, glossy surfaces and oversized decoration. Use restrained 
 
 - Keep each layout fixed. Game uses the native arrangement; Web uses the visible dependency graph. Pan and zoom the viewport instead of moving nodes. Give the starting region a clear return action.
 - Place title search, the spoiler toggle and progress controls in a compact toolbar that remains reachable while exploring.
+- Style the spoiler checkbox with the toolbar's brown surface and gold framing, a visible check mark and a label-wide keyboard focus ring. Keep the map's pan and zoom when spoilers change, including when a selected hidden upgrade's inspector closes.
 - Use a details side panel on desktop and a compact expandable docked panel on mobile. Show the selected upgrade's title, icon, cost, description, prerequisites, purchase/activation state and provenance clearly.
 - Separate visible locked, available, purchased and pending-activation states with distinct symbols and outlines. Color can reinforce a state but must not be its only cue.
 - Filter hidden upgrades and their connections out of the map and related UI consistently. Do not show placeholder silhouettes or search hints that reveal hidden branches unless the game's reveal rules call for them.
