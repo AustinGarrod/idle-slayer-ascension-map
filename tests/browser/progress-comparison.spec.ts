@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Page, type BrowserContext } from '@playwright/test'
 import { emptyProfile, type Catalog, type Profile } from '../../src/domain/types'
 import { planPurchase, visibility } from '../../src/domain/rules'
 import { PROFILE_STORAGE_KEY } from '../../src/domain/storage'
@@ -133,7 +133,7 @@ test('activation, milestone and ownership baseline changes stay distinct from UA
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
 })
 
-test('conflict review explains both replacement directions and preserves cancellation', async ({ page, context }) => {
+async function createConflict(page: Page, context: BrowserContext) {
   await seed(page, current)
   await page.addInitScript((key) => {
     const native = Storage.prototype.setItem
@@ -150,6 +150,10 @@ test('conflict review explains both replacement directions and preserves cancell
   await page.getByRole('button', { name: 'Apply purchases', exact: true }).click()
   await expect(page.getByRole('alert')).toContainText('Progress could not be saved')
   await other.evaluate(({ key, profile }) => localStorage.setItem(key, JSON.stringify(profile)), { key: PROFILE_STORAGE_KEY, profile: incoming })
+}
+
+test('conflict review explains both replacement directions and preserves cancellation', async ({ page, context }) => {
+  await createConflict(page, context)
   await page.getByRole('button', { name: 'Review progress conflict', exact: true }).click()
   let review = page.getByRole('dialog', { name: 'Review progress conflict', exact: true })
   await expect(review.getByRole('region', { name: 'Progress differences' }).locator('li').filter({ hasText: 'Permanent Quests' })).toContainText('Owned and active → Not owned')
@@ -166,3 +170,32 @@ test('conflict review explains both replacement directions and preserves cancell
   await expect(saved).toContainText('Current session → After replacement (saved)')
   await saved.getByRole('button', { name: 'Cancel', exact: true }).click()
 })
+
+for (const direction of ['local', 'saved'] as const) {
+  test(`conflict ${direction} apply gives accurate operation-specific Undo guidance`, async ({ page, context }) => {
+    await createConflict(page, context)
+    await page.getByRole('button', { name: 'Review progress conflict', exact: true }).click()
+    const review = page.getByRole('dialog', { name: 'Review progress conflict', exact: true })
+    await review.getByRole('button', { name: direction === 'local' ? 'Keep this session…' : 'Use saved progress…', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: direction === 'local' ? 'Replace saved progress with this session?' : 'Use saved progress?', exact: true })
+    if (direction === 'local') {
+      await expect(dialog).toContainText('Undo cannot restore its prior contents')
+      await expect(dialog).toContainText('Export the saved profile from the other tab first')
+      await expect(dialog).not.toContainText('Undo is available after replacement')
+    } else await expect(dialog).toContainText('Undo is available after replacement in this visit')
+    await page.evaluate(() => { (window as Window & { failProfileWrites?: boolean }).failProfileWrites = false })
+    await dialog.getByRole('button', { name: 'Apply changes', exact: true }).click()
+    await expect(dialog).toHaveCount(0)
+    const undo = page.getByRole('button', { name: 'Undo', exact: true })
+    if (!await undo.isVisible()) await page.getByRole('button', { name: 'Map options', exact: true }).click()
+    if (direction === 'local') {
+      await expect(undo).toBeDisabled()
+      expect(Object.keys((await stored(page)).purchases)).toHaveLength(4)
+    } else {
+      expect(await stored(page)).toEqual(incoming)
+      await expect(undo).toBeEnabled()
+      await undo.click()
+      expect(Object.keys((await stored(page)).purchases)).toHaveLength(4)
+    }
+  })
+}

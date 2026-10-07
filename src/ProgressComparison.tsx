@@ -11,11 +11,12 @@ export type ProgressComparisonProps = {
   incomingLabel?: string
   context?: string
   showSettings?: boolean
+  undoAvailable?: boolean
 }
 
 const ownership = (purchase: Profile['purchases'][string] | undefined) => !purchase ? 'Not owned' : purchase.active ? 'Owned and active' : 'Owned · awaiting activation'
 
-export function ProgressComparison({ catalog, current, incoming, viewer = current, currentLabel = 'Current session', incomingLabel = 'After replacement', context, showSettings = true }: ProgressComparisonProps) {
+export function ProgressComparison({ catalog, current, incoming, viewer = current, currentLabel = 'Current session', incomingLabel = 'After replacement', context, showSettings = true, undoAvailable = true }: ProgressComparisonProps) {
   const changes = useMemo(() => compareProgress(catalog, current, incoming, viewer), [catalog, current, incoming, viewer])
   const [shown, setShown] = useState(10)
   useEffect(() => { setShown(10) }, [current, incoming, viewer])
@@ -41,6 +42,6 @@ export function ProgressComparison({ catalog, current, incoming, viewer = curren
       </li>)}
     </ul>
     {count > shown && <button onClick={() => setShown((value) => value + 10)}>Show next {Math.min(10, count - shown)} visible changes</button>}
-    <p>Review before applying. Cancel leaves progress unchanged; Undo is available after replacement in this visit. Ownership baselines are recorded map history, not recovered purchase dates.</p>
+    <p>Review before applying. Cancel leaves progress unchanged. {undoAvailable ? 'Undo is available after replacement in this visit.' : 'This overwrites saved progress; Undo cannot restore its prior contents. Export the saved profile from the other tab first if you need to keep it.'} Ownership baselines are recorded map history, not recovered purchase dates.</p>
   </section>
 }
