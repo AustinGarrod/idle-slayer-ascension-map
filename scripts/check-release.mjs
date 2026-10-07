@@ -2,6 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 import { recommendationDataErrors } from '../src/domain/recommendation-data-validation.ts'
+import { validateNoticeDistribution } from './runtime-notices.ts'
 
 const catalogBytes = readFileSync('public/catalog.json')
 const catalog = JSON.parse(catalogBytes)
@@ -29,5 +30,6 @@ function inspect(directory) {
     } else if (/\.(?:dll|exe|acf|assets|resS|resource|dat|sav|py|ps1)$/i.test(entry.name) || /(?:^\.env|appmanifest)/i.test(entry.name)) throw new Error(`Private input in deployment: ${path}`)
   }
 }
+validateNoticeDistribution(process.cwd(), 'dist')
 inspect('dist')
 console.log(`Release gate passed: ${receipt.nativeNodeCount} reviewed upgrades, ${receipt.nativeEdgeCount} native connections, ${priorities.rows.length} reviewed wiki priorities; static dist contains no private game inputs.`)

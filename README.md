@@ -34,6 +34,8 @@ The private Umami setup includes a [product overview board](https://analytics.ga
 
 ## Windows setup and checks
 
+**About & sources → Bundled software licenses** opens the deployed license index in a new tab. Its complete upstream notice texts and [version/hash manifest](public/licenses/notices.json) cover the actual bundled runtime, font, embedded Graphlib and generated helpers. Builds and release checks verify coverage, installed versions and faithful source/distribution bytes. Dependency upgrades require reviewing and updating this inventory and the complete notice copies; do not replace notices with summaries. Regenerate the index from the reviewed manifest using `renderNoticeIndex` in `scripts/runtime-notices.ts`.
+
 Use Node.js 24. The repository includes Yarn 4.13.0, and `.yarnrc.yml` directs normal `yarn` commands to that pinned release, including when the installed launcher is Yarn Classic. Keep the committed lockfile and node-modules linker. The public repository spelling is idle-slayer-ascension-map; leave the original Mac checkout spelling unchanged.
 
 ```powershell
