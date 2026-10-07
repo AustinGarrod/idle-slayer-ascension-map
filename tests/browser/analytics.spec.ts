@@ -1291,3 +1291,32 @@ test('reference sheet selections and full outgoing document stay blocked in actu
   expect(capture.submissions.some((submission) => String(submission.payload.name).includes('reference'))).toBe(false)
   expect(capture.unexpected).toEqual([])
 })
+
+test('hypothetical UA names, stage choices and results stay blocked in real recorder snapshots and mutations', async ({ page, context, baseURL }) => {
+  const origin = new URL(baseURL!).origin
+  let releaseRecorder!: () => void
+  const recorderReady = new Promise<void>((resolve) => { releaseRecorder = resolve })
+  const capture = await installLocalRoutes(context, origin, { recorderReady })
+  await serveIsolatedApplication(context, origin)
+  const name = 'ROADMAP_PRIVATE_NAME_74621', query = 'ROADMAP_PRIVATE_QUERY_63928', snapshotProof = 'ROADMAP_PUBLIC_SNAPSHOT', mutationProof = 'ROADMAP_PUBLIC_MUTATION'
+  await page.goto(`${origin}${appFixturePath}`); await expect(page.locator('.toolbar')).toBeVisible()
+  const compact = page.getByRole('button', { name: 'Map options', exact: true })
+  await (await compact.isVisible() ? compact : page.getByRole('button', { name: 'Map view…', exact: true })).click()
+  await page.getByRole('dialog', { name: 'Map options', exact: true }).getByRole('button', { name: 'Plan hypothetical UAs…', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Hypothetical UA roadmap', exact: true })
+  await dialog.getByRole('textbox', { name: 'Plan name', exact: true }).fill(name)
+  const picker = dialog.locator('.roadmap-picker'); await picker.locator('summary').click(); const input = picker.getByRole('searchbox')
+  await input.fill('Legendary Belt'); await picker.locator(`[data-roadmap-choice="${catalog.upgrades.find((node) => node.title === 'Legendary Belt')!.id}"]`).click(); await dialog.getByRole('radio').first().check()
+  await dialog.evaluate((element, proof) => { const node = document.createElement('p'); node.id = 'roadmap-replay-proof'; node.textContent = proof; element.appendChild(node) }, snapshotProof)
+  await waitForActive(page); releaseRecorder()
+  const snapshot = await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 2 && JSON.stringify(event).includes(snapshotProof)))
+  expect(blockedReplayNodes(snapshot).some((node) => node.attributes.class.includes('ua-roadmap') && !node.childNodes?.length)).toBe(true)
+  await picker.locator('summary').click(); await input.fill(query)
+  await page.locator('#roadmap-replay-proof').evaluate((node, proof) => { node.textContent = proof }, mutationProof); await page.locator('#roadmap-replay-proof').click()
+  const events = await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 3 && JSON.stringify(event).includes(mutationProof)))
+  const evidence = JSON.stringify({ submissions: capture.submissions, replay: events })
+  for (const privateText of [name, query, 'Exact purchase sum across stages', 'Explicit OR choices', 'Intend route 1 for this stage']) expect(evidence).not.toContain(privateText)
+  expect(await page.evaluate((key) => localStorage.getItem(key), profileKey)).toBeNull()
+  expect(capture.submissions.some((entry) => /roadmap|purchase|milestone/.test(String(entry.payload.name)))).toBe(false)
+  expect(capture.unexpected).toEqual([])
+})
