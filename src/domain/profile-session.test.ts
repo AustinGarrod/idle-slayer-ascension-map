@@ -24,6 +24,113 @@ function delayedLocks() {
   return { locks, release: () => callbacks.shift()!() }
 }
 
+describe('labeled visit-only Undo and Redo', () => {
+  it('restores exact snapshots and action identity in both directions without changing backup fields', async () => {
+    const f = fixture()
+    const first = { ...profile('unknown-future'), epoch: 4, purchases: { unknown: { epoch: 1, active: false } }, milestones: { unknown: true as const } }
+    const second = { ...first, showSpoilers: true }
+    f.session.apply(first, false, 'game_import'); await settled()
+    f.session.apply(second, false, 'spoilers'); await settled()
+    expect(f.session.getState().history.map((entry) => entry.action)).toEqual(['game_import', 'spoilers'])
+    expect(f.session.undo()).toBe(true); await settled()
+    expect(f.session.getState().profile).toEqual(first)
+    expect(f.session.getState().redoHistory.at(-1)?.action).toBe('spoilers')
+    expect(f.session.undo()).toBe(true); await settled()
+    expect(f.session.getState().profile).toEqual(emptyProfile('fixture'))
+    expect(f.session.redo()).toBe(true); await settled()
+    expect(f.session.getState().profile).toEqual(first)
+    expect(f.session.redo()).toBe(true); await settled()
+    expect(f.session.getState().profile).toEqual(second)
+    expect(JSON.parse(f.stored()!)).toEqual(second)
+    expect(Object.keys(JSON.parse(f.stored()!)).sort()).toEqual(Object.keys(emptyProfile('fixture')).sort())
+    expect(f.session.getState().redoHistory).toEqual([])
+    expect(f.session.redo()).toBe(false)
+    expect(fixture(f.stored()).session.getState()).toMatchObject({ history: [], redoHistory: [] })
+  })
+
+  it('bounds past and future together to 20 snapshots and discards a redo branch on a new edit', async () => {
+    const f = fixture()
+    for (let epoch = 1; epoch <= 25; epoch++) { f.session.apply({ ...emptyProfile('fixture'), epoch }, false, 'prior_ascensions'); await settled() }
+    expect(f.session.getState().history).toHaveLength(20)
+    for (let count = 0; count < 20; count++) {
+      expect(f.session.undo()).toBe(true); await settled()
+      const state = f.session.getState()
+      expect(state.history.length + state.redoHistory.length).toBe(20)
+    }
+    expect(f.session.getState().profile.epoch).toBe(5)
+    expect(f.session.undo()).toBe(false)
+    for (let count = 0; count < 10; count++) { f.session.redo(); await settled() }
+    expect(f.session.getState().profile.epoch).toBe(15)
+    f.session.apply(profile('new-branch'), false, 'purchase'); await settled()
+    expect(f.session.getState().redoHistory).toEqual([])
+    expect(f.session.getState().history.at(-1)?.action).toBe('purchase')
+    expect(f.session.redo()).toBe(false)
+  })
+
+  it('does not move either history stack or version while a safe write is pending', async () => {
+    const delayed = delayedLocks(), f = fixture(null, delayed.locks)
+    f.session.apply(profile('first'), false, 'purchase')
+    const before = f.session.getState()
+    expect(f.session.undo()).toBe(false)
+    expect(f.session.redo()).toBe(false)
+    expect(f.session.getState()).toBe(before)
+    delayed.release(); await settled()
+    f.session.undo()
+    const undoing = f.session.getState()
+    expect(f.session.redo()).toBe(false)
+    expect(f.session.undo()).toBe(false)
+    expect(f.session.getState()).toBe(undoing)
+    delayed.release(); await settled()
+    expect(f.session.redo()).toBe(true)
+    delayed.release(); await settled()
+    expect(JSON.parse(f.stored()!)).toEqual(profile('first'))
+  })
+
+  it.each(['write-failure', 'missing', 'held', 'rejected'] as const)('keeps redo in memory and uses the existing safe persistence boundary with %s', async (condition) => {
+    const locks: ProfileLocks = { request: async (_name, _options, callback) => {
+      if (condition === 'rejected') throw new Error('Synthetic lock rejection')
+      return callback(condition === 'held' ? null : {})
+    } }
+    const f = fixture(null, condition === 'missing' ? false : locks)
+    if (condition === 'write-failure') f.failWrites()
+    f.session.apply(profile('local'), false, 'restore'); await settled()
+    f.session.undo(); await settled()
+    expect(f.session.redo()).toBe(true); await settled()
+    expect(f.session.getState()).toMatchObject({ profile: profile('local'), pending: false, persistence: 'failed' })
+    expect(f.stored()).toBeNull()
+    expect(f.session.getState().history.at(-1)?.action).toBe('restore')
+    expect(exportProfileBackup(f.session.getState().profile).ok).toBe(true)
+  })
+
+  it.each([null, '{corrupt}', JSON.stringify(profile('external'))])('external progress %s clears both directions and action metadata', async (external) => {
+    const f = fixture()
+    f.session.apply(profile('first'), false, 'purchase'); await settled()
+    f.session.apply(profile('second'), false, 'milestone'); await settled()
+    f.session.undo(); await settled()
+    f.external(external); f.session.refreshExternal()
+    expect(f.session.getState()).toMatchObject({ history: [], redoHistory: [] })
+    expect(f.session.undo()).toBe(false)
+    expect(f.session.redo()).toBe(false)
+  })
+
+  it('supersedes a delayed redo write on external change and labels a confirmed saved-state recovery', async () => {
+    const delayed = delayedLocks(), f = fixture(null, delayed.locks)
+    f.session.apply(profile('local'), false, 'purchase'); delayed.release(); await settled()
+    f.session.undo(); delayed.release(); await settled()
+    f.session.redo()
+    f.external(JSON.stringify(profile('external'))); f.session.refreshExternal()
+    delayed.release(); await settled()
+    expect(JSON.parse(f.stored()!)).toEqual(profile('external'))
+    expect(f.session.getState()).toMatchObject({ profile: profile('local'), history: [], redoHistory: [] })
+    expect(f.session.useSaved(f.session.getState().version)).toBe(true)
+    expect(f.session.getState().history.at(-1)?.action).toBe('recovery')
+    f.session.undo(); delayed.release(); await settled()
+    expect(f.session.getState().profile).toEqual(profile('local'))
+    f.session.redo(); delayed.release(); await settled()
+    expect(f.session.getState().profile).toEqual(profile('external'))
+  })
+})
+
 describe('coordinated profile persistence', () => {
   it('loads and migrates every portable field without rewriting saved input', () => {
     const incoming: Profile = {
