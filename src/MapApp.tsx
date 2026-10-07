@@ -9,6 +9,7 @@ import { emptyProfile, MAX_PROFILE_EPOCH } from './domain/types'
 import { planAstralActivation, planPurchase, planRemoval, planUltraAscension, retainedPurchasesOnReset, satisfies, searchVisible, visibility } from './domain/rules'
 import { formatRequirement } from './domain/requirement-label'
 import { exportProfileBackup, parseProfileBackup, PROFILE_STORAGE_KEY } from './domain/storage'
+import { visibleProgress } from './domain/progress-summary'
 import { createProfileSession, type ProfilePersistence, type StoredSnapshot } from './domain/profile-session'
 import { createMapLayout, GAME_NODE_SIZE, MAP_NODE_HEIGHT, MAP_NODE_WIDTH } from './domain/map-layout'
 import { DependencyEdge } from './DependencyEdge'
@@ -550,8 +551,9 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     if (request !== restoreRequest.current) return
     const result = parseProfileBackup(text, catalog.revision)
     if (!result.ok) { setMessage(result.error.message); trackEvent('backup_error', { reason: result.error.kind }); return }
+    const incoming = visibleProgress(catalog, result.profile, currentProfile.current.showSpoilers)
     setMenu(null)
-    setPreview({ operation: 'restore', title: 'Restore progress?', text: `Replace this profile and its stored data with ${Object.keys(result.profile.purchases).length} recorded purchases and ${Object.keys(result.profile.milestones).length} milestones, in epoch ${result.profile.epoch}. Unknown IDs are retained. Undo remains available.`, profile: { ...result.profile, catalogRevision: catalog.revision }, replaceStorage: true })
+    setPreview({ operation: 'restore', title: 'Restore progress?', text: `The backup has ${incoming.owned} visible recorded purchases and ${incoming.milestones} visible milestones, in epoch ${result.profile.epoch}. Counts follow the map's current spoiler setting and the backup's progress. This replaces the entire profile and its stored data, including records outside these counts. Unknown IDs in the backup are retained. The backup's spoiler setting is restored when applied. Undo remains available.`, profile: result.profile, replaceStorage: true })
   }
   function chooseGameSave() { restoreRequest.current++; trackEvent('game_import_started'); gameFileInput.current?.click() }
   function closeGameImport() {
