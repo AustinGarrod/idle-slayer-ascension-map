@@ -16,6 +16,8 @@
     "test:tools": "node scripts/test-tools.mjs",
     "test:e2e": "playwright test",
     "validate:catalog": "vitest run src/domain/catalog.test.ts",
+    "notices:check": "node scripts/maintain-runtime-notices.mjs check",
+    "notices:refresh": "node scripts/maintain-runtime-notices.mjs refresh",
     "check:release": "node scripts/check-release.mjs"
   },
   "dependencies": {
