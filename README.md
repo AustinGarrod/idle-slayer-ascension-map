@@ -67,6 +67,8 @@ yarn preview
 
 Browser tests exercise a production build on the local preview at port 4173. Keep all automated tests and probes on local or isolated CI builds; production confirmation is manual only. Never point the suite or scheduled checks at the live site. Catalog tests compare every native ID, coordinate, cost, predicate and sprite hash with the reviewed receipt. Unit tests cover dependencies, reset epochs and storage; browser tests cover navigation, persistence, spoilers and responsive interaction. There is no lint script.
 
+Failed local/CI browser tests retain a trace, screenshot and HTML report. CI uploads only synthetic failure diagnostics for five days. See [browser diagnostics](docs/browser-diagnostics.md) for Windows retrieval and local viewer commands.
+
 ## Progress and data
 
 Milestones mean the actual required item received, crafted or purchased. Controls for isolated external branches require explicit **Show spoilers** for first entry because the game supplies no earlier tree gate. Enter existing Ultra Ascension history in Progress, choose **Review history…**, then **Record history** to confirm. Leaving the field does not apply it. This increases the count while keeping current purchases current and preserving earlier ownership and activation; **Ultra Ascend…** instead previews a new reset. Invalid entries explain the reason. Use Undo for an entry mistake in this session or restore an earlier JSON backup after reloading. Confirm already activated Astrals separately in their details. The app never modifies the game.

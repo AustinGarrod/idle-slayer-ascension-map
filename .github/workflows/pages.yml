@@ -27,7 +27,20 @@ jobs:
       - run: node .yarn/releases/yarn-4.13.0.cjs test
       - run: node .yarn/releases/yarn-4.13.0.cjs build
       - run: node .yarn/releases/yarn-4.13.0.cjs playwright install --with-deps chromium
-      - run: node .yarn/releases/yarn-4.13.0.cjs test:e2e
+      - name: Browser regression checks
+        id: browser_checks
+        run: node .yarn/releases/yarn-4.13.0.cjs test:e2e
+      - name: Retain failed browser diagnostics
+        if: ${{ !cancelled() && steps.browser_checks.outcome == 'failure' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: browser-failure-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 5
+          if-no-files-found: warn
+          include-hidden-files: false
       - run: node .yarn/releases/yarn-4.13.0.cjs check:release
       - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
