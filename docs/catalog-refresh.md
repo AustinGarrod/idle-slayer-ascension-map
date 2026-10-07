@@ -65,14 +65,18 @@ Use the [wiki reproduction and candidate-refresh workflow](wiki-recommendations.
 The wiki CLI reads `public/catalog.json`; it has no candidate-catalog argument. To review mappings against the native-reviewed candidate before final promotion, stage only that catalog locally, generate private wiki output, then restore the original catalog bytes. Do this in the isolated refresh checkout, with no concurrent build/promotion or publisher. The linked candidate/reproduction modes require the corrected workflow in #66 to be integrated first.
 
 ```powershell
-$wikiReviewRoot = Join-Path '.local-game' ('wiki-review-' + [guid]::NewGuid().ToString())
-New-Item -ItemType Directory -Path $wikiReviewRoot | Out-Null
-$catalogPublicPath = Join-Path (Get-Location) 'public\catalog.json'
-$catalogBeforeWiki = [IO.File]::ReadAllBytes($catalogPublicPath)
+$wikiReviewRoot = Join-Path (Join-Path (Get-Location).Path '.local-game') ('wiki-review-' + [guid]::NewGuid().ToString())
+New-Item -ItemType Directory -Path $wikiReviewRoot -ErrorAction Stop | Out-Null
+$catalogPublicPath = Join-Path (Get-Location).Path 'public\catalog.json'
 $catalogRecoveryPath = Join-Path $wikiReviewRoot 'catalog-before-review.json'
-[IO.File]::WriteAllBytes($catalogRecoveryPath, $catalogBeforeWiki)
 try {
-    Copy-Item -LiteralPath .local-game\catalog-candidate.json -Destination $catalogPublicPath
+    $catalogBeforeWiki = [IO.File]::ReadAllBytes($catalogPublicPath)
+    [IO.File]::WriteAllBytes($catalogRecoveryPath, $catalogBeforeWiki)
+} catch {
+    throw 'Could not preserve the original catalog; stop before staging.'
+}
+try {
+    Copy-Item -LiteralPath .local-game\catalog-candidate.json -Destination $catalogPublicPath -ErrorAction Stop
     node scripts/extract/wiki-priorities.mjs --mode=candidate --refresh --revision=latest "--input=$wikiReviewRoot" "--output=$wikiReviewRoot\candidate.json"
     if ($LASTEXITCODE -ne 0) { throw 'Wiki candidate generation failed; review the private evidence.' }
 } finally {
