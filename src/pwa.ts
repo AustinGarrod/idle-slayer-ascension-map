@@ -94,7 +94,9 @@ export async function repairOffline(signal: AbortSignal, onCommit: () => void, c
       // can still abort this operation, including while unregister is pending.
       onCommit()
       if (signal.aborted || !canContinue()) return false
-      if (!await registration.unregister()) throw new Error('Unavailable')
+      // An invalidated committed repair may already have removed this scope,
+      // while the old document still holds its activated registration object.
+      if (!await registration.unregister() && await navigator.serviceWorker.getRegistration(import.meta.env.BASE_URL)) throw new Error('Unavailable')
     } catch { if (!signal.aborted) publish({ message: 'Offline repair could not start. Close other map windows and try again.' }); return false }
   } else onCommit()
   if (signal.aborted || !canContinue()) return false

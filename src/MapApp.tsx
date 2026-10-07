@@ -832,9 +832,10 @@ function Atlas({ catalog, transferInbox }: { catalog: Catalog; transferInbox: Pr
       return
     }
     const current = profileSession.getState()
+    const repairURL = window.location.href
     const operation = { controller: new AbortController(), committed: false }
     const canContinue = () => appReloadOperation.current === operation && menuRef.current === 'install'
-      && profileSession.getState().profile === current.profile && !unsavedReferenceKinds().length
+      && window.location.href === repairURL && profileSession.getState().profile === current.profile && !unsavedReferenceKinds().length
     appReloadOperation.current = operation; setAppReloadPhase('checking')
     const accepted = await repairOffline(operation.controller.signal, () => {
       if (!canContinue()) { operation.controller.abort(); return }

@@ -154,6 +154,47 @@ test('a private incoming transfer can be reviewed and applied offline without en
   await expect.poll(() => page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? '{}').epoch, PROFILE_STORAGE_KEY)).toBe(0)
 })
 
+for (const outcome of ['read error', 'new registration', 'URI change'] as const) {
+  test(`a retry absence read keeps ${outcome} safe without a stale reload`, async ({ page }) => {
+    await page.goto('./'); await offlineReady(page)
+    await page.evaluate(() => { (window as Window & { nativePwaUnregister?: typeof ServiceWorkerRegistration.prototype.unregister }).nativePwaUnregister = ServiceWorkerRegistration.prototype.unregister })
+    await deferRepair(page, 'committed'); await openInstall(page)
+    await page.getByRole('button', { name: 'Repair offline files and reload…', exact: true }).click()
+    await page.getByRole('button', { name: 'Reload with saved progress', exact: true }).click()
+    await expect(page.getByRole('dialog', { name: 'Reload the app?', exact: true })).toContainText('Repair started')
+    await page.evaluate(() => { location.hash = 'transfer=v1.invalid' })
+    await expect(page.getByRole('dialog', { name: 'Transfer map progress', exact: true })).toBeVisible()
+    await page.evaluate(async () => await (window as Window & { releasePwaRepair?: () => Promise<void> }).releasePwaRepair!())
+    await page.getByRole('button', { name: 'Close dialog', exact: true }).click()
+    const original = await page.evaluate((key) => localStorage.getItem(key), PROFILE_STORAGE_KEY)
+    await page.evaluate(() => {
+      document.body.dataset.pwaVisit = 'original-retry-document'
+      ServiceWorkerRegistration.prototype.unregister = (window as Window & { nativePwaUnregister?: typeof ServiceWorkerRegistration.prototype.unregister }).nativePwaUnregister!
+      navigator.serviceWorker.getRegistration = () => new Promise<ServiceWorkerRegistration | undefined>((resolve, reject) => {
+        Object.assign(window, { resolvePwaAbsence: resolve, rejectPwaAbsence: reject })
+      })
+    })
+    await openInstall(page)
+    await page.getByRole('button', { name: 'Repair offline files and reload…', exact: true }).click()
+    await page.getByRole('button', { name: 'Reload with saved progress', exact: true }).click()
+    await expect.poll(() => page.evaluate(() => Boolean((window as Window & { resolvePwaAbsence?: unknown }).resolvePwaAbsence))).toBe(true)
+    await page.evaluate(async ({ outcome, id, revision, base }) => {
+      const win = window as Window & { resolvePwaAbsence?: (value: ServiceWorkerRegistration | undefined) => void; rejectPwaAbsence?: (reason: Error) => void }
+      if (outcome === 'read error') win.rejectPwaAbsence!(new DOMException('Synthetic lookup refusal', 'SecurityError'))
+      else if (outcome === 'new registration') win.resolvePwaAbsence!(await navigator.serviceWorker.register(base + 'sw.js', { scope: base }))
+      else {
+        // Resolve in the same task as URI mutation, before queued hash listeners.
+        location.hash = new URLSearchParams({ upgrade: id, catalog: revision }).toString()
+        win.resolvePwaAbsence!(undefined)
+      }
+    }, { outcome, id: catalog.startId, revision: catalog.revision, base })
+    if (outcome === 'URI change') await expect(page.getByRole('dialog')).toHaveCount(0)
+    else await expect(page.getByRole('dialog', { name: 'Install & offline', exact: true })).toContainText('Offline repair could not start')
+    expect(await page.locator('body').getAttribute('data-pwa-visit')).toBe('original-retry-document')
+    expect(await page.evaluate((key) => localStorage.getItem(key), PROFILE_STORAGE_KEY)).toBe(original)
+  })
+}
+
 test('an incoming private transfer aborts startup repair while catalog files are unavailable', async ({ page }) => {
   await page.goto('./'); await offlineReady(page); await purchase(page)
   const original = await page.evaluate((key) => localStorage.getItem(key), PROFILE_STORAGE_KEY)
@@ -405,6 +446,18 @@ test('committed repair blocks dismissal and duplicate actions, and external inva
   await page.evaluate(async () => await (window as Window & { finishUnregister?: () => Promise<void> }).finishUnregister!())
   await expect(preview).toBeVisible()
   expect(await page.evaluate(async () => Boolean(await navigator.serviceWorker.getRegistration()))).toBe(false)
+  // The document retains the old activated object after unregister. A second
+  // explicit repair must accept an already absent scope and remain usable.
+  await preview.getByRole('button', { name: 'Cancel', exact: true }).click()
+  await openInstall(page)
+  await page.getByRole('button', { name: 'Repair offline files and reload…', exact: true }).click()
+  await page.getByRole('button', { name: 'Reload with saved progress', exact: true }).click()
+  await expect(page.getByRole('dialog', { name: 'Reload the app?', exact: true })).toContainText('Repair started')
+  const reloaded = page.waitForEvent('domcontentloaded')
+  await page.evaluate(() => { void (window as Window & { finishUnregister?: () => Promise<void> }).finishUnregister!() })
+  await reloaded
+  await expect(page.locator('.toolbar')).toBeVisible()
+  expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!).epoch, PROFILE_STORAGE_KEY)).toBe(1)
 })
 
 test('updates stay waiting for late windows, then naturally activate after all close with profile/preferences and backup recovery', async ({ browser }, testInfo) => {
