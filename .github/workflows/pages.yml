@@ -25,6 +25,7 @@ jobs:
       - run: node .yarn/releases/yarn-4.13.0.cjs validate:catalog
       - run: node .yarn/releases/yarn-4.13.0.cjs typecheck
       - run: node .yarn/releases/yarn-4.13.0.cjs test
+      - run: node .yarn/releases/yarn-4.13.0.cjs test:tools
       - run: node .yarn/releases/yarn-4.13.0.cjs build
       - run: node .yarn/releases/yarn-4.13.0.cjs playwright install --with-deps chromium
       - run: node .yarn/releases/yarn-4.13.0.cjs test:e2e

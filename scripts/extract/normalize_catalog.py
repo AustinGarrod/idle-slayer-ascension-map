@@ -13,7 +13,7 @@ import re
 from decimal import Decimal
 from pathlib import Path
 
-from extract_assets import only_private_output
+from private_paths import only_private_output
 
 
 def combine(kind, requirements):
