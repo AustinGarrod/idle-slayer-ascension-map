@@ -52,8 +52,8 @@ export function createCheckpointSession(options: { revision: string; storage: ()
   }
   function command(version: number, reduce: (vault: CheckpointVault) => CheckpointVault | null): boolean {
     if (!state.loaded || state.pending || version !== state.version) return false
-    const next = reduce(state.vault)
-    const parsed = next && parseCheckpoints(JSON.stringify(next), options.revision)
+    let parsed: CheckpointVault | null = null
+    try { const next = reduce(state.vault); parsed = next && parseCheckpoints(JSON.stringify(next), options.revision) } catch { /* Keep the existing collection on failed capture/validation. */ }
     if (!parsed) { publish({ error: 'Checkpoint change refused. Use a name of 1–64 characters, at most four checkpoints, and a collection within 4 MiB. Nothing was replaced.' }); return false }
     publish({ vault: parsed, dirty: true, saved: false })
     void save()
