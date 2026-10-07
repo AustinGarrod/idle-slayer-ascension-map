@@ -40,6 +40,10 @@ Include every node belonging to the Ascension tree, including Ultra, Astral and 
 - Offer an optional four-entry saved visible-upgrade comparison reference, separately stored/exported from the actual progress profile. Compare arbitrary recorded states using exact native facts and current shared visibility; require explicit list replacement/removal and restore/recovery confirmation. Hide unrevealed identities/counts and replay-block saved contents, without goals, purchase automation, rankings, notes or new analytics payloads.
 - Import the current state of a user-selected Windows Steam 7.2.0 `savedata.sav` or `backup.sav` locally. Validate transport, native version and verified fields before a spoiler-aware preview; apply only after confirmation and retain undo. Import stable-ID ownership, activation, UA count and verified milestones, discard unrelated native preferences, preserve unknown map IDs, and document the synthetic retention baseline for missing purchase history. Do not access game files automatically or authenticate to cloud storage.
 
+## Optional single-event analysis
+
+Forward impact analyzes one explicit currently valid native purchase or actually received/crafted/purchased visible milestone without editing recorded progress. Both purchase and reveal gates decide newly eligible options; direct native predicates, rather than map edges, identify affected alternatives. Current shared visibility governs default identities, counts and explanations. Hypothetical new reveals require explicit Show spoilers. No recursive purchases, prerequisite filling, pending-Astral flag activation, affordability, optimal-choice scores, persisted plan or new telemetry is added. The private optional dialog preserves compact Purchase keyboard order, stale-session invalidation and normal recovery controls.
+
 ## Authorized usage analytics
 
 - Use only the self-hosted Umami website `f5c9bfd4-7ab5-4f82-a543-9357dcea1566` at `analytics.garrod.house`. Collect page views, bounded usage events, performance data and session recordings using the contract in [analytics.md](analytics.md); keep domain rules and progress storage independent.

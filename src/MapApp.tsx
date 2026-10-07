@@ -54,6 +54,8 @@ import { reconcileRecentUpgrades, visitRecentUpgrade } from './domain/recent-nav
 import { GoalsPanel } from './GoalsPanel'
 import { useGoals } from './useGoals'
 import { PrerequisiteRoutesPanel } from './PrerequisiteRoutesPanel'
+import { ForwardImpactPanel } from './ForwardImpactPanel'
+import type { HypotheticalEvent } from './domain/forward-impact'
 
 type Preview = { operation: AnalyticsOperation | 'prior_ascensions'; title: string; text: string; profile: Profile; changes?: string[]; groups?: { label: string; ids: string[] }[]; replaceStorage?: boolean; upgradeId?: string; milestoneId?: string; sessionVersion?: number; resolution?: 'saved' | 'local'; comparison?: Omit<ProgressComparisonProps, 'catalog'> }
 type Menu = 'options' | 'progress' | 'milestones' | 'about' | 'recommendations' | 'game-import' | 'privacy' | 'keyboard-help' | 'reference-sheet' | null
@@ -78,6 +80,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
       setPreviewState(null); setPurchaseTarget(null); setChoices({})
       setGameImport(null); setGameImportLoading(false); setGameImportError('')
       setConflictReview(null); setTrackingReload(null); setMenuState(null); setRequirementReview(null)
+      setForecast(null)
       setRecentOpen(false)
       setRoutesOpen(false)
       setMessage(state.conflict ? 'Saved progress changed. This session was kept for recovery.' : 'Progress updated from another tab. Previous previews, Undo and Redo were cleared.')
@@ -88,6 +91,9 @@ function Atlas({ catalog }: { catalog: Catalog }) {
   const [conflictReview, setConflictReview] = useState<{ version: number; snapshot: StoredSnapshot } | null>(null)
   const intentions = useGoals()
   const [goalTarget, setGoalTarget] = useState<string | null>(null)
+  const [forecast, setForecast] = useState<{ event: HypotheticalEvent; profile: Profile } | null>(null)
+  const currentForecast = forecast?.profile === profile ? forecast : null
+  useEffect(() => { if (forecast && forecast.profile !== profile) setForecast(null) }, [forecast, profile])
   const [selected, setSelected] = useState<string | null>(null)
   type SheetSelection = { ids: string[]; feedback: string }
   const [sheetSelection, setSheetSelectionState] = useState<SheetSelection>({ ids: [], feedback: '' })
@@ -247,6 +253,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     ?? (conflictReview ? 'Review progress conflict' : null)
     ?? (trackingReload !== null ? 'Reload with unsaved progress?' : null)
     ?? (routesOpen ? 'Prerequisite routes' : null)
+    ?? (currentForecast ? 'Forward impact' : null)
     ?? (checkpointsOpen ? 'Progress checkpoints' : null)
     ?? (comparisonOpen ? 'Saved upgrade comparison' : null)
     ?? (recentOpen ? 'Recent upgrades' : null)
@@ -290,6 +297,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
   }, [purchasePlan, purchaseTarget])
   function setMenu(next: Menu, recommendationStatus = recommendations.status) {
     setRoutesOpen(false)
+    setForecast(null)
     setRecentOpen(false)
     setCheckpointsOpen(false); setComparisonOpen(false)
     const previous = menuRef.current
@@ -312,7 +320,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
   }
   function setPreview(next: Preview | null) {
     if (next && profileSession.getState().profile !== profile) { setMessage('Progress changed. Create a fresh preview from the current session.'); return }
-    if (next) { setRoutesOpen(false); setCheckpointsOpen(false); setComparisonOpen(false); setRecentOpen(false) }
+    if (next) { setRoutesOpen(false); setForecast(null); setCheckpointsOpen(false); setComparisonOpen(false); setRecentOpen(false) }
     if (next && next.operation !== 'prior_ascensions') trackEvent(`${next.operation}_previewed`, { upgrade_id: next.upgradeId, milestone_id: next.milestoneId })
     else if (!next && preview && preview.operation !== 'prior_ascensions') trackEvent(`${preview.operation}_cancelled`, { upgrade_id: preview.upgradeId, milestone_id: preview.milestoneId })
     setMessage('')
@@ -320,6 +328,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
   }
   function startPurchase(id: string, source: 'details' | 'recommendation' = 'details') {
     if (!visible.ids.has(id)) return
+    setForecast(null)
     setMessage('')
     purchaseSource.current = source; purchaseEventKey.current = ''
     trackEvent('purchase_started', { upgrade_id: id, source })
@@ -330,6 +339,17 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     if (purchaseTarget) trackEvent('purchase_cancelled', { upgrade_id: purchaseTarget, source: purchaseSource.current })
     setPurchaseTarget(null); setChoices({})
     setMessage('')
+  }
+  function startForecast(event: HypotheticalEvent) {
+    if (profileSession.getState().profile !== profile) return
+    invalidatePendingFiles()
+    setMenu(null); setPreviewState(null); setPurchaseTarget(null); setChoices({})
+    setConflictReview(null); setTrackingReload(null); setSearchOpen(false); setMessage('')
+    setForecast({ event, profile })
+  }
+  function closeForecast() {
+    setForecast(null)
+    if (currentForecast?.event.kind === 'milestone') setMenu('milestones')
   }
   function applyPurchase(continueSuggestions = false) {
     if (purchasePlan?.kind !== 'ready' || !purchaseTarget) return
@@ -840,13 +860,14 @@ function Atlas({ catalog }: { catalog: Catalog }) {
         <div className="detail-actions">
         {profile.purchases[detail.id] ? <button className="danger full" disabled={saving} onClick={() => previewRemoval(detail.id)}>Remove purchase…</button> : <button className="primary full" disabled={saving} onClick={() => startPurchase(detail.id)}>Record purchase…</button>}
         {profile.purchases[detail.id] && detail.activation === 'after-ultra-ascension' && !profile.purchases[detail.id].active && <button className="full" disabled={saving} onClick={() => previewAstralActivation(detail.id)}>Already activated…</button>}
-        </div><div className="detail-secondary"><button onClick={openRecentUpgrades}>Recent upgrades…</button><ExactCostDetails key={`cost:${detail.id}`} value={detail.cost} upgradeId={detail.id} /><button onClick={() => openComparison(detail.id)}>Compare this upgrade…</button><UpgradeReference key={`reference:${detail.id}`} catalog={catalog} upgrade={detail} /><section className="sheet-add telemetry-private rr-block" aria-label="Add public reference"><button onClick={() => addToSheet(detail.id)}>Add to reference sheet</button><p aria-live="polite" aria-atomic="true">{sheetSelection.feedback}</p></section><button className="route-entry" onClick={() => openRoutes(detail.id)}>Compare prerequisite routes…</button></div></aside>}
+        </div><div className="detail-secondary"><button onClick={openRecentUpgrades}>Recent upgrades…</button><ExactCostDetails key={`cost:${detail.id}`} value={detail.cost} upgradeId={detail.id} /><button onClick={() => openComparison(detail.id)}>Compare this upgrade…</button><UpgradeReference key={`reference:${detail.id}`} catalog={catalog} upgrade={detail} /><section className="sheet-add telemetry-private rr-block" aria-label="Add public reference"><button onClick={() => addToSheet(detail.id)}>Add to reference sheet</button><p aria-live="polite" aria-atomic="true">{sheetSelection.feedback}</p></section><button className="route-entry" onClick={() => openRoutes(detail.id)}>Compare prerequisite routes…</button><div className="forward-impact-details telemetry-private rr-block"><button className="forward-impact-trigger" onClick={() => startForecast({ kind: 'purchase', id: detail.id })}>Analyze forward impact…</button></div></div></aside>}
     </div>
     {routesOpen && <Dialog title="Prerequisite routes" close={() => setRoutesOpen(false)}><PrerequisiteRoutesPanel catalog={catalog} profile={profile} visible={visible} goals={intentions.goals} initialId={routeInitialId} /></Dialog>}
     <footer><span>Unofficial companion · {progressStatus}</span>{historyControls}<button onClick={() => setMenu('keyboard-help')}>Map help…</button><button onClick={() => setMenu('about')}>About & sources</button><button onClick={() => setMenu('privacy')}>Privacy & tracking</button></footer>
     {!activeDialogTitle && <p className="sr-only" role="status" aria-label="Map action feedback">{message === storageError ? '' : message}</p>}{!activeDialogTitle && message !== storageError && message && toastVisible && <div className="toast" onClick={() => setMessage('')}>{message}<button aria-label="Dismiss status" onClick={() => setMessage('')}>×</button></div>}
     <input className="sr-only telemetry-private rr-block" tabIndex={-1} aria-label="Map progress JSON backup" ref={fileInput} type="file" accept="application/json,.json" onChange={(event) => { const file = event.target.files?.[0]; if (file) void restore(file); else restoreRequest.current++; event.target.value = '' }} />
     <input className="sr-only telemetry-private rr-block" tabIndex={-1} aria-label="Idle Slayer game save" ref={gameFileInput} type="file" accept=".sav" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void readGameSave(file) }} />
+    {currentForecast && <Dialog title="Forward impact" close={closeForecast}><ForwardImpactPanel catalog={catalog} profile={profile} event={currentForecast.event} /><div className="dialog-actions"><button className="forward-impact-close" onClick={closeForecast}>{currentForecast.event.kind === 'milestone' ? 'Back to Milestones' : 'Return to details'}</button></div></Dialog>}
     {recentOpen && <Dialog title="Recent upgrades" close={() => setRecentOpen(false)}><RecentUpgrades upgrades={visibleRecent.map((id) => index.get(id)!)} visibleUpgrades={visible.upgrades} selected={detail?.id ?? null} onSelect={returnToRecentUpgrade} onClear={() => setRecent([])} /></Dialog>}
     {checkpointsOpen && <Dialog title="Progress checkpoints" close={() => setCheckpointsOpen(false)}><CheckpointPanel catalog={catalog} profile={profile} history={history} redoHistory={redoHistory} state={checkpoints.state} session={checkpoints.session} currentProfile={() => profileSession.getState().profile} /></Dialog>}
     {comparisonOpen && <Dialog title="Saved upgrade comparison" close={() => setComparisonOpen(false)}><SavedComparisonPanel catalog={catalog} profile={profile} getProfile={() => profileSession.getState().profile} visible={visible} session={comparison.session} state={comparison.state} initialId={comparisonInitialId}
@@ -856,7 +877,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     {menu === 'recommendations' && <Dialog title="Suggested next upgrade" close={() => setMenu(null)}><RecommendationPanel catalog={catalog} recommendations={recommendations} onSelect={(id) => selectSuggestion(id)} onPurchase={(id) => selectSuggestion(id, true)} blockedUpgrade={blockedRecommendation} onReviewRequirements={reviewBlockedRecommendation} /></Dialog>}
     {menu === 'options' && <Dialog title="Map options" close={() => setMenu(null)}><div className="map-options"><p><b>{visible.owned} / {visible.total}</b> visible upgrades owned · Ultra Ascensions {profile.epoch}<br />{profile.showSpoilers ? 'Spoilers shown' : 'Spoilers hidden'}</p><label className="spoiler-control"><input type="checkbox" disabled={saving} checked={profile.showSpoilers} onChange={(event) => toggleSpoilers(event.target.checked)} />Show spoilers</label><button onClick={() => openRoutes()}>Compare prerequisite routes…</button><button onClick={openRecentUpgrades}>Recent upgrades…</button><button onClick={() => openComparison()}>Saved upgrade comparison…</button><button onClick={showOverview} disabled={!visible.ids.size}>Overview visible map</button><button onClick={(event) => refocusSelection(event.detail === 0)} disabled={!detail}>Refocus selected upgrade</button><small>Overview fits only currently visible upgrades. Refocus returns your selection to inspection size without changing progress.</small><button onClick={() => setMenu('milestones')}>Milestones</button><button onClick={() => setMenu('progress')}>Progress</button><button onClick={() => setMenu('reference-sheet')}>Reference sheet</button>{historyControls}<button onClick={() => setMenu('keyboard-help')}>Map help…</button><button onClick={() => setMenu('about')}>About & sources</button><button onClick={() => setMenu('privacy')}>Privacy & tracking</button><small>Unofficial companion · {progressStatus}</small></div></Dialog>}
     {menu === 'reference-sheet' && <Dialog title="Upgrade reference sheet" close={() => setMenu(null)}><ReferenceSheetPanel catalog={catalog} ids={visibleSheetIds} getIds={() => menuRef.current === 'reference-sheet' ? sheetSelectionRef.current.ids : []} viewer={profile} getViewer={() => profileSession.getState().profile} remove={(id) => setSheetSelection((current) => ({ ids: current.ids.filter((entry) => entry !== id), feedback: '' }))} clear={() => setSheetSelection({ ids: [], feedback: '' })} /></Dialog>}
-    {menu === 'milestones' && <Dialog title="Milestones" close={() => setMenu(null)}><p>Record the required item received or purchased in the game.</p>{requirementReturn}{visible.milestones.map((item) => <label className="milestone" key={item.id}><input data-requirement-milestone={item.id} type="checkbox" disabled={saving} checked={profile.milestones[item.id] === true} onChange={(event) => { if (event.target.checked) { if (change({ ...profile, milestones: { ...profile.milestones, [item.id]: true } }, 'Milestone recorded.', false, 'milestone')) trackEvent('milestone_changed', { milestone_id: item.id, recorded: true }) } else { setMenu(null); previewRemoval(item.id, true) } }} /><span>{item.title}<small>{item.description}</small></span></label>)}{!visible.milestones.length && <div><p>No milestone controls are currently revealed. Controls follow the game's reveal rules. To enter existing progress on an isolated branch, you can explicitly choose Show spoilers in Map options, then return here. Record only the required item actually received, crafted or purchased.</p><button onClick={() => setMenu('options')}>Review spoiler setting</button></div>}</Dialog>}
+    {menu === 'milestones' && <Dialog title="Milestones" close={() => setMenu(null)}><p>Record the required item received or purchased in the game.</p>{requirementReturn}{visible.milestones.map((item) => <div key={item.id}><label className="milestone"><input data-requirement-milestone={item.id} type="checkbox" disabled={saving} checked={profile.milestones[item.id] === true} onChange={(event) => { if (event.target.checked) { if (change({ ...profile, milestones: { ...profile.milestones, [item.id]: true } }, 'Milestone recorded.', false, 'milestone')) trackEvent('milestone_changed', { milestone_id: item.id, recorded: true }) } else { setMenu(null); previewRemoval(item.id, true) } }} /><span>{item.title}<small>{item.description}</small></span></label>{!profile.milestones[item.id] && <div className="telemetry-private rr-block"><button className="forward-impact-trigger" data-forward-milestone={item.id} aria-label={`Analyze receipt of ${item.title}`} onClick={() => startForecast({ kind: 'milestone', id: item.id })}>Analyze item receipt…</button></div>}</div>)}{!visible.milestones.length && <div><p>No milestone controls are currently revealed. Controls follow the game's reveal rules. To enter existing progress on an isolated branch, you can explicitly choose Show spoilers in Map options, then return here. Record only the required item actually received, crafted or purchased.</p><button onClick={() => setMenu('options')}>Review spoiler setting</button></div>}</Dialog>}
     {menu === 'progress' && <Dialog title="Your progress" close={() => setMenu(null)}>
       <p>One local profile. Keep a backup when changing browsers or devices.</p><button onClick={() => setMenu('keyboard-help')}>Map help…</button>{requirementReturn}
       <button onClick={openCheckpoints}>Progress checkpoints…</button><small>Keep named read-only references and compare visible progress. Separate from active progress and visit-only Undo/Redo.</small>
