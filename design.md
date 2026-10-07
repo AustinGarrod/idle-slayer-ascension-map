@@ -30,6 +30,12 @@ Larger browser text grows the toolbar rows and layout-button columns instead of 
 
 Compact details show the upgrade's icon, title, cost, status and purchase action. Show details expands the internally scrollable description, requirements, connections and sources. The inspector occupies an actual layout row or column so selected nodes cannot center behind it. The full footer moves into Map options. Four directional camera buttons appear only after opening Map navigation, while zoom and return-to-start remain immediately available. Browser acceptance includes 320×568 portrait, 844×390 landscape, 568×320 and 375×350 short windows, compact/expanded details, internal scrolling and selected-node hit testing. Short windows use measured available space: 480–639px landscape widths place details beside the canvas, and narrower views reduce the map reservation so dismissal and purchase actions remain reachable. Selection fits the smaller canvas and uses space beside camera controls when needed; normal portrait allocation remains intact.
 
+## Visible map overview
+
+Overview is an on-demand camera mode, reached through Map options or the compact desktop Map view button. It temporarily hides the inspector so the revealed graph can use the existing canvas; selection and inspector expansion are retained for return. It shows the complete visible node shape with normal branch contrast and a short orientation caption. Nodes can become very small, so the existing return-to-start camera slot changes to Return to inspection while a selection exists, or Return to previous view otherwise. Refocus selected upgrade in Map options remains available during ordinary exploration.
+
+This adds no permanent minimap, camera button or phone panel. The four existing camera targets keep their footprint. Overview leaves room below its caption and above camera controls, fits only current shared visible frames, and uses the current reduced-motion preference. Refocus restores the existing useful node scale and responsive inspection insets. Spoiler changes retain the exact camera instead of widening or resetting the view automatically.
+
 ## Next-upgrade guidance
 
 Three presentations were independently reviewed for the wiki-based suggestion feature:

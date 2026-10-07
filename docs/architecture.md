@@ -80,6 +80,8 @@ Analytics is an optional external service: script, network and API failures must
 
 ## Rendering and verification
 
+`map-overview.ts` fits node frames from the current layout centers and shared visible IDs only; hidden centers, connections and identities cannot affect its bounds. Map options offers Overview visible map and Refocus selected upgrade, with a compact Map view opener on desktop. Overview temporarily hides the inspector without changing selection, its expansion preference, fixed positions or recorded progress. Its camera range permits the smaller zoom needed for orientation; normal inspection retains the existing scales and insets. The existing return-to-start slot temporarily becomes Return to inspection, or Return to previous view when no visible selection exists. Refocus restores the selected inspector and normal camera scale. Layout changes, real canvas resizing and recorded progress that changes visible geometry recompute the overview against current visible frames; unchanged geometry preserves manual exploration. Spoiler-only changes freeze the viewport and cancel queued fits. Pending fits are refreshed for new recorded progress, reject stale profile/layout snapshots and use actual canvas, summary and control bounds after layout. Overview state and its prior camera live only in this mounted view, never profile storage, backups or analytics properties.
+
 Recorded progress can reflow Detailed Layout. When the same visible selected ID
 receives new coordinates, the camera recenters using its current zoom and the
 shared canvas-fit safeguards. Unchanged selected coordinates and unselected

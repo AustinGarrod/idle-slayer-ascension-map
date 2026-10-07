@@ -308,7 +308,7 @@ dialog > button { margin: 6px 8px 0 0; }
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }
 /* Suggestions share the existing toolbar rows and use an on-demand dialog. */
-.toolbar { grid-template-columns: auto minmax(180px, 1fr) auto auto auto auto auto; }
+.toolbar { grid-template-columns: auto minmax(180px, 1fr) auto auto auto auto auto auto; }
 .next-upgrade { color: var(--bright-gold); font-size: .8125rem; font-weight: 600; white-space: nowrap; }
 .recommendation-panel { display: flex; flex-direction: column; gap: 16px; }
 .recommendation-context { margin: 0; color: var(--muted); font-size: .8125rem; line-height: 1.55; }
