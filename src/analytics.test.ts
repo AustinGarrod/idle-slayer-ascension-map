@@ -256,6 +256,18 @@ describe('analytics payload privacy', () => {
     expect(analytics.getTrackingStatus()).toMatchObject({ enabled: false, active: false, reason: 'reload-required' })
   })
 
+  it('latches a dirty live URL before guarded history can replace it without navigation listeners or cache checks', () => {
+    const { analytics, win, historyCalls, tracker, ready } = setup()
+    analytics.initializeAnalytics()
+    ready()
+    historyCalls.pushState({}, '', '/map/#PRIVATE')
+    win.history.replaceState({ cleaned: true }, '', '/map/')
+    expect(analytics.getTrackingStatus()).toMatchObject({ enabled: false, active: false, reason: 'reload-required' })
+    expect(tracker.getSession().cache).toBeUndefined()
+    expect(win.location.href).toBe('https://example.test/map/')
+    expect(historyCalls.replaceState).toHaveBeenLastCalledWith({ cleaned: true }, '', 'https://example.test/map/')
+  })
+
   it.each(['pushState', 'replaceState'] as const)('preserves native %s failures without replacing their exceptions', (method) => {
     const { analytics, win, historyCalls } = setup()
     analytics.initializeAnalytics()

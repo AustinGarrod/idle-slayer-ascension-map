@@ -344,11 +344,40 @@ test('dirty fragment changes during a trusted click never upload or resume their
   expect(capture.unexpected).toEqual([])
 })
 
+test('a later same-click history replacement cannot hide a dirty buffered URL', async ({ page, context, baseURL }) => {
+  const origin = new URL(baseURL!).origin
+  const capture = await installLocalRoutes(context, origin)
+  const marker = 'BUFFERED_CLICK_URL_SECRET'
+  await page.goto(`${origin}${fixturePath}`)
+  await page.evaluate(({ marker, path }) => {
+    // The recorder's document capture listener runs between these handlers.
+    // The bubble handler deliberately never calls getSession to intervene.
+    document.addEventListener('click', () => { location.hash = marker }, { capture: true, once: true })
+    document.addEventListener('click', () => { history.replaceState({ cleaned: true }, '', path) }, { once: true })
+  }, { marker, path: fixturePath })
+  await injectHarness(page)
+  await initializeHarness(page)
+  await waitForActive(page)
+  await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 2))
+  await page.locator('#public-action').click()
+  await page.waitForTimeout(6000)
+  const events = await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 2))
+  expect(JSON.stringify({ submissions: capture.submissions, replay: events }).includes(marker), 'A dirty URL hidden by a same-click history replacement leaked').toBe(false)
+  expect(await page.evaluate(() => (window as unknown as { analyticsHarness: { getTrackingStatus: () => { active: boolean; reason: string } } }).analyticsHarness.getTrackingStatus())).toMatchObject({ active: false, reason: 'reload-required' })
+  expect(page.url()).toBe(`${origin}${fixturePath}`)
+  expect(await page.evaluate(() => history.state)).toEqual({ cleaned: true })
+  expect(capture.unexpected).toEqual([])
+})
+
 test('session URL guards preserve native history failures, state and a later opt-out marker', async ({ page, context, baseURL }) => {
   const origin = new URL(baseURL!).origin
   const capture = await installLocalRoutes(context, origin)
   await page.goto(`${origin}${fixturePath}`)
   await page.evaluate(() => history.replaceState({ preserved: 'initial' }, '', location.href))
+  const nativeMalformedURL = await page.evaluate(() => {
+    try { history.pushState({}, '', 'http://['); return 'none' } catch (error) { return (error as Error).name }
+  })
+  expect(nativeMalformedURL).toBe('SecurityError')
   await injectHarness(page)
   await initializeHarness(page)
   await waitForActive(page)
@@ -358,12 +387,13 @@ test('session URL guards preserve native history failures, state and a later opt
       () => history.pushState({}, '', 'https://other.invalid/private'),
       () => history.replaceState({ invalid: () => undefined }, '', location.href),
       () => Reflect.apply(history.pushState, history, []),
+      () => history.pushState({}, '', 'http://['),
     ].map((operation) => {
       try { operation(); return 'none' } catch (error) { return (error as Error).name }
     })
     return { failures, lengthPreserved: history.length === length, state: history.state }
   })
-  expect(nativeFailures).toEqual({ failures: ['SecurityError', 'DataCloneError', 'TypeError'], lengthPreserved: true, state: { preserved: 'initial' } })
+  expect(nativeFailures).toEqual({ failures: ['SecurityError', 'DataCloneError', 'TypeError', nativeMalformedURL], lengthPreserved: true, state: { preserved: 'initial' } })
   await page.evaluate(() => { location.hash = 'analytics=off' })
   await expect.poll(() => page.evaluate(() => (window as unknown as { analyticsHarness: { getTrackingStatus: () => { active: boolean; reason: string } } }).analyticsHarness.getTrackingStatus())).toMatchObject({ active: false, reason: 'opt-out' })
   expect(page.url()).toBe(`${origin}${fixturePath}#analytics=off`)

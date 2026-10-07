@@ -213,7 +213,11 @@ export function createAnalyticsController(environment: AnalyticsEnvironment) {
     const nativeReplaceState = win.history.replaceState
     const nativePushState = win.history.pushState
     function cleanHistoryURL(value: string | URL | null | undefined) {
-      const requested = new URL(value ?? win.location.href, win.location.href)
+      let requested: URL
+      try { requested = new URL(value ?? win.location.href, win.location.href) } catch {
+        // Native History reports invalid destinations with its own exception.
+        return value
+      }
       // Let the browser retain its native cross-origin rejection semantics.
       if (requested.origin !== origin) return value
       const clean = new URL(appURL)
@@ -225,6 +229,9 @@ export function createAnalyticsController(environment: AnalyticsEnvironment) {
     }
     function guard(method: History['pushState']): History['pushState'] {
       return function (this: History, data: unknown, unused: string, url?: string | URL | null) {
+        // Clearing a dirty address must not hide metadata already buffered
+        // before the queued navigation event or recorder cache check.
+        guardLiveURL()
         if (arguments.length < 2) return Reflect.apply(method, this, arguments)
         return method.call(this, data, unused, cleanHistoryURL(url))
       }
