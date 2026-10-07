@@ -62,6 +62,26 @@ The second command uses an independent implementation and the reviewed native re
 
 Use the [wiki reproduction and candidate-refresh workflow](wiki-recommendations.md#reproduce-or-refresh-on-windows). A byte-for-byte replay of the accepted guide differs from accepting a new guide/catalog pair. Keep raw API responses private, preserve original artifact dates when reproducing, record actual fetch dates separately, and review license/mapping drift before promotion. Wiki order remains a priority guide; it cannot replace native costs or rules.
 
+The wiki CLI reads `public/catalog.json`; it has no candidate-catalog argument. To review mappings against the native-reviewed candidate before final promotion, stage only that catalog locally, generate private wiki output, then restore the original catalog bytes. Do this in the isolated refresh checkout, with no concurrent build/promotion or publisher. The linked candidate/reproduction modes require the corrected workflow in #66 to be integrated first.
+
+```powershell
+$wikiReviewRoot = Join-Path '.local-game' ('wiki-review-' + [guid]::NewGuid().ToString())
+New-Item -ItemType Directory -Path $wikiReviewRoot | Out-Null
+$catalogPublicPath = Join-Path (Get-Location) 'public\catalog.json'
+$catalogBeforeWiki = [IO.File]::ReadAllBytes($catalogPublicPath)
+$catalogRecoveryPath = Join-Path $wikiReviewRoot 'catalog-before-review.json'
+[IO.File]::WriteAllBytes($catalogRecoveryPath, $catalogBeforeWiki)
+try {
+    Copy-Item -LiteralPath .local-game\catalog-candidate.json -Destination $catalogPublicPath
+    node scripts/extract/wiki-priorities.mjs --mode=candidate --refresh --revision=latest "--input=$wikiReviewRoot" "--output=$wikiReviewRoot\candidate.json"
+    if ($LASTEXITCODE -ne 0) { throw 'Wiki candidate generation failed; review the private evidence.' }
+} finally {
+    [IO.File]::WriteAllBytes($catalogPublicPath, $catalogBeforeWiki)
+}
+```
+
+If the shell is interrupted before `finally`, restore from the printed/retained `$catalogRecoveryPath` before continuing. Record that path in private working notes. Check that the restored public file has its original hash and that the private wiki candidate records the **candidate catalog** hash/revision. Review that new pair and adjust pinned parser/validation expectations only with evidence. A successful private generation is not approval. Do not copy the wiki candidate into `src/data/` yet.
+
 Save compatibility is a separate gate even if the catalog looks unchanged. Review native serialization/encoding, version discriminator, typed keys, milestone flags, UA count, Astral activation and retained-ownership baseline against new native evidence. Follow [the save-format contract and evidence list](save-import.md); synthetic decoder tests alone do not establish a new platform/version. There is currently no automatic generator that certifies a new save receipt. Assemble/review its sanitized evidence without embedding player data, then update the exact SHA-256 literal in `scripts/check-release.mjs` to the **reviewed final file bytes**:
 
 ```powershell
@@ -81,6 +101,8 @@ python scripts/logic/validate_catalog_rules.py --export .local-game/asset-export
 ```
 
 Inspect the full diff, receipt identities/hashes and attribution. No raw inputs, private review sheets, save bytes, preference values or installation paths belong in the commit. Receipts describe established review; generating them does not perform it.
+
+With the accepted catalog now in `public/catalog.json`, regenerate wiki output from the **same reviewed cached responses**, using the linked candidate command with the recorded input/output paths and without `--refresh`. Compare its catalog identity and full bytes to the accepted private candidate; an unexpected difference blocks acceptance. Promote only the reviewed normalized priority JSON into `src/data/wiki-priorities.json`, together with reviewed validator expectations and provenance. Recompute all final receipts after the last catalog/icon/save-evidence change before validating.
 
 ## 6. Validate, independently review, then publish within authority
 
