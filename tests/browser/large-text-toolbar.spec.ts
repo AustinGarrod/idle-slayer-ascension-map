@@ -211,6 +211,41 @@ test('recent inspection controls stay usable at the actual 200% browser font', a
   expect(await page.evaluate(() => localStorage.getItem('idle-slayer-ascension-map.profile.v1'))).toBeNull()
 })
 
+test('recent guidance and its clear action fit with wide font metrics at actual 200% text', async ({ page }) => {
+  await page.goto('./')
+  await expect(page.locator('html')).toHaveCSS('font-size', '32px')
+  await page.getByRole('searchbox').fill('Permanent Slayer')
+  await page.getByRole('searchbox').press('Enter')
+  await page.getByRole('button', { name: 'Map options', exact: true }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Recent upgrades…', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Recent upgrades', exact: true })
+  // System-font metrics differ across platforms; keep the real browser text size.
+  await dialog.locator('.recent-upgrades').evaluate((element) => { (element as HTMLElement).style.fontFamily = 'Verdana, sans-serif' })
+  expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true)
+  const guidance = dialog.locator('.recent-upgrades > p').first()
+  expect(await guidance.evaluate((element) => {
+    const box = element.getBoundingClientRect()
+    const range = document.createRange(); range.selectNodeContents(element)
+    return [...range.getClientRects()].every((line) => line.left >= box.left - 1 && line.right <= box.right + 1)
+  })).toBe(true)
+  const clear = dialog.getByRole('button', { name: 'Clear recent upgrades', exact: true })
+  await clear.scrollIntoViewIfNeeded()
+  await expect(clear).toBeInViewport()
+  expect(await clear.evaluate((element) => {
+    const box = element.getBoundingClientRect()
+    const panel = element.closest('.recent-upgrades')!.getBoundingClientRect()
+    const range = document.createRange(); range.selectNodeContents(element)
+    return box.width >= 44 && box.height >= 44 && box.left >= panel.left && box.right <= panel.right + 1
+      && [...range.getClientRects()].every((line) => line.left >= box.left && line.right <= box.right && document.elementFromPoint(line.x + line.width / 2, line.y + line.height / 2)?.closest('button') === element)
+  })).toBe(true)
+  await page.screenshot({ path: test.info().outputPath('recent-wide-font-clear-200-percent.png') })
+  await clear.click()
+  await expect(dialog).toContainText('No recently inspected visible upgrades.')
+  await dialog.getByRole('button', { name: 'Close dialog', exact: true }).click()
+  await expect(page.locator('.details h2')).toHaveText('Permanent Slayer')
+  expect(await page.evaluate(() => localStorage.getItem('idle-slayer-ascension-map.profile.v1'))).toBeNull()
+})
+
 test('prior ascension history keeps its input and actions inside a narrow large-text dialog', async ({ page }) => {
   await page.goto('./')
   await expect(page.locator('html')).toHaveCSS('font-size', '32px')

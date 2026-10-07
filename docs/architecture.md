@@ -6,6 +6,8 @@
 
 `recent-navigation.ts` stores a bounded most-recent-first set of up to 20 inspected stable IDs in mounted React view state. Every deliberate selection adds or moves its ID; overview/refocus and keyboard browsing without selection do not. Closing details retains the list. `RecentUpgrades` receives only the current shared visible IDs and identities; rendering filters synchronously and a layout effect discards entries that become hidden, so a later spoiler/reveal change cannot resurrect old context. Returning closes the dialog and uses the existing center/detail-focus path without changing purchases, profile Undo, backups, URLs or persistence. Queued selection centering also checks the latest visible IDs and layout before moving the camera. The list can be cleared and disappears on reload. Its DOM is replay-blocked; trail contents and new events are not collected. Returning uses the existing current-visible selection event.
 
+Recent-dialog guidance, identity text and its bounded Clear button wrap within the available content width, including enlarged browser text and differing system-font metrics. The list keeps the native dialog's vertical scrolling and ordinary keyboard controls.
+
 ## Rules and spoilers
 
 Purchase and reveal explanations preserve nested AND/OR grouping with parentheses whenever the operator changes. The pure formatter retains caller-supplied visible/hidden leaf labels and activation notes without changing rule evaluation.

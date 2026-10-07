@@ -1,5 +1,6 @@
-.recent-upgrades { min-width: 0; }
+.recent-upgrades { min-width: 0; overflow-wrap: anywhere; }
 .recent-upgrades > p { font-size: .875rem; line-height: 1.5; }
+.recent-upgrades > button { max-width: 100%; font-size: .875rem; }
 .recent-upgrades ol { list-style: none; margin: 16px 0; padding: 0; }
 .recent-upgrades li + li { margin-top: 8px; }
 .recent-upgrades li > button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px; text-align: left; font-size: .875rem; }
