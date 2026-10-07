@@ -1,4 +1,9 @@
 /** Bounded, optional Umami integration. Progress persistence never depends on telemetry. */
+import { isAnalyticsEventName, isAnalyticsLayout, sanitizeAnalyticsProperties } from './analytics-contract'
+import type { AnalyticsEventName, AnalyticsLayout, AnalyticsTrackEvent } from './analytics-contract'
+export type { AnalyticsEventName, AnalyticsOperation, AnalyticsProperties, AnalyticsTrackEvent } from './analytics-contract'
+export { analyticsPosition } from './analytics-contract'
+
 export const ANALYTICS_PREFERENCE_KEY = 'idle-slayer-ascension-map.analytics.v1'
 export const ANALYTICS_WEBSITE_ID = 'f5c9bfd4-7ab5-4f82-a543-9357dcea1566'
 export const ANALYTICS_HOST = 'https://analytics.garrod.house'
@@ -7,22 +12,10 @@ const APP_VERSION = '0.1.0'
 const QUEUE_LIMIT = 100
 const QUEUE_TTL = 30_000
 
-export type AnalyticsOperation = 'purchase' | 'removal' | 'milestone_removal' | 'astral_activation' | 'ultra_ascension' | 'clear' | 'restore' | 'recovery'
-type OperationPhase = 'previewed' | 'applied' | 'cancelled'
-export type AnalyticsEventName =
-  | `${AnalyticsOperation}_${OperationPhase}`
-  | 'app_ready' | 'catalog_error' | 'runtime_error' | 'storage_error' | 'storage_recovered'
-  | 'panel_opened' | 'panel_closed' | 'map_layout_changed' | 'spoilers_changed' | 'details_toggled' | 'map_camera_used'
-  | 'search_performed' | 'upgrade_selected' | 'source_link_opened'
-  | 'recommendations_viewed' | 'recommendation_selected' | 'recommendation_purchase_started' | 'recommendation_purchase_applied'
-  | 'purchase_started' | 'purchase_blocked' | 'prerequisite_chosen' | 'milestone_changed' | 'prior_ascensions_recorded' | 'progress_undo'
-  | 'backup_download_requested' | 'backup_error'
-  | 'game_import_started' | 'game_import_previewed' | 'game_import_applied' | 'game_import_cancelled' | 'game_import_error'
-export type AnalyticsProperties = Record<string, string | number | boolean | undefined>
 export interface AnalyticsContext {
   catalog_version: string
   catalog_revision: string
-  layout: 'web' | 'game'
+  layout: AnalyticsLayout
   spoilers: boolean
   visibleUpgradeIds: ReadonlySet<string>
   visibleMilestoneIds: ReadonlySet<string>
@@ -54,30 +47,6 @@ export interface AnalyticsEnvironment {
   websiteId: string
 }
 
-const operations: AnalyticsOperation[] = ['purchase', 'removal', 'milestone_removal', 'astral_activation', 'ultra_ascension', 'clear', 'restore', 'recovery']
-const eventNames = new Set<string>([
-  ...operations.flatMap((operation) => ['previewed', 'applied', 'cancelled'].map((phase) => `${operation}_${phase}`)),
-  'app_ready', 'catalog_error', 'runtime_error', 'storage_error', 'storage_recovered',
-  'panel_opened', 'panel_closed', 'map_layout_changed', 'spoilers_changed', 'details_toggled', 'map_camera_used',
-  'search_performed', 'upgrade_selected', 'source_link_opened', 'recommendations_viewed', 'recommendation_selected',
-  'recommendation_purchase_started', 'recommendation_purchase_applied', 'purchase_started', 'purchase_blocked',
-  'prerequisite_chosen', 'milestone_changed', 'prior_ascensions_recorded', 'progress_undo', 'backup_download_requested',
-  'backup_error', 'game_import_started', 'game_import_previewed', 'game_import_applied', 'game_import_cancelled', 'game_import_error',
-])
-const enums: Record<string, readonly string[]> = {
-  operation: operations,
-  phase: ['previewed', 'applied', 'cancelled'],
-  source: ['map', 'search', 'neighbor', 'recommendation', 'start', 'details', 'progress', 'milestones', 'keyboard', 'pointer', 'controls', 'about'],
-  action: ['zoom_in', 'zoom_out', 'zoom', 'pan', 'pan_zoom', 'navigation_toggle', 'return_start', 'wiki', 'github', 'license', 'game', 'other', 'load', 'save', 'retry', 'confirm', 'cancel', 'open', 'close', 'purchase', 'show'],
-  panel: ['options', 'progress', 'milestones', 'about', 'recommendations', 'game-import', 'privacy', 'keyboard-help'],
-  layout: ['web', 'game'],
-  reason: ['network', 'validation', 'read', 'size', 'stale', 'milestone', 'pending', 'reveal', 'runtime', 'unhandled-rejection', 'unavailable', 'invalid-json', 'invalid-profile', 'too-large', 'storage-read', 'storage-write', 'wiki', 'catalog-fallback', 'all-owned', 'blocked'],
-  query_length: ['1-3', '4-10', '11-30', '31+'],
-  results: ['0', '1-5', '6-20', '21+'],
-  basis: ['wiki', 'catalog-fallback'],
-  direction: ['left', 'right', 'up', 'down'],
-}
-const booleanFields = new Set(['expanded', 'enabled', 'recorded', 'spoilers'])
 const campaignKeys = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term']
 const metadataToken = (value: unknown): value is string => typeof value === 'string' && /^[a-zA-Z0-9._-]{1,128}$/.test(value)
 
@@ -137,20 +106,8 @@ export function createAnalyticsController(environment: AnalyticsEnvironment) {
     if (context) {
       if (metadataToken(context.catalog_version)) data.catalog_version = context.catalog_version
       if (metadataToken(context.catalog_revision)) data.catalog_revision = context.catalog_revision
-      if (enums.layout.includes(context.layout)) data.layout = context.layout
+      if (isAnalyticsLayout(context.layout)) data.layout = context.layout
       if (typeof context.spoilers === 'boolean') data.spoilers = context.spoilers
-    }
-    return data
-  }
-  function sanitizeData(properties: unknown): SafeData {
-    const data: SafeData = {}
-    if (!properties || typeof properties !== 'object' || Array.isArray(properties)) return data
-    for (const [key, value] of Object.entries(properties)) {
-      if (enums[key] && typeof value === 'string' && enums[key].includes(value)) data[key] = value
-      else if (booleanFields.has(key) && typeof value === 'boolean') data[key] = value
-      else if (key === 'position' && Number.isInteger(value) && Number(value) >= 1 && Number(value) <= 3) data[key] = Number(value)
-      else if (key === 'upgrade_id' && typeof value === 'string' && context?.visibleUpgradeIds.has(value)) data[key] = value
-      else if (key === 'milestone_id' && typeof value === 'string' && context?.visibleMilestoneIds.has(value)) data[key] = value
     }
     return data
   }
@@ -178,9 +135,9 @@ export function createAnalyticsController(environment: AnalyticsEnvironment) {
     if (typeof payload.language === 'string' && /^[a-zA-Z0-9-]{1,35}$/.test(payload.language)) safe.language = payload.language
     if (type === 'event') {
       if (payload.name !== undefined) {
-        if (typeof payload.name !== 'string' || !eventNames.has(payload.name)) return null
+        if (!isAnalyticsEventName(payload.name)) return null
         safe.name = payload.name
-        safe.data = { ...commonData(), ...sanitizeData(payload.data) }
+        safe.data = { ...commonData(), ...sanitizeAnalyticsProperties(payload.name, payload.data, context) }
       }
     } else if (type === 'identify') {
       // Never forward a distinct ID, caller data or a stored profile.
@@ -277,7 +234,7 @@ export function createAnalyticsController(environment: AnalyticsEnvironment) {
     for (const event of events) {
       if (Date.now() - event.timestamp < QUEUE_TTL) {
         // Validate IDs again after visibility changes while scripts were loading.
-        const data = { ...commonData(), ...sanitizeData(event.data) }
+        const data = { ...commonData(), ...sanitizeAnalyticsProperties(event.name, event.data, context) }
         ignoreFailure(() => win.umami!.track(event.name, data))
       }
     }
@@ -352,7 +309,7 @@ export function createAnalyticsController(environment: AnalyticsEnvironment) {
     win.document.head.appendChild(recorder)
     // Bound error loops to one per category / 30 seconds and ten per page session.
     // Never serialize errors, URLs or stacks.
-    const reportError = (reason: string) => {
+    const reportError = (reason: 'runtime' | 'unhandled-rejection') => {
       const previous = runtimeErrorTimes.get(reason)
       if (runtimeErrorsReported >= 10 || (previous !== undefined && Date.now() - previous < 30_000)) return
       runtimeErrorTimes.set(reason, Date.now())
@@ -378,9 +335,9 @@ export function createAnalyticsController(environment: AnalyticsEnvironment) {
     context = { ...next, visibleUpgradeIds: new Set(next.visibleUpgradeIds), visibleMilestoneIds: new Set(next.visibleMilestoneIds) }
     identifyContext()
   }
-  function trackEvent(name: AnalyticsEventName, properties?: AnalyticsProperties) {
-    if (!initialized || !eventNames.has(name) || disabledReason() || scriptFailed) return
-    const data = sanitizeData(properties)
+  const trackEvent: AnalyticsTrackEvent = (name, properties) => {
+    if (!initialized || !isAnalyticsEventName(name) || disabledReason() || scriptFailed) return
+    const data = sanitizeAnalyticsProperties(name, properties, context)
     if (trackerReady && win.umami) ignoreFailure(() => win.umami!.track(name, { ...commonData(), ...data }))
     else {
       queued = queued.filter((event) => Date.now() - event.timestamp < QUEUE_TTL)
@@ -418,6 +375,6 @@ function controller() {
 }
 export const initializeAnalytics = () => controller().initializeAnalytics()
 export const updateAnalyticsContext = (context: AnalyticsContext) => controller().updateAnalyticsContext(context)
-export const trackEvent = (name: AnalyticsEventName, properties?: AnalyticsProperties) => controller().trackEvent(name, properties)
+export const trackEvent: AnalyticsTrackEvent = (name, properties) => controller().trackEvent(name, properties)
 export const getTrackingStatus = () => controller().getTrackingStatus()
 export const setTrackingPreference = (enabled: boolean) => controller().setTrackingPreference(enabled)
