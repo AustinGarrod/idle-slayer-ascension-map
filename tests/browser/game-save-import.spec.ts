@@ -51,6 +51,9 @@ test('game save preview is atomic, replaces known state, updates suggestions and
   await expect(page.getByRole('button', { name: 'Import game save…', exact: true })).toBeFocused()
   dialog = await chooseSave(page, bytes)
   await dialog.getByRole('button', { name: 'Apply import', exact: true }).click()
+  await expect.poll(async () => JSON.parse((await stored(page))!)).toEqual({ ...original,
+    purchases: { [start]: { epoch: 0, active: true }, [gatherer]: { epoch: 0, active: true }, 'legacy-test-id': { epoch: 0, active: false } },
+  })
   const imported = JSON.parse((await stored(page))!)
   expect(imported.purchases).toEqual({ [start]: { epoch: 0, active: true }, [gatherer]: { epoch: 0, active: true }, 'legacy-test-id': { epoch: 0, active: false } })
   expect(imported.milestones).toEqual({ 'legacy-item-test': true })
@@ -63,7 +66,7 @@ test('game save preview is atomic, replaces known state, updates suggestions and
   const undo = page.getByRole('button', { name: 'Undo', exact: true })
   if (!await undo.isVisible()) await page.getByRole('button', { name: 'Map options', exact: true }).click()
   await undo.click()
-  expect(JSON.parse((await stored(page))!)).toEqual(original)
+  await expect.poll(async () => JSON.parse((await stored(page))!)).toEqual(original)
 })
 
 test('invalid, unsupported and oversized saves keep progress intact and can be retried', async ({ page }) => {
@@ -98,6 +101,7 @@ test('preview keeps hidden names and native account preferences out of the UI, s
   await expect(dialog).not.toContainText(hidden.title)
   await expect(dialog).not.toContainText('fixture-account')
   await dialog.getByRole('button', { name: 'Apply import', exact: true }).click()
+  await expect.poll(async () => JSON.parse((await stored(page))!)).toEqual({ ...initial, epoch: 1, purchases: { [hidden.id]: { epoch: 1, active: false } } })
   expect(submissions).toEqual([])
   const imported = JSON.parse((await stored(page))!)
   expect(imported.epoch).toBe(1)
@@ -162,7 +166,7 @@ test('explicit import recovers corrupt storage and failed writes retain usable p
   expect(await stored(page)).toBe('{fixture-corrupt-profile')
   dialog = await chooseSave(page, bytes)
   await dialog.getByRole('button', { name: 'Apply import', exact: true }).click()
-  expect(JSON.parse((await stored(page))!).purchases[start]).toEqual({ epoch: 0, active: true })
+  await expect.poll(async () => JSON.parse((await stored(page))!)).toEqual({ ...initial, purchases: { [start]: { epoch: 0, active: true } } })
 
   await page.evaluate(() => { (window as unknown as { fixtureBlockStorage: boolean }).fixtureBlockStorage = true })
   await openProgress(page)
