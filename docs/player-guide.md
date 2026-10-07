@@ -2,7 +2,7 @@
 
 Open the [Ascension Map](https://austingarrod.github.io/idle-slayer-ascension-map/) and use the [README first-use route](../README.md#start-playing) to begin. This guide describes the existing map, progress and privacy behavior.
 
-**Detailed Layout**, a readable dependency graph. Game Layout is the default; your last selection is remembered locally in this browser.
+**Game Layout** uses the original native positions; **Detailed Layout** provides a readable dependency graph. Game Layout is the default; your last selection is remembered locally in this browser.
 
 Search titles, inspect details, record purchases and milestones, preview removals and Ultra Ascensions, undo changes, and back up one local profile as JSON. Import current progress from a reviewed Steam game save through a local preview. Spoilers are hidden by default across the map, connections, search, details, checklist and totals. OR paths require a choice; external items and Astral activation require explicit input. The app remains static, without accounts, an application backend, SP balances or Stone allocation. Self-hosted Umami collects usage analytics and session recordings as described below.
 
@@ -43,5 +43,3 @@ Tabs in the same browser follow saved progress while their session has no unsave
 [Architecture](architecture.md) documents visibility, edits, resets and storage migrations. [Data provenance](data.md), [asset extraction](../scripts/extract/README.md) and [native logic inspection](../scripts/logic/README.md) give exact Windows refresh commands. Keep installed files, Steam manifests, saves, raw exports, downloaded tools and reconstructed assemblies inside ignored `.local-game/` or outside the repository; never serve or commit them. Optional copies use `.local-game/Idle Slayer/` and `.local-game/appmanifest_1353300.acf`.
 
 Native English localization supplies descriptions and icons. Fourteen effects have accurate static descriptions with notes for player-dependent values. Wiki priority ordering is separate from the native catalog; wiki descriptions and dependencies are not substituted. [The coverage receipt](../data/catalog-receipt.json) records game/build/tool versions, registry coverage, native fields and exact catalog/icon hashes. [design.md](../design.md) records reviewed layout concepts and Atlas styling; [AGENTS.md](../AGENTS.md) states implementation boundaries.
-
-
