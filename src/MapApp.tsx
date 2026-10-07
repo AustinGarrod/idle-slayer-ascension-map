@@ -375,7 +375,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
   }, [loaded])
   const state = (node: Upgrade) => satisfies({ kind: 'owned', id: node.id }, profile)
     ? satisfies({ kind: 'active', id: node.id }, profile) ? 'purchased' : 'pending'
-    : satisfies(node.purchase, profile) ? 'available' : 'locked'
+    : satisfies(node.purchase, profile) && satisfies(node.reveal, profile) ? 'available' : 'locked'
   const nodes: UpgradeNode[] = visible.upgrades.map((node) => ({ id: node.id, type: 'upgrade', position: layout.centers.get(node.id)!,
     data: { upgrade: node, state: state(node) }, selected: selected === node.id,
     className: detail && node.id !== detail.id ? related.has(node.id) ? 'node-related' : 'node-muted' : '',
