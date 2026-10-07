@@ -77,10 +77,11 @@ const eventContracts = {
 export type AnalyticsEventName = keyof typeof eventContracts
 export type AnalyticsLayout = typeof layouts[number]
 /** Optional fields preserve property-free events; each supplied value must obey its event's rules. */
-export type AnalyticsProperties<Name extends AnalyticsEventName> = Name extends AnalyticsEventName ? {
+export type AnalyticsProperties<Name extends AnalyticsEventName> = Name extends AnalyticsEventName ?
+  keyof typeof eventContracts[Name] extends never ? Record<string, never> : {
   [Key in keyof typeof eventContracts[Name]]?: RuleValue<typeof eventContracts[Name][Key]>
 } : never
-type PropertyKey<Name extends AnalyticsEventName> = Name extends AnalyticsEventName ? keyof AnalyticsProperties<Name> : never
+type PropertyKey<Name extends AnalyticsEventName> = Name extends AnalyticsEventName ? keyof typeof eventContracts[Name] : never
 /** NoInfer prevents an invalid property from widening a literal event name to another event. */
 export type AnalyticsTrackEvent = <const Name extends AnalyticsEventName,
   const Properties extends AnalyticsProperties<NoInfer<Name>> = AnalyticsProperties<Name>>(

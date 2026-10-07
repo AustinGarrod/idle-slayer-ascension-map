@@ -51,5 +51,7 @@ export function authoredAnalyticsContract(controller: ReturnType<typeof createAn
   controller.trackEvent('upgrade_selected', { source: arbitrarySource })
   // @ts-expect-error The named property type has the same event-specific boundary.
   const badProperties: AnalyticsProperties<'purchase_started'> = { source: 'pointer' }
-  return badProperties
+  // @ts-expect-error Property-free named types also reject custom fields at declaration.
+  const emptyProperties: AnalyticsProperties<'app_ready'> = { filename: 'private.sav' }
+  return [badProperties, emptyProperties]
 }
