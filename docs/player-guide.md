@@ -42,6 +42,8 @@ The production app uses self-hosted [Umami](https://analytics.garrod.house) for 
 
 Tracking starts automatically unless disabled through **About & sources → Privacy & tracking** or the browser's privacy signals. The preference is separate from map progress and survives reloads, undo, restore and clearing progress. If it cannot be read, tracking stays off. Changing it reloads the page; if map progress cannot be saved first, choose export-and-reload, reload without backup or cancel. A failed tracking-preference write reloads with `#analytics=off`, which disables tracking for that URL/visit without claiming a durable preference. Keep or bookmark that URL if storage remains unavailable. [Analytics setup and operator guide](analytics.md) documents the settings, event contract, URL safeguards, reports and local verification.
 
+**Recent upgrades…** in Map view/options or expanded details returns to an upgrade you inspected earlier. The list shows your latest 20 different upgrades, newest first. It is separate from progress Undo: returning changes only selection and map focus. Hidden entries disappear, clearing the list changes no progress, and reloading starts an empty list. Same-titled upgrades show their exact cost and stable ID.
+
 ## Progress and data
 
 Large Slayer Point costs use exact powers of ten: `2.15 × 10¹⁸ SP` means `2,150,000,000,000,000,000 SP`. Every significant digit is retained. Search, suggestions and previews use the same notation. Upgrade details expose the full value and stable upgrade ID; on phones choose **Show details**. **Copy exact cost** copies the original digits without separators. If clipboard access fails, the app offers a selectable field for manual copying and does not claim success.

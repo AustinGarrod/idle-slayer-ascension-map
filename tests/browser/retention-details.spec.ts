@@ -41,7 +41,7 @@ for (const retention of catalog.grants) {
       else await expect(retainedGroup).not.toContainText(target.title)
       await page.getByRole('button', { name: 'Apply changes', exact: true }).click()
       await expect.poll(() => page.evaluate(({ key, id }) => JSON.parse(localStorage.getItem(key)!).purchases[id], { key: PROFILE_STORAGE_KEY, id: target.id })).toEqual(retained ? before.purchases[target.id] : undefined)
-      expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!).epoch, PROFILE_STORAGE_KEY)).toBe(2)
+      await expect.poll(() => page.evaluate((key) => JSON.parse(localStorage.getItem(key)!).epoch, PROFILE_STORAGE_KEY)).toBe(2)
     })
   }
 }

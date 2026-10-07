@@ -11,6 +11,8 @@ A free, unofficial companion for Idle Slayer: explore the Ascension tree, record
 3. Select an upgrade and choose **Record purchase…** to enter purchases manually. Alternatively, open **Progress → Import game save…** (on phones, **Map options → Progress**) for a reviewed Windows Steam 7.2.0 save. Import and consequential changes require a preview and confirmation; the app never changes the game.
 4. Use **Export JSON backup** regularly; its filename includes the UTC export time and recorded UA count. Restore, import and conflict recovery compare currently visible progress before replacement. Progress belongs to this browser's local storage, with labeled session-only Undo/Redo (up to 20 changes) and validated restore; there is no account, cloud backup or automatic game-file access.
 
+**Recent upgrades…** in Map view/options or expanded upgrade details returns to your latest inspections. It remembers up to 20 different visible upgrades for this visit, independently of progress Undo.
+
 **Goals:** in expanded upgrade details, **Set progression goal…** records an acquisition, activation or recurring rebuild intention without purchasing anything. Review and reorder visible goals in **Progress**. Intentions stay in separate browser storage and are not included in progress JSON backups; reset, import and Undo only recompute their status.
 
 Use **Map view…** on desktop or **Map options → Overview visible map** on phones to orient within the visible tree. **Return to inspection** or **Refocus selected upgrade** brings back your current target without changing progress.
