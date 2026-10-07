@@ -39,8 +39,9 @@ async function openAction(page: Page, name: string) {
 async function history(page: Page, epoch: string) {
   await openAction(page, 'Progress')
   const counter = page.getByRole('spinbutton', { name: 'Previous Ultra Ascensions', exact: true })
-  await counter.fill(epoch); await counter.press('Tab')
-  await page.getByRole('button', { name: 'Close dialog', exact: true }).click()
+  await counter.fill(epoch)
+  await page.getByRole('button', { name: 'Review history…', exact: true }).click()
+  await page.getByRole('button', { name: 'Record history', exact: true }).click()
   await expect(page.locator('.map-summary')).toContainText('Epoch ' + epoch)
   await rendered(page)
 }
