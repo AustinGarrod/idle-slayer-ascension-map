@@ -58,11 +58,19 @@ for (const layout of ['Game Layout', 'Detailed Layout'] as const) {
       await expect.poll(() => page.locator('.react-flow__viewport').evaluate((element) => new DOMMatrix(getComputedStyle(element).transform).a)).toBeGreaterThan(zoomBefore)
       await shortcut.focus(); await page.keyboard.press('Tab')
       await expect(node(page, catalog.startId)).toBeFocused()
+      await expect(node(page, catalog.startId)).toHaveCSS('outline-style', 'solid')
+      await expect(node(page, catalog.startId)).toHaveCSS('outline-color', 'rgb(241, 215, 155)')
       await expect(node(page, catalog.startId)).toHaveAccessibleName(/Permanent Slayer, available, .*Slayer Points/)
       await expect(node(page, catalog.startId)).toHaveAccessibleDescription(/catalog order; tree positions stay fixed/)
       await page.keyboard.press('End')
       const last = visibility(catalog, emptyProfile(catalog.revision)).upgrades.at(-1)!
       await expect(node(page, last.id)).toBeFocused(); await frameVisible(page, last.id)
+      if (viewport.width === 320) {
+        await page.setViewportSize({ width: 844, height: 390 })
+        await expect(node(page, last.id)).toBeFocused(); await frameVisible(page, last.id)
+        await page.setViewportSize(viewport)
+        await expect(node(page, last.id)).toBeFocused(); await frameVisible(page, last.id)
+      }
       await page.keyboard.press('Home'); await page.keyboard.press('ArrowRight')
       const second = visibility(catalog, emptyProfile(catalog.revision)).upgrades[1]
       await expect(node(page, second.id)).toBeFocused()

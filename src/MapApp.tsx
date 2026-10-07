@@ -467,7 +467,8 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     else { setMenu(null); setTrackingReload(enabled) }
   }
   const recenterCamera = useEffectEvent(() => {
-    if (loaded) moveCamera(detail?.id ?? catalog.startId, detail ? selectionZoom : startZoom)
+    const focused = graphHasFocus.current && visible.ids.has(graphFocus) ? graphFocus : null
+    if (loaded) moveCamera(focused ?? detail?.id ?? catalog.startId, focused || detail ? selectionZoom : startZoom)
   })
   const resizeMapCamera = useEffectEvent(() => {
     if (recenterOnMapResize.current) recenterCamera()
