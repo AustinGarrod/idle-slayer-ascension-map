@@ -363,7 +363,7 @@ test('connection navigation keeps native AND and OR purchase requirements explic
     const expand = page.getByRole('button', { name: 'Show details', exact: true })
     if (await expand.isVisible()) await expand.click()
     const requirement = page.locator('.detail-content dt').filter({ hasText: /^Purchase requirements$/ }).locator('xpath=following-sibling::dd[1]')
-    await expect(requirement).toHaveText(expected)
+    expect(await requirement.locator('.requirement-expression').evaluate((element) => { const text = element.cloneNode(true) as HTMLElement; text.querySelectorAll('.requirement-status').forEach((status) => status.remove()); return text.textContent })).toBe(expected)
     await expect(page.getByRole('region', { name: 'Connected from', exact: true })).toBeVisible()
     await expect(page.getByRole('region', { name: 'Leads to', exact: true })).toBeVisible()
   }
