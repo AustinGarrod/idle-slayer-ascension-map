@@ -12,20 +12,24 @@ function read(): GoalsState {
 export function useGoals() {
   const [state, setState] = useState(read)
   const current = useRef(state)
-  current.current = state
   function publish(next: GoalsState) { current.current = next; setState(next) }
-  function edit(goals: Goals, replace = false) {
+  function edit(goals: Goals, expected: Goals, replace = false) {
     const previous = current.current
+    if (expected !== previous.goals) {
+      publish({ ...previous, error: 'The goal list changed before this edit. Current goals were kept; review the updated list and retry.' })
+      return false
+    }
     const next = { ...previous, goals, dirty: true }
     try {
       if (!replace && (!previous.readable || window.localStorage.getItem(GOALS_STORAGE_KEY) !== previous.raw)) {
         publish({ ...next, error: 'Saved goals changed or could not be read. This visit keeps your intentions; choose a recovery action before replacing saved goals.' })
-        return
+        return true
       }
       const raw = JSON.stringify(goals)
       window.localStorage.setItem(GOALS_STORAGE_KEY, raw)
       publish({ goals, raw, readable: true, dirty: false, error: '' })
     } catch { publish({ ...next, error: 'Goals could not be saved. Your intentions remain usable for this visit. Retry saving before closing this page.' }) }
+    return true
   }
   function useSaved() {
     const incoming = read()

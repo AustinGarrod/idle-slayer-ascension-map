@@ -234,3 +234,57 @@ for (const failure of ['unavailable', 'corrupt'] as const) {
     expect(await saved(page)).toBeNull()
   })
 }
+
+
+// Delay only React's MessagePort work, leaving genuine native clicks, storage
+// notifications, layout and animation frames running. This reproduces the gap
+// between adopting another tab's goals and committing the next render.
+for (const action of ['save', 'retire', 'higher', 'lower'] as const) {
+  test(`stale ${action} intention edit keeps goals already adopted from another tab`, async ({ page, context }) => {
+    const available = visibility(catalog, initial).upgrades.filter((upgrade) => upgrade.id !== catalog.startId && upgrade.id !== node('Minions').id)
+    const original = { version: 1, targets: [{ id: catalog.startId, mode: 'acquire' }, { id: node('Minions').id, mode: 'acquire' }] }
+    const incoming = { ...original, targets: [...original.targets, { id: available[0]!.id, mode: 'acquire' }] }
+    await page.addInitScript(({ goalKey, original }) => {
+      type HeldWindow = Window & { holdGoalRender?: boolean; goalRenderQueue: (() => void)[]; goalIncomingRead?: string | null; resumeGoalRender: () => void }
+      const win = window as unknown as HeldWindow
+      const descriptor = Object.getOwnPropertyDescriptor(MessagePort.prototype, 'onmessage')!
+      win.goalRenderQueue = []
+      Object.defineProperty(MessagePort.prototype, 'onmessage', { ...descriptor, set(handler: ((event: MessageEvent) => void) | null) {
+        descriptor.set!.call(this, handler ? (event: MessageEvent) => {
+          if (win.holdGoalRender) win.goalRenderQueue.push(() => handler.call(this, event))
+          else handler.call(this, event)
+        } : handler)
+      } })
+      win.resumeGoalRender = () => { win.holdGoalRender = false; win.goalRenderQueue.splice(0).forEach((callback) => callback()) }
+      const get = Storage.prototype.getItem
+      Storage.prototype.getItem = function (key) { const value = get.call(this, key); if (key === goalKey && win.holdGoalRender) win.goalIncomingRead = value; return value }
+      localStorage.setItem(goalKey, JSON.stringify(original))
+    }, { goalKey: GOALS_STORAGE_KEY, original })
+    await page.goto('./')
+    await page.getByRole('searchbox').fill('Permanent Slayer')
+    await page.locator(`.search-result[data-upgrade-id="${catalog.startId}"]`).click()
+    const expand = page.getByRole('button', { name: 'Show details', exact: true }); if (await expand.isVisible()) await expand.click()
+    await page.getByRole('button', { name: 'Set progression goal…', exact: true }).click()
+    await page.getByRole('combobox', { name: 'Goal completion', exact: true }).selectOption('activate')
+    await expect(page.locator('.goal-list li')).toHaveCount(2)
+    const control = action === 'save' ? page.getByRole('button', { name: 'Save goal', exact: true }) :
+      action === 'retire' ? page.locator('.goal-list li').first().getByRole('button', { name: 'Retire goal', exact: true }) :
+      action === 'higher' ? page.locator('.goal-list li').last().getByRole('button', { name: 'Higher priority', exact: true }) :
+      page.locator('.goal-list li').first().getByRole('button', { name: 'Lower priority', exact: true })
+    const other = await context.newPage(); await other.goto(page.url())
+    try {
+      await page.evaluate(() => { (window as Window & { holdGoalRender?: boolean }).holdGoalRender = true })
+      await other.evaluate(({ key, incoming }) => localStorage.setItem(key, JSON.stringify(incoming)), { key: GOALS_STORAGE_KEY, incoming })
+      await expect.poll(() => page.evaluate(() => { const win = window as unknown as Window & { goalIncomingRead?: string | null; goalRenderQueue: unknown[] }; return { raw: win.goalIncomingRead, queued: win.goalRenderQueue.length > 0 } })).toEqual({ raw: JSON.stringify(incoming), queued: true })
+      // The DOM still belongs to the old render while the hook has adopted incoming.
+      expect(await page.locator('.goal-list li').count()).toBe(2)
+      await control.click()
+    } finally { await page.evaluate(() => (window as unknown as Window & { resumeGoalRender: () => void }).resumeGoalRender()); await other.close() }
+    await expect(page.locator('.goals-panel')).toContainText('The goal list changed before this edit')
+    await expect(page.locator('.goal-list li')).toHaveCount(3)
+    expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), GOALS_STORAGE_KEY)).toEqual(incoming)
+    expect(await saved(page)).toBeNull()
+    await expect(page.locator('.goals-panel')).not.toContainText('Intention recorded')
+    await expect(page.locator('.goals-panel')).not.toContainText('Goal retired')
+  })
+}
