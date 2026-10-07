@@ -2,7 +2,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import type { Catalog } from '../../src/domain/types'
 import { emptyProfile } from '../../src/domain/types'
-import { visibility } from '../../src/domain/rules'
+import { planPurchase, visibility } from '../../src/domain/rules'
 
 const catalog = JSON.parse(readFileSync('public/catalog.json', 'utf8')) as Catalog
 const initial = emptyProfile(catalog.revision)
@@ -42,6 +42,14 @@ async function chooseLayout(page: Page, name: 'Detailed Layout' | 'Game Layout')
   const action = page.getByRole('group', { name: 'Map layout', exact: true }).getByRole('button', { name, exact: true })
   await action.click()
   await expect(action).toHaveAttribute('aria-pressed', 'true')
+}
+
+async function undoProgress(page: Page) {
+  const undo = page.getByRole('button', { name: 'Undo', exact: true })
+  await exposeMapAction(page, undo)
+  await undo.click()
+  const options = page.getByRole('dialog', { name: 'Map options', exact: true })
+  if (await options.isVisible()) await options.getByRole('button', { name: 'Close dialog', exact: true }).click()
 }
 
 async function noPageOverflow(page: Page) {
@@ -141,6 +149,65 @@ test('storage failures retain usable progress and export', async ({ page }) => {
   await expect(page.getByRole('alert')).toContainText('Current progress remains available')
   await expect(page.locator('.state-label')).toHaveText('✓ Purchased and active')
   await expect(page.getByRole('button', { name: 'Export backup', exact: true })).toBeEnabled()
+})
+
+test('manual Astral activation retains ownership through prerequisite removal and remains undoable', async ({ page }) => {
+  const astral = catalog.upgrades.find((node) => node.title === 'Land Lord')!
+  const choices: Record<string, number> = {}
+  let purchase = planPurchase(catalog, { ...initial, epoch: 3 }, astral.id, choices)
+  for (let count = 0; purchase.kind === 'choice' && count < catalog.upgrades.length; count++) {
+    choices[purchase.key] = 0 // Explicit synthetic fixture choices, never player progress.
+    purchase = planPurchase(catalog, { ...initial, epoch: 3 }, astral.id, choices)
+  }
+  if (purchase.kind !== 'ready') throw new Error('Land Lord fixture could not fill its reviewed prerequisites')
+  await page.addInitScript((profile) => {
+    const key = 'idle-slayer-ascension-map.profile.v1'
+    if (localStorage.getItem(key) === null) localStorage.setItem(key, JSON.stringify(profile))
+  }, purchase.profile)
+  const recordedAstral = () => page.evaluate((id) => JSON.parse(localStorage.getItem('idle-slayer-ascension-map.profile.v1')!).purchases[id], astral.id)
+  const activate = async () => {
+    await selectUpgrade(page, astral.title)
+    await page.getByRole('button', { name: 'Already activated…', exact: true }).click()
+    await page.getByRole('button', { name: 'Apply changes', exact: true }).click()
+  }
+  await page.goto('./')
+  await selectUpgrade(page, astral.title)
+  await page.getByRole('button', { name: 'Already activated…', exact: true }).click()
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+  expect(await recordedAstral()).toEqual({ epoch: 3, active: false })
+  await activate()
+  expect(await recordedAstral()).toEqual({ epoch: 2, active: true })
+  await undoProgress(page)
+  expect(await recordedAstral()).toEqual({ epoch: 3, active: false })
+  await activate()
+  await page.reload()
+  await selectUpgrade(page, astral.title)
+  await expect(page.locator('.state-label')).toHaveText('✓ Purchased and active')
+  expect(await recordedAstral()).toEqual({ epoch: 2, active: true })
+  await selectUpgrade(page, start.title)
+  await page.getByRole('button', { name: 'Remove purchase…', exact: true }).click()
+  await expect(page.getByRole('dialog', { name: 'Remove purchase?', exact: true })).not.toContainText(astral.title)
+  await page.getByRole('button', { name: 'Apply changes', exact: true }).click()
+  expect(await recordedAstral()).toEqual({ epoch: 2, active: true })
+  await undoProgress(page)
+  await selectUpgrade(page, astral.title)
+  await page.getByRole('button', { name: 'Remove purchase…', exact: true }).click()
+  await page.getByRole('button', { name: 'Apply changes', exact: true }).click()
+  expect(await recordedAstral()).toBeUndefined()
+  await undoProgress(page)
+  expect(await recordedAstral()).toEqual({ epoch: 2, active: true })
+})
+
+test('manual Astral activation requires previous Ultra Ascension history', async ({ page }) => {
+  const astral = catalog.upgrades.find((node) => node.title === 'Land Lord')!
+  const profile = { ...initial, showSpoilers: true, purchases: { [astral.id]: { epoch: 0, active: false } } }
+  await page.addInitScript((seed) => localStorage.setItem('idle-slayer-ascension-map.profile.v1', JSON.stringify(seed)), profile)
+  await page.goto('./')
+  await selectUpgrade(page, astral.title)
+  await page.getByRole('button', { name: 'Already activated…', exact: true }).click()
+  await expect(page.getByRole('status')).toContainText('Record at least one previous Ultra Ascension')
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('idle-slayer-ascension-map.profile.v1')!))).toEqual(profile)
 })
 
 test('corrupt stored data cannot be overwritten by ordinary edits', async ({ page }) => {
