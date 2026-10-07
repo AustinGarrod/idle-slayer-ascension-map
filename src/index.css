@@ -15,7 +15,9 @@
   --muted: #bfb199;
   --complete: #94ba88;
   --danger: #edaa9b;
-  --compact-header: 110px;
+  --toolbar-height: 110px;
+  --workspace-height: calc(100dvh - var(--toolbar-height));
+  --map-reserve: 230px;
 }
 
 * { box-sizing: border-box; }
@@ -214,7 +216,7 @@ dialog > button { margin: 6px 8px 0 0; }
   .layout-control button { flex: 1 1 0; padding: 4px 5px; font-size: .75rem; line-height: 1.2; white-space: normal; }
   .mobile-options { display: block; grid-column: 3; grid-row: 1; padding: 0; font-size: 1.25rem !important; }
   .search-box { position: static; grid-column: 1 / -1; grid-row: 2; }
-  .search-results { top: calc(100% + 6px); left: 8px; right: 8px; width: auto; max-width: none; max-height: min(55dvh, calc(100dvh - 122px)); }
+  .search-results { top: calc(100% + 6px); left: 8px; right: 8px; width: auto; max-width: none; max-height: min(55dvh, max(0px, calc(100dvh - var(--toolbar-height) - 12px))); }
   .workspace.has-details { grid-template-columns: minmax(0, 1fr) 280px; }
   .details { padding: 12px; }
   .detail-heading { gap: 8px; margin-bottom: 8px; }
@@ -229,14 +231,14 @@ dialog > button { margin: 6px 8px 0 0; }
   .detail-actions { bottom: -12px; margin-top: 4px; padding: 6px 0 12px; }
   .detail-actions > button.full { font-size: .8125rem; }
   .has-details .map-summary { display: none; }
-  .toast { top: calc(var(--compact-header) + 8px); bottom: auto; }
+  .toast { top: calc(var(--toolbar-height) + 8px); bottom: auto; }
 }
 
 /* Phones reserve actual map and inspector rows rather than covering the canvas. */
 @media (max-width: 759px) {
-  .workspace.has-details { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(230px, 1fr) minmax(0, auto); }
-  .details { max-height: min(180px, calc(100dvh - var(--compact-header) - 230px)); padding: 8px 12px; border-left: 0; border-top: 1px solid #79603b; }
-  .details.expanded { max-height: min(60dvh, calc(100dvh - var(--compact-header) - 230px)); }
+  .workspace.has-details { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(var(--map-reserve), 1fr) minmax(0, auto); }
+  .details { max-height: min(180px, max(0px, calc(var(--workspace-height) - var(--map-reserve)))); padding: 8px 12px; border-left: 0; border-top: 1px solid #79603b; }
+  .details.expanded { max-height: min(60dvh, max(0px, calc(var(--workspace-height) - var(--map-reserve)))); }
   .detail-actions { bottom: -8px; padding-bottom: 8px; }
   .detail-actions > button.full { flex-basis: 125px; }
   .map-summary { font-size: .6875rem; }
@@ -246,9 +248,17 @@ dialog > button { margin: 6px 8px 0 0; }
   .dialog-actions > button { flex: 1; }
 }
 
+/* Narrow landscape keeps both toolbar rows and gives details their own column. */
+@media (min-width: 480px) and (max-width: 639px) and (max-height: 540px) {
+  .workspace.has-details { grid-template-columns: minmax(0, 1fr) minmax(220px, 45%); grid-template-rows: minmax(0, 1fr); }
+  .details, .details.expanded { max-height: none; padding: 10px 12px; border-left: 1px solid #79603b; border-top: 0; }
+  .detail-heading { flex-wrap: wrap; }
+  .detail-identity { flex: 1 1 calc(100% - 118px); }
+  .detail-actions { bottom: -10px; padding-bottom: 10px; }
+}
+
 /* A wide, short viewport has room for a side inspector and one toolbar row. */
 @media (min-width: 640px) and (max-height: 540px) {
-  :root { --compact-header: 60px; }
   .toolbar { grid-template-columns: auto minmax(180px, 1fr) auto 44px; grid-template-rows: 44px; gap: 8px; }
   .brand { grid-column: 1; grid-row: 1; }
   .search-box { grid-column: 2; grid-row: 1; }
@@ -259,7 +269,7 @@ dialog > button { margin: 6px 8px 0 0; }
   .detail-heading { flex-wrap: wrap; }
   .detail-identity { flex: 1 1 calc(100% - 118px); }
   .detail-actions { bottom: -10px; padding-bottom: 10px; }
-  .search-results { max-height: calc(100dvh - 76px); }
+  .search-results { max-height: max(0px, calc(100dvh - var(--toolbar-height) - 16px)); }
 }
 
 @media (prefers-reduced-motion: reduce) {

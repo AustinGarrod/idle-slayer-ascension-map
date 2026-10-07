@@ -115,6 +115,23 @@ function Atlas({ catalog }: { catalog: Catalog }) {
   const gameFileInput = useRef<HTMLInputElement>(null)
   const mapElement = useRef<HTMLElement>(null)
   const detailsElement = useRef<HTMLElement>(null)
+  const atlasElement = useRef<HTMLElement>(null)
+  const toolbarElement = useRef<HTMLElement>(null)
+  const workspaceElement = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    const atlas = atlasElement.current, toolbar = toolbarElement.current, workspace = workspaceElement.current
+    if (!atlas || !toolbar || !workspace) return
+    const measure = () => {
+      const available = workspace.getBoundingClientRect().height
+      atlas.style.setProperty('--toolbar-height', `${toolbar.getBoundingClientRect().height}px`)
+      atlas.style.setProperty('--workspace-height', `${available}px`)
+      atlas.style.setProperty('--map-reserve', available < 400 ? '80px' : '230px')
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(toolbar); observer.observe(workspace)
+    return () => observer.disconnect()
+  }, [])
   const flow = useReactFlow<UpgradeNode>()
   const reducedMotion = useMemo(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches, [])
   const visible = useMemo(() => visibility(catalog, profile), [catalog, profile])
@@ -262,17 +279,29 @@ function Atlas({ catalog }: { catalog: Catalog }) {
       if (request !== cameraRequest.current) return
       const map = mapElement.current?.getBoundingClientRect()
       const camera = mapElement.current?.querySelector('.camera-controls')?.getBoundingClientRect()
+      const attribution = mapElement.current?.querySelector('.react-flow__attribution')?.getBoundingClientRect()
+      if (map && map.width > 16 && map.height > 16) zoom = Math.min(zoom, (map.width - 16) / nodeWidth, (map.height - 16) / nodeHeight)
       let inset = 0
+      let rightOffset = 0
       if (map && camera && camera.right > map.left + map.width / 2 - nodeWidth * zoom / 2) {
-        const safeCenter = Math.max(nodeHeight * zoom / 2 + 8,
-          Math.min(map.height / 2, camera.top - map.top - nodeHeight * zoom / 2 - 12))
-        inset = (map.height / 2 - safeCenter) / zoom
+        if (camera.top - map.top - 12 >= nodeHeight * zoom + 8) {
+          const safeCenter = Math.min(map.height / 2, camera.top - map.top - nodeHeight * zoom / 2 - 12)
+          inset = (map.height / 2 - safeCenter) / zoom
+        } else if (map.right - camera.right >= nodeWidth * zoom + 20) {
+          // Short portrait canvases have room beside, rather than above, controls.
+          const heightAboveCredit = attribution ? attribution.top - map.top - 8 : 0
+          if (heightAboveCredit >= 44) {
+            zoom = Math.min(zoom, heightAboveCredit / nodeHeight)
+            inset = (map.height / 2 - nodeHeight * zoom / 2 - 4) / zoom
+          }
+          rightOffset = camera.right - map.left + 12 + nodeWidth * zoom / 2 - map.width / 2
+        }
       }
       const duration = reducedMotion ? 0 : 220
-      // The expanded phone inspector can resize the DOM before React Flow's
-      // container observer updates. Use the actual canvas for Game centering.
-      if (gameLayout && map) void flow.setViewport({
-        x: map.width / 2 - position.x * zoom,
+      // Inspector changes can precede React Flow's cached container dimensions.
+      // Both layouts center using the actual canvas rather than that stale cache.
+      if (map) void flow.setViewport({
+        x: map.width / 2 + rightOffset - position.x * zoom,
         y: map.height / 2 - (position.y + inset) * zoom,
         zoom,
       }, { duration })
@@ -323,7 +352,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     if (loaded) moveCamera(detail?.id ?? catalog.startId, detail ? selectionZoom : startZoom)
   })
   const resizeMapCamera = useEffectEvent(() => {
-    if (gameLayout && recenterOnMapResize.current) recenterCamera()
+    if (recenterOnMapResize.current) recenterCamera()
   })
   useEffect(() => {
     recenterCamera()
@@ -465,8 +494,8 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     setPreviewState(null)
   }
   const verified = Object.entries(catalog.verification).filter(([key]) => key !== 'evidence').every(([, value]) => value === true)
-  return <main className="atlas" aria-busy={saving}>
-    <header className="toolbar">
+  return <main ref={atlasElement} className="atlas" aria-busy={saving}>
+    <header ref={toolbarElement} className="toolbar">
       <div className="brand"><span className="brand-mark" aria-hidden="true">✦</span><div><h1>Ascension Map</h1><p>Idle Slayer · {catalog.gameVersion}</p></div></div>
       <div className="search-box"><label className="sr-only" htmlFor="search">Search visible upgrade titles</label><span aria-hidden="true">⌕</span><input className="telemetry-private rr-block" id="search" type="search" autoComplete="off" placeholder="Find an upgrade…" value={query} onFocus={() => setSearchOpen(true)} onChange={(event) => { setQuery(event.target.value); setSearchOpen(true) }} onKeyDown={(event) => { if (event.key === 'Escape') setSearchOpen(false); if (event.key === 'Enter' && results[0]) center(results[0].id, 'search') }} />
         {searchOpen && <div className="search-results" aria-label="Visible upgrade results"><div className="results-heading"><span>{results.length} visible results</span><button onClick={() => setSearchOpen(false)} aria-label="Close search results">×</button></div>{results.slice(0, 40).map((node) => <button className="search-result" key={node.id} onClick={() => center(node.id, 'search')}><Icon node={node} /><span>{node.title}<small>{cost(node.cost)} SP</small></span></button>)}{results.length > 40 && <p>Refine your search to see more results.</p>}{results.length === 0 && <p>No visible upgrades match.</p>}</div>}
@@ -479,7 +508,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     </header>
     {storageError && <div className="notice" role="alert">{storageError} <button onClick={conflict ? reviewConflict : retryStorage}>{conflict ? 'Review progress conflict' : storageWritable ? 'Retry saving' : 'Retry recovery'}</button><button onClick={backup}>Export backup</button></div>}
     {!verified && <div className="notice">Local preview · Catalog verification is incomplete. Publication is gated.</div>}
-    <div className={`workspace ${detail ? 'has-details' : ''} ${detailExpanded ? 'details-expanded' : ''}`}>
+    <div ref={workspaceElement} className={`workspace ${detail ? 'has-details' : ''} ${detailExpanded ? 'details-expanded' : ''}`}>
       <section ref={mapElement} className={`map ${gameLayout ? 'map-game' : ''}`} aria-label="Ascension tree" onKeyDownCapture={(event) => { keyboardSelection.current = (event.key === 'Enter' || event.key === ' ') && event.target instanceof HTMLElement && Boolean(event.target.closest('.react-flow__node')) }}>
         {loaded && <ReactFlow<UpgradeNode> nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} elevateEdgesOnSelect={!gameLayout} nodeOrigin={[0.5, 0.5]} nodesDraggable={false} nodesConnectable={false} edgesReconnectable={false} deleteKeyCode={null} selectionKeyCode={null} multiSelectionKeyCode={null} minZoom={0.15} maxZoom={2.5} defaultViewport={{ x: 0, y: 0, zoom: 0.7 }} onInit={(instance) => { const start = layout.centers.get(catalog.startId); if (start) void instance.setCenter(start.x, start.y, { zoom: startZoom }) }} onNodesChange={(changes) => { const selection = changes.find((entry) => entry.type === 'select' && entry.selected); if (selection?.type === 'select') { if (keyboardSelection.current && selection.id !== selected) center(selection.id, 'keyboard'); keyboardSelection.current = false } else if (changes.some((entry) => entry.type === 'select' && !entry.selected && entry.id === selected)) clearSelection() }} onNodeClick={(_, node) => { keyboardSelection.current = false; center(node.id) }} onMoveStart={(event, viewport) => { if (event) cameraStart.current = viewport }} onMoveEnd={(event, viewport) => { const start = cameraStart.current; cameraStart.current = null; if (event && start) { const pan = start.x !== viewport.x || start.y !== viewport.y; const zoom = start.zoom !== viewport.zoom; if (pan || zoom) trackEvent('map_camera_used', { action: pan && zoom ? 'pan_zoom' : zoom ? 'zoom' : 'pan', source: 'pointer' }) } }} onPaneClick={() => setSearchOpen(false)} ariaLabelConfig={{ 'node.a11yDescription.default': 'Press Enter to select an upgrade. The tree positions are fixed.' }}><Background color="#514432" gap={32} size={1} /></ReactFlow>}
         <div className="map-summary"><span><b>{visible.owned}</b> / {visible.total} visible upgrades owned</span><span>Epoch {profile.epoch} · {profile.showSpoilers ? 'Spoilers shown' : 'Spoilers hidden'}</span><span className="connection-hint">{detail ? 'Dashed: connected from · Solid: leads to' : layoutMode === 'web' ? 'Prerequisite → upgrade · Select to trace connections' : 'Grey: unowned prerequisite · Magenta: owned · Select to trace'}</span></div>
