@@ -1,4 +1,4 @@
-import { chromium, expect, test as base, type BrowserContext, type Locator } from '@playwright/test'
+import { chromium, expect, test as base, type BrowserContext, type Locator, type Page } from '@playwright/test'
 import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
@@ -15,12 +15,16 @@ const test = base.extend<{ fontSize: number }>({
     await mkdir(join(directory, 'Default'), { recursive: true })
     await writeFile(join(directory, 'Default', 'Preferences'), JSON.stringify({ webkit: { webprefs: { default_font_size: fontSize } } }))
     let context: BrowserContext | undefined
+    const errors: string[] = []
+    const watch = (page: Page) => page.on('pageerror', (error) => errors.push(error.message))
     try {
       context = await chromium.launchPersistentContext(directory, {
         channel: 'chromium', headless: true, ignoreDefaultArgs: ['--hide-scrollbars'], baseURL, viewport: { width: 320, height: 568 },
         ...(info.project.name === 'mobile' ? { isMobile: true, hasTouch: true, userAgent: info.project.use.userAgent, deviceScaleFactor: info.project.use.deviceScaleFactor } : {}),
       })
-      await context.addInitScript(() => localStorage.setItem('idle-slayer-ascension-map.analytics.v1', 'disabled'))
+      context.pages().forEach(watch)
+      context.on('page', watch)
+      await context.addInitScript(() => { if (location.origin !== 'null') localStorage.setItem('idle-slayer-ascension-map.analytics.v1', 'disabled') })
       await context.route('https://analytics.garrod.house/**', (route) => route.abort())
       const page = await context.newPage(); await page.emulateMedia({ reducedMotion: 'reduce' })
       await use(page)
@@ -28,6 +32,7 @@ const test = base.extend<{ fontSize: number }>({
       await context?.close()
       if (dirname(resolve(directory)) !== resolve(info.outputDir)) throw new Error('Refusing to remove a font profile outside its test output directory')
       await rm(directory, { recursive: true, force: true })
+      expect(errors, 'Unhandled browser errors during this exact-cost scenario').toEqual([])
     }
   },
 })
