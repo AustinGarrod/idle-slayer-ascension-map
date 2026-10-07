@@ -338,6 +338,8 @@ function Atlas({ catalog, transferInbox }: { catalog: Catalog; transferInbox: Pr
   }, [purchasePlan, purchaseTarget])
   function setMenu(next: Menu, recommendationStatus = recommendations.status) {
     if (appReloadOperation.current?.committed) return
+    if (next === 'install' && (preview || purchaseTarget || gameImportLoading || conflictReview || trackingReload !== null
+      || menuRef.current === 'transfer' || checkpointsOpen || comparisonOpen || routesOpen || currentRoadmap || currentForecast)) return
     setRoutesOpen(false); setRoadmap(null)
     setForecast(null)
     setRecentOpen(false)
@@ -565,6 +567,7 @@ function Atlas({ catalog, transferInbox }: { catalog: Catalog; transferInbox: Pr
     if (profileSession.getState().version !== sessionState.version) return
     handledReference.current = referenceDelivery.sequence
     cancelAppReload(true)
+    if (menuRef.current === 'install') setMenuState(null)
     const reference = referenceDelivery.reference
     if (reference.kind === 'invalid') { setMessage('This upgrade reference is invalid. Your progress and spoiler setting were kept.'); return }
     if (!visible.ids.has(reference.id)) { setMessage('The referenced upgrade is unavailable under your current spoiler setting, or is missing from this catalog. Your progress was kept.'); return }
@@ -794,7 +797,7 @@ function Atlas({ catalog, transferInbox }: { catalog: Catalog; transferInbox: Pr
   }, [checkpoints.state.version, comparison.state.version, intentions.dirty])
   function interruptAppReload() {
     if (appReloadOperation.current?.committed) return false
-    if (appReloadState.current !== null || appReloadOperation.current) {
+    if (appReloadState.current !== null || appReloadOperation.current || menuRef.current === 'install') {
       cancelAppReload()
       if (menuRef.current === 'install') setMenuState(null)
     }
@@ -973,7 +976,7 @@ function Atlas({ catalog, transferInbox }: { catalog: Catalog; transferInbox: Pr
     setMenu(null)
     setPreview({ operation: 'restore', title: 'Restore progress?', text: `The backup has ${incoming.owned} visible recorded purchases and ${incoming.milestones} visible milestones, in epoch ${result.profile.epoch}. Counts follow the map's current spoiler setting and the backup's progress. This replaces the entire profile and its stored data, including records outside these counts. Unknown IDs in the backup are retained. The backup's spoiler setting is restored when applied. Undo remains available.`, profile: result.profile, replaceStorage: true, comparison: { current: currentProfile.current, incoming: result.profile, context: `JSON backup: ${file.name.slice(0, 120)}`, incomingLabel: 'After restore' } })
   }
-  function chooseGameSave() { restoreRequest.current++; trackEvent('game_import_started'); gameFileInput.current?.click() }
+  function chooseGameSave() { if (!interruptAppReload()) return; restoreRequest.current++; trackEvent('game_import_started'); gameFileInput.current?.click() }
   function closeGameImport() {
     trackEvent('game_import_cancelled')
     gameImportRequest.current++

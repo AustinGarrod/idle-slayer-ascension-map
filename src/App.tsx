@@ -19,7 +19,7 @@ export default function App({ transferInbox }: { transferInbox: ProgressTransfer
     const cancel = () => { repairRequest.current?.abort(); repairRequest.current = null; setRepairing(false) }
     const stopTransfer = transferInbox.subscribe(cancel)
     const stopReference = subscribeUpgradeReference(cancel)
-    return () => { stopTransfer(); stopReference(); repairRequest.current?.abort() }
+    return () => { stopTransfer(); stopReference(); repairRequest.current?.abort(); repairRequest.current = null }
   }, [transferInbox])
   useEffect(() => { if (catalog) { repairRequest.current?.abort(); repairRequest.current = null } }, [catalog])
   async function repairStartup() {

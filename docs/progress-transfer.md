@@ -10,6 +10,8 @@ Undo restores the preceding progress profile and the transferred layout during t
 
 A transfer link arriving in the current page supersedes the active progress interaction. It closes purchase/OR, clear/reset/history, restore/import, conflict and tracking-reload confirmations, invalidates pending file reads and privacy reload work, and cancels pending saving while retaining the in-memory profile and Undo history. One named transfer dialog owns the preview or validation feedback. Malformed arrivals also cancel the older interaction without applying either action; cancelling the receiver does not reopen it. A late game-file selection while receiving is ignored.
 
+An incoming transfer also supersedes PWA update preparation or app-file repair, including a committed unregister whose later completion must not reload the received preview. Offline receipt and confirmed application remain local after a complete public release has been cached; tokens and transfer URLs never become cache entries. Installation works independently, and browser/installed-app storage sharing still depends on the platform.
+
 ## Transport and bounds
 
 The version 1 envelope contains `format: "ISAM"`, `version: 1`, `layout` and an explicit encoding. The URL carries `#transfer=v1.<gzip-base64url>` on the map's existing base path. Browser-native [Compression Streams](https://developer.mozilla.org/en-US/docs/Web/API/CompressionStream) perform gzip compression/decompression; unsupported browsers can use the unchanged JSON backup route. Gzip's integrity checks and strict base64url/UTF-8/JSON validation reject incomplete or damaged input. This is a copy format, not proof of a sender's identity.
