@@ -425,6 +425,37 @@ test('unavailable tracker is optional and leaves the isolated page usable', asyn
   expect(capture.unexpected).toEqual([])
 })
 
+test('catalog parsing errors show only fixed public wording in the actual recorded application', async ({ page, context, baseURL }) => {
+  const origin = new URL(baseURL!).origin
+  const capture = await installLocalRoutes(context, origin)
+  await serveIsolatedApplication(context, origin)
+  const marker = 'CATALOG_SECRET'
+  const safeError = 'The verified game catalog could not be loaded. Please try again.'
+  let releaseCatalog!: () => void
+  const catalogReady = new Promise<void>((resolve) => { releaseCatalog = resolve })
+  await context.route(`${origin}${appFixturePath}catalog.json`, async (route) => {
+    await catalogReady
+    await route.fulfill({ contentType: 'application/json', body: marker })
+  })
+  await page.goto(`${origin}${appFixturePath}`)
+  await waitForActive(page)
+  await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 2))
+  releaseCatalog()
+  await expect(page.getByRole('button', { name: 'Try again', exact: true })).toBeVisible()
+  const displayedError = (await page.getByRole('status').textContent())!
+  const encodedError = JSON.stringify(displayedError).slice(1, -1)
+  const events = await waitForReplayEvents(capture, (events) => JSON.stringify(events).includes(encodedError))
+  const evidence = JSON.stringify({ submissions: capture.submissions, replay: events })
+  expect(evidence.includes(marker), 'Raw catalog parser detail leaked into telemetry').toBe(false)
+  await expect(page.getByRole('status')).toHaveText(safeError)
+  expect(JSON.stringify(events).includes(safeError), 'The fixed public error was absent from the real recording').toBe(true)
+  await expect(page.locator('body')).not.toContainText(marker)
+  const failures = capture.submissions.filter((item) => item.payload.name === 'catalog_error')
+  expect(failures).toHaveLength(1)
+  expect(failures[0].payload.data).toMatchObject({ reason: 'validation' })
+  expect(capture.unexpected).toEqual([])
+})
+
 test('real recorder proves moderate input masking, blocking and safe application save import', async ({ page, context, baseURL }) => {
   const origin = new URL(baseURL!).origin
   let releaseRecorder!: () => void
