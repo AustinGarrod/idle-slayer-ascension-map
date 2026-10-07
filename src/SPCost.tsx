@@ -3,7 +3,8 @@ import { presentCost } from './domain/cost-presentation'
 import './SPCost.css'
 
 function GroupedValue({ value }: { value: string }) {
-  return presentCost(value).groups.map((group, index) => <Fragment key={index}>{index > 0 && <wbr />}<span className="cost-digits">{group}{index < presentCost(value).groups.length - 1 ? ',' : ''}</span></Fragment>)
+  const { groups } = presentCost(value)
+  return groups.map((group, index) => <Fragment key={index}>{index > 0 && <wbr />}<span className="cost-digits">{group}{index < groups.length - 1 ? ',' : ''}</span></Fragment>)
 }
 
 export function SPCost({ value, full = false }: { value: string; full?: boolean }) {
