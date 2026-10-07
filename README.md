@@ -33,6 +33,12 @@ Use **Map view…** on desktop or **Map options → Overview visible map** on ph
 
 **Privacy:** the production map starts self-hosted Umami usage analytics and session recording unless disabled through **About & sources → Privacy & tracking**, Do Not Track or Global Privacy Control. Recordings can include visible map progress. Selected saves and JSON backups are excluded and never uploaded; file inputs, search text, counters, checkpoint names/snapshots and import/restore contents are blocked from replay. Layout and tracking preferences are separate from progress. See [privacy details and operator documentation](docs/analytics.md).
 
+## Install and reopen offline
+
+Open **Install & offline** from the footer, **Map options**, or **About & sources**. Supporting browsers offer installation; Android, iPhone/iPad and desktop guidance covers other cases. Keep the first visit online until public app files report ready, then reopen offline with the bundled catalog, icons, fonts, licenses and core progress actions.
+
+Updates wait until every old map window closes. Prepare with saved/exported progress, close all windows, then reopen; reloading an open window keeps its old release. Repair retains stored progress. Separate unsaved checkpoints, comparison and goals require their own recovery before update preparation or repair; a profile backup does not include them. Browser tabs and installed apps may use different storage. Export regular backups before uninstalling or clearing data. [Installation, offline recovery, updates and platform limits](docs/install-offline.md) distinguishes automated evidence from optional, unverified physical installation behavior.
+
 ## Run locally on Windows
 
 Install **Node.js 24**. The repository includes **Yarn 4.13.0** and directs normal `yarn` commands to that pinned release. Preserve `yarn.lock` and the node-modules linker; do not add other package-manager lockfiles.

@@ -13,6 +13,7 @@ export function PrivacyPanel({ status, onChange, progressStatus = 'Progress savi
     : status.reason === 'embedded' ? 'Embedded previews are not tracked.'
       : ['global-privacy-control', 'do-not-track', 'umami-disabled'].includes(status.reason) ? 'Your browser privacy setting prevents tracking.'
         : status.reason === 'storage-unavailable' ? 'Your tracking preference could not be read. Tracking is off for this visit.'
+          : status.reason === 'offline' ? 'Tracking is off while offline. Offline usage is not queued for later delivery.'
           : status.reason === 'reload-required' ? 'Tracking remains off in this tab until a clean reload. Reload to start a new recording with your current preference.'
           : urlOnlyOptOut ? 'Tracking is off for this visit. The disabled preference was not saved in this browser; keep this page URL to retain the choice.'
             : status.reason === 'script-unavailable' ? 'Tracking could not load. Your map remains usable.'

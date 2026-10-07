@@ -53,6 +53,28 @@ function setup(options: { url?: string; production?: boolean; preference?: strin
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks() })
 
 describe('analytics activation and preference', () => {
+  it('discards offline events and denies buffered replay after returning online', () => {
+    const { analytics, win, ready, tracker, listeners, stored } = setup({ preference: 'enabled' })
+    analytics.initializeAnalytics(); analytics.trackEvent('app_ready')
+    listeners.get('offline')!.forEach((listener) => listener({}))
+    ready()
+    expect(tracker.track).not.toHaveBeenCalled()
+    expect(tracker.getSession()).toEqual({ cache: undefined, website: websiteId })
+    listeners.get('online')?.forEach((listener) => listener({}))
+    analytics.trackEvent('app_ready')
+    expect(tracker.track).not.toHaveBeenCalled()
+    expect(win.ascensionMapBeforeSend?.('event', { name: 'app_ready' })).toBeNull()
+    expect(stored.get(ANALYTICS_PREFERENCE_KEY)).toBe('enabled')
+  })
+  it('does not load tracking scripts during offline startup or begin queuing for later delivery', () => {
+    const { analytics, win, scripts } = setup()
+    Object.defineProperty(win.navigator, 'onLine', { value: false, configurable: true })
+    analytics.initializeAnalytics(); analytics.trackEvent('app_ready')
+    Object.defineProperty(win.navigator, 'onLine', { value: true })
+    analytics.trackEvent('app_ready')
+    expect(scripts).toEqual([])
+    expect(analytics.getTrackingStatus()).toMatchObject({ enabled: false, reason: 'reload-required' })
+  })
   it.each([
     ['development', { production: false }],
     ['unsupported-origin', { url: 'https://other.test/map/' }],

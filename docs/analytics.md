@@ -36,6 +36,8 @@ URL guards are installed before the tracker and recorder throughout the page ses
 
 ## Scripts and event contract
 
+Offline documents suspend tracking until a fresh online reload. Offline startup loads no tracking scripts; a later offline signal discards the startup event queue and denies the recorder's guarded session-cache accessor so buffered events/replays cannot resume after reconnection. No offline upload queue or background sync exists. The PWA caches only reviewed public static files and bypasses external analytics requests. Preference, disabled-URL and browser privacy-signal checks apply again on reload. See [install-offline.md](install-offline.md). The bounded `panel` property also accepts `install` for the installation/offline dialog; no profile or installation payload is tracked.
+
 The bootstrap creates only the authorized tracker and recorder after applying startup safeguards. Its effective tracker attributes include host/domain restrictions, query/hash exclusion, Do Not Track, performance collection and the sanitizing callback:
 
 ```html

@@ -5,11 +5,13 @@ import App from './App.tsx'
 import { initializeAnalytics } from './analytics'
 import { createProgressTransferInbox } from './progress-transfer-inbox'
 import { initializeUpgradeReferences } from './upgrade-reference-receiver'
+import { initializePwa } from './pwa'
 
 const transferInbox = createProgressTransferInbox(window)
 const references = initializeUpgradeReferences(window, import.meta.env.BASE_URL)
 if (transferInbox.trackingSafe) initializeAnalytics()
 references.cleanAddress()
+initializePwa()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

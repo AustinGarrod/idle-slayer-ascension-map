@@ -95,6 +95,7 @@ export function createAnalyticsController(environment: AnalyticsEnvironment) {
       return 'storage-unavailable'
     }
     if (sessionSuspended) return 'reload-required'
+    if (signals.onLine === false) return 'offline'
     return undefined
   }
   function getTrackingStatus(): TrackingStatus {
@@ -265,6 +266,8 @@ export function createAnalyticsController(environment: AnalyticsEnvironment) {
     if (initialized) return
     initialized = true
     storagePreference()
+    win.addEventListener('offline', suspendSession)
+    if (win.navigator.onLine === false) suspendSession()
     if (disabledReason()) return
     // Replay and heatmaps use the actual URL, outside the tracker callback.
     const currentURL = new URL(win.location.href)

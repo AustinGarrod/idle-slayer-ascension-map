@@ -1,7 +1,17 @@
 import { test as base, expect, type Page } from '@playwright/test'
 
 // Every test has its own error list, including tabs it opens during the scenario.
-export const test = base.extend<{ browserErrors: void }>({
+export const test = base.extend<{ browserErrors: void; appServiceWorkers: boolean }>({
+  appServiceWorkers: [false, { option: true }],
+  context: async ({ context, appServiceWorkers }, use) => {
+    if (!appServiceWorkers) await context.addInitScript(() => {
+      // Playwright's global worker blocker probes sandboxed iframes too. Keep
+      // those frames opaque, and block only the app's top-level registration.
+      if (window.self !== window.top || !['http:', 'https:'].includes(location.protocol) || !isSecureContext || !('serviceWorker' in navigator)) return
+      navigator.serviceWorker.register = async () => { throw new DOMException('App workers are disabled in this isolated test.', 'SecurityError') }
+    })
+    await use(context)
+  },
   browserErrors: [async ({ context }, use) => {
     const errors: string[] = []
     const watched = new Set<Page>()

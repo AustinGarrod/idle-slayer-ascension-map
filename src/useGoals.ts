@@ -47,5 +47,5 @@ export function useGoals() {
     window.addEventListener('storage', changed)
     return () => window.removeEventListener('storage', changed)
   }, [])
-  return { ...state, edit, useSaved }
+  return { ...state, edit, useSaved, getState: () => current.current }
 }
