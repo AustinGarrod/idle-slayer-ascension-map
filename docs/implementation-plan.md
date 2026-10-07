@@ -16,7 +16,7 @@ The required source input is a copy of the Windows Steam installation folder and
 - If necessary, prepare an independent read-only exporter for the installed game. Collect data without invoking purchase, save, unlock or reset methods. Inspect serialized requirements and relevant game logic; a snapshot of one player's progress cannot establish every reveal rule.
 - Supplement the extracted catalog with wiki descriptions and individual icons. Resolve conflicting wiki entries against the installed game. Bundle reviewed assets locally so the deployed app needs no wiki requests.
 - Give every node a stable identity, including separate nodes sharing titles such as “Astral Key.” Store large costs as decimal strings to avoid numerical precision loss.
-- Keep purchase requirements, reveal requirements, Astral activation and permanent grants separate. Preserve AND/OR relationships explicitly.
+- Keep purchase requirements, reveal requirements, Astral activation and conditional retention separate. Preserve AND/OR relationships explicitly.
 - Record game version, Steam build, source revisions and extraction provenance. Keep game binaries outside Git; commit the normalized catalog, reviewed assets and reproducible extraction tools.
 
 Include every node belonging to the Ascension tree, including Ultra, Astral and later branches. Other progression systems appear only as milestones needed to unlock those branches.
@@ -31,7 +31,7 @@ Include every node belonging to the Ascension tree, including Ultra, Astral and 
 - Provide a milestone checklist for unlocks outside the tree. Milestones represent the required item purchased or received—for example, Victor's Soul—not simply its preceding boss defeat.
 - Marking a purchase fills missing prerequisites. For an unsatisfied OR requirement, let the user choose the path before applying changes. Outside milestones and Astral activation require explicit user input.
 - Unmarking a prerequisite previews and clears purchases that lose their valid dependency path. Preserve retained Astral ownership from earlier Ultra Ascensions.
-- Model Ultra Ascension with a previewed reset: clear repeat purchases, retain permanent upgrades and milestones, activate eligible Astral locks, and recalculate permanent grants. Track purchase epoch and activation separately, and allow users to record already activated Astrals when entering existing progress.
+- Model Ultra Ascension with a previewed reset: clear repeat purchases, retain permanent upgrades and milestones, activate eligible Astral locks, and recalculate conditional retention of existing purchases. Track purchase epoch and activation separately, and allow users to record already activated Astrals when entering existing progress.
 - Offer undo for progress changes and confirmation for clearing all progress. Do not simulate SP balances or Stone allocations.
 - Suggest the next eligible upgrade using reviewed wiki priority ordering and recorded purchases. Keep native costs and reveal/purchase gates authoritative; hide spoilers, skip owned upgrades and label any cost fallback explicitly. Explain benefits, provide source/version attribution, and use normal preview/undo for recording a suggestion. Guide ordering must not infer SP balance, total USP, equipment or personal play style.
 - Version saved data. Validate imports before replacing progress, preserve unknown IDs across catalog updates, and report storage failures without discarding the current session.
@@ -56,7 +56,7 @@ Maintain `AGENTS.md` and `README.md`, and add focused architecture and data docu
 ## Validation and release
 
 - Validate catalog coverage against the game export, unique IDs, references, icons, coordinates and reachable prerequisite paths.
-- Test AND/OR dependencies, story gates, hidden search results, prerequisite filling, cascading removal, pending Astrals, permanent grants and repeated Ultra Ascensions.
+- Test AND/OR dependencies, story gates, hidden search results, prerequisite filling, cascading removal, pending Astrals, conditional retention and repeated Ultra Ascensions.
 - Test backup round trips, malformed imports, storage failures and catalog migrations.
 - Use Playwright to verify search-to-node navigation, persistence, spoiler toggling and responsive interactions against the production bundle on local or isolated CI builds. Intercept analytics in those builds; never run automated suites or probes against the live production site.
 - Configure CI for catalog validation, type checking, tests and build. Deploy successful `main` builds through GitHub Actions with the correct Pages base path.
