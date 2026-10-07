@@ -19,6 +19,37 @@ async function cameraPosition(page: Page) {
     return { x: matrix.e, y: matrix.f }
   })
 }
+async function settledCameraPosition(page: Page) {
+  let position = { x: 0, y: 0 }
+  await expect.poll(async () => {
+    const proof = await page.locator('.react-flow__viewport').evaluate(async (element) => {
+      const read = () => {
+        const target = new DOMMatrix((element as HTMLElement).style.transform)
+        const rendered = new DOMMatrix(getComputedStyle(element).transform)
+        const map = element.closest('.map')!.getBoundingClientRect()
+        return { x: rendered.e, y: rendered.f, zoom: rendered.a, width: map.width, height: map.height,
+          targetMatches: Math.abs(rendered.e - target.e) < .01 && Math.abs(rendered.f - target.f) < .01 && Math.abs(rendered.a - target.a) < .00001 }
+      }
+      const before = read()
+      let after = before
+      let stable = before.targetMatches
+      // ResizeObserver camera work takes two frames. A CSS transform can still
+      // render its old value after the inline target changes, even with reduced
+      // motion. Require convergence and stability, rather than counting frames
+      // once and assuming that the resulting viewport is the pan baseline.
+      for (let frame = 0; frame < 4; frame++) {
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+        after = read()
+        stable &&= after.targetMatches && after.x === before.x && after.y === before.y
+          && after.zoom === before.zoom && after.width === before.width && after.height === before.height
+      }
+      return { stable, position: { x: after.x, y: after.y } }
+    })
+    position = proof.position
+    return proof.stable
+  }).toBe(true)
+  return position
+}
 async function openAction(page: Page, name: string) {
   const action = page.getByRole('button', { name, exact: true })
   if (!await action.isVisible()) await page.getByRole('button', { name: 'Map options', exact: true }).click()
@@ -166,8 +197,9 @@ for (const layout of ['Game Layout', 'Detailed Layout'] as const) {
     await expect(page.locator('.map')).not.toContainText(hidden.title)
   })
 
-  for (const viewport of [{ width: 375, height: 350 }, { width: 320, height: 350 }, { width: 320, height: 568 }]) {
-    test(`${layout} keeps keyboard upgrades and directional controls usable with expanded details at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+  for (const motion of ['reduce', 'no-preference'] as const) for (const viewport of [{ width: 375, height: 350 }, { width: 320, height: 350 }, { width: 320, height: 568 }]) {
+    test(`${layout} keeps keyboard upgrades and directional controls usable with expanded details at ${viewport.width}x${viewport.height} (${motion})`, async ({ page }) => {
+      await page.emulateMedia({ reducedMotion: motion })
       await page.setViewportSize(viewport); await page.goto('./')
       await page.getByRole('group', { name: 'Map layout' }).getByRole('button', { name: layout, exact: true }).click()
       await page.getByRole('button', { name: 'Return to start', exact: true }).click()
@@ -199,8 +231,6 @@ for (const layout of ['Game Layout', 'Detailed Layout'] as const) {
       await page.keyboard.press('Enter')
       await expect(page.locator('.pan-controls')).toBeVisible()
       await page.keyboard.press('Tab'); await expect(panLeft).toBeFocused()
-      // Navigation changes the canvas reservation; read a settled DOM baseline.
-      await page.evaluate(async () => { for (let frame = 0; frame < 4; frame++) await new Promise<void>((resolve) => requestAnimationFrame(() => resolve())) })
       for (const direction of ['left', 'right', 'up', 'down']) {
         const control = page.getByRole('button', { name: `Pan map ${direction}`, exact: true })
         await expect(control).toBeFocused()
@@ -209,14 +239,16 @@ for (const layout of ['Game Layout', 'Detailed Layout'] as const) {
           const box = element.getBoundingClientRect()
           return box.width >= 44 && box.height >= 44 && element.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2))
         })).toBe(true)
-        const before = await cameraPosition(page)
+        const before = await settledCameraPosition(page)
         await page.keyboard.press('Enter')
-        await page.evaluate(async () => { for (let frame = 0; frame < 4; frame++) await new Promise<void>((resolve) => requestAnimationFrame(() => resolve())) })
         const expected = { x: before.x + (direction === 'left' ? 180 : direction === 'right' ? -180 : 0), y: before.y + (direction === 'up' ? 180 : direction === 'down' ? -180 : 0) }
         await expect.poll(async () => {
           const after = await cameraPosition(page)
           return Math.abs(after.x - expected.x) < .1 && Math.abs(after.y - expected.y) < .1
         }).toBe(true)
+        const settled = await settledCameraPosition(page)
+        expect(Math.abs(settled.x - expected.x)).toBeLessThan(.1)
+        expect(Math.abs(settled.y - expected.y)).toBeLessThan(.1)
         await page.keyboard.press('Tab')
       }
       for (const name of ['Hide details', 'Close upgrade details', 'Record purchase…']) {
