@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test } from './fixtures'
+import type { Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import { emptyProfile, type Catalog, type Profile, type Upgrade } from '../../src/domain/types'
 import { visibility } from '../../src/domain/rules'
