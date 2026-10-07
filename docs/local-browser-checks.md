@@ -40,6 +40,6 @@ try {
 
 Setting `PLAYWRIGHT_BASE_URL` tells Playwright to use your running preview; it does not start another server. The `finally` block restores the terminal's previous setting even when the checks fail. Stop **your preview** with Ctrl+C in the first terminal when finished. After changing application code, stop it, rebuild successfully, and restart before testing again.
 
-For a scoped run, pass a test file or Playwright filter after `yarn test:e2e`, for example `yarn test:e2e tests/browser/profile-sync.spec.ts`. Keep the same local URL and cleanup block. If no Yarn launcher is installed, replace each `yarn` invocation with `node .yarn/releases/yarn-4.13.0.cjs`, as described in the [Windows setup instructions](../README.md#windows-setup-and-checks).
+For a scoped run, pass a test file or Playwright filter after `yarn test:e2e`, for example `yarn test:e2e tests/browser/profile-sync.spec.ts`. Keep the same local URL and cleanup block. If no Yarn launcher is installed, replace each `yarn` invocation with `node .yarn/releases/yarn-4.13.0.cjs`, as described in the [Windows setup instructions](../README.md#run-locally-on-windows).
 
-The configuration and local-only URL guard are in [playwright.config.ts](../playwright.config.ts). The full repository check sequence remains in the [README](../README.md#windows-setup-and-checks).
+The configuration and local-only URL guard are in [playwright.config.ts](../playwright.config.ts). The full repository check sequence remains in the [README](../README.md#verify-a-change).
