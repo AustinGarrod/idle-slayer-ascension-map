@@ -1,17 +1,12 @@
-import { expect, test, type Page } from '@playwright/test'
+import { openProgress } from './helpers/app'
+import { expect, test } from './fixtures'
+import type { Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import { visibility } from '../../src/domain/rules'
 import { PROFILE_STORAGE_KEY } from '../../src/domain/storage'
 import { emptyProfile, type Catalog, type Profile } from '../../src/domain/types'
 
 const catalog = JSON.parse(readFileSync('public/catalog.json', 'utf8')) as Catalog
-
-async function openProgress(page: Page) {
-  await expect(page.locator('.toolbar')).toBeVisible()
-  const button = page.getByRole('button', { name: 'Progress', exact: true })
-  if (!await button.isVisible()) await page.getByRole('button', { name: 'Map options', exact: true }).click()
-  await button.click()
-}
 
 async function chooseBackup(page: Page, profile: Profile) {
   await openProgress(page)

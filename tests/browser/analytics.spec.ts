@@ -1,4 +1,6 @@
-import { expect, test, type BrowserContext, type Page, type Request } from '@playwright/test'
+import { openProgress } from './helpers/app'
+import { expect, test } from './fixtures'
+import type { BrowserContext, Page, Request } from '@playwright/test'
 import { createHash } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, resolve, sep } from 'node:path'
@@ -218,12 +220,6 @@ async function initializeHarness(page: Page) {
 
 async function waitForActive(page: Page) {
   await expect.poll(() => page.evaluate(() => (window as unknown as { analyticsHarness: { getTrackingStatus: () => { active: boolean } } }).analyticsHarness.getTrackingStatus().active)).toBe(true)
-}
-
-async function openProgress(page: Page) {
-  const button = page.getByRole('button', { name: 'Progress', exact: true })
-  if (!await button.isVisible()) await page.getByRole('button', { name: 'Map options', exact: true }).click()
-  await button.click()
 }
 
 test('local production preview stays untracked and has usable privacy controls', async ({ page, context, baseURL }) => {
