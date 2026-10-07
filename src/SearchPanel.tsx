@@ -27,6 +27,7 @@ export function SearchPanel({ upgrades, profile, inputRef, open, onOpenChange, o
   const panel = useRef<HTMLDivElement>(null)
   const focusFrame = useRef(0)
   const candidateFrame = useRef(0)
+  const candidateGeneration = useRef(0)
   const results = useMemo(() => discoverUpgrades(upgrades, profile, query, filter), [upgrades, profile, query, filter])
   const latestSearch = useRef<{ query_length: '1-3' | '4-10' | '11-30' | '31+'; results: '0' | '1-5' | '6-20' | '21+' } | null>(null)
   latestSearch.current = query.trim() ? {
@@ -41,8 +42,10 @@ export function SearchPanel({ upgrades, profile, inputRef, open, onOpenChange, o
     return () => window.clearTimeout(timer)
   }, [queryRevision])
   useEffect(() => { if (panel.current) panel.current.scrollTop = 0 }, [query, filter])
+  useEffect(() => { if (!open) cancelCandidateFocus() }, [open])
   useEffect(() => {
     if (activeId && !results.some(({ node }) => node.id === activeId)) {
+      cancelCandidateFocus()
       setActiveId(null)
       if (open && document.activeElement === document.body) inputRef.current?.focus({ preventScroll: true })
     }
@@ -78,39 +81,48 @@ export function SearchPanel({ upgrades, profile, inputRef, open, onOpenChange, o
     window.cancelAnimationFrame(focusFrame.current)
     focusFrame.current = window.requestAnimationFrame(align)
   }
+  function cancelCandidateFocus() {
+    candidateGeneration.current++
+    window.cancelAnimationFrame(candidateFrame.current)
+  }
   function focusResult(index: number) {
+    cancelCandidateFocus()
+    const generation = candidateGeneration.current, origin = document.activeElement
     const result = results[index]
     if (!result) return
     const button = [...(panel.current?.querySelectorAll<HTMLButtonElement>('.search-result') ?? [])].find((element) => element.dataset.upgradeId === result.node.id)
     if (button) { button.focus({ preventScroll: true }); revealFocusedTitle(button) }
     else {
-      window.cancelAnimationFrame(candidateFrame.current)
       candidateFrame.current = window.requestAnimationFrame(() => {
+        if (generation !== candidateGeneration.current || document.activeElement !== origin) return
         const mounted = [...(panel.current?.querySelectorAll<HTMLButtonElement>('.search-result') ?? [])].find((element) => element.dataset.upgradeId === result.node.id)
         if (mounted) { mounted.focus({ preventScroll: true }); revealFocusedTitle(mounted) }
       })
     }
   }
-  function close() { window.cancelAnimationFrame(candidateFrame.current); setActiveId(null); inputRef.current?.focus({ preventScroll: true }); onOpenChange(false) }
-  return <div className="search-box" onKeyDown={(event) => { if (event.key === 'Escape') { event.stopPropagation(); close() } }}>
+  function close() { cancelCandidateFocus(); setActiveId(null); inputRef.current?.focus({ preventScroll: true }); onOpenChange(false) }
+  return <div className="search-box" onKeyDown={(event) => { if (event.key === 'Escape' && !event.nativeEvent.isComposing) { event.stopPropagation(); close() } }}>
     <label className="sr-only" htmlFor="search">Search visible upgrade titles and effects</label>
     <button type="button" className="search-toggle" aria-label="Toggle search results" aria-expanded={open} aria-controls={open ? resultsId : undefined} onClick={() => { if (open) close(); else { onOpenChange(true); inputRef.current?.focus({ preventScroll: true }) } }}><span aria-hidden="true">⌕</span></button>
     <p id={statusId} role="status" aria-live="polite" aria-atomic="true" className="sr-only telemetry-private rr-block">{open ? `Search results open. ${results.length} visible results${results.length ? '.' : '; no matching visible upgrades.'}` : 'Search results closed.'}</p>
     <p id={hintId} className="sr-only">Arrow Down or Arrow Up moves into results. In results, Arrow keys, Home and End choose a candidate; Enter or Space opens it. Escape closes results. Tab visits the controls and every result.</p>
     <input className="telemetry-private rr-block" id="search" ref={inputRef} type="search" aria-controls={open ? resultsId : undefined} aria-describedby={`${statusId} ${hintId}`} autoComplete="off" placeholder="Find an upgrade…" value={query}
       onFocus={() => onOpenChange(true)}
-      onChange={(event) => { setActiveId(null); setQuery(event.target.value); setQueryRevision((revision) => revision + 1); onOpenChange(true) }}
+      onBlur={cancelCandidateFocus}
+      onChange={(event) => { cancelCandidateFocus(); setActiveId(null); setQuery(event.target.value); setQueryRevision((revision) => revision + 1); onOpenChange(true) }}
       onKeyDown={(event) => {
+        if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || event.nativeEvent.isComposing) return
         if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); onOpenChange(true); focusResult(event.key === 'ArrowDown' ? 0 : results.length - 1) }
         else if (event.key === 'Enter' && results.length) { event.preventDefault(); onSelect((results.find(({ node }) => node.id === activeId) ?? results[0]).node.id, true) }
       }} />
     {open && <div ref={panel} id={resultsId} className="search-results upgrade-discovery telemetry-private rr-block" role="region" aria-label="Visible upgrade results">
       <div className="results-heading"><span>{results.length} visible results</span><button onClick={close} aria-label="Close search results">×</button></div>
-      <div className="discovery-controls"><label htmlFor="discovery-state">Progress state</label><select id="discovery-state" value={filter} onChange={(event) => { setActiveId(null); setFilter(event.target.value as DiscoveryFilter) }}>
+      <div className="discovery-controls"><label htmlFor="discovery-state">Progress state</label><select id="discovery-state" value={filter} onChange={(event) => { cancelCandidateFocus(); setActiveId(null); setFilter(event.target.value as DiscoveryFilter) }}>
         <option value="all">All visible</option><option value="available">Available</option><option value="locked">Locked</option><option value="owned">Owned</option><option value="pending">Awaiting activation</option>
       </select><small>Available: native requirements recorded. SP balance is not checked.</small></div>
       <div className="discovery-list">
         {results.map(({ node, state, duplicateTitle }, index) => <button className="search-result" key={node.id} data-upgrade-id={node.id} aria-current={activeId === node.id ? 'true' : undefined} aria-describedby={`${hintId} ${resultsId}-${index}`} onFocus={(event) => { setActiveId(node.id); revealFocusedTitle(event.currentTarget) }} onKeyDown={(event) => {
+          if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || event.nativeEvent.isComposing) return
           if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
             event.preventDefault(); event.stopPropagation()
             focusResult(event.key === 'Home' ? 0 : event.key === 'End' ? results.length - 1 : Math.max(0, Math.min(results.length - 1, index + (event.key === 'ArrowDown' ? 1 : -1))))
