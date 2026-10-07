@@ -22,6 +22,8 @@ Milestones represent the actual item received/crafted or Upgrade bought. Checkli
 
 Purchase, removal and reset confirmation rows pair each visible upgrade title with its exact native SP cost. This distinguishes the eleven same-titled Astral Keys while stable native IDs remain the mutation identities; long costs wrap within narrow dialogs.
 
+Search selection uses real native button focus rather than a synthetic listbox. The disclosure button exposes expanded state and controls the visible-result region; the native search field references that region and private live status. Candidate descriptions report only the current visible ordinal. Arrow navigation and row Home/End preserve native field editing, ordinary Tab/pointer access, stable-ID selection and measured sticky-header clearance. Query/filter changes reset the candidate; removed focused candidates return to the field. This structural contract is covered locally; a real screen-reader session remains a separate acceptance check for issue #77.
+
 ## Next-upgrade suggestions
 
 `recommendations.ts` computes a read-only result from the catalog, current profile and bundled `src/data/wiki-priorities.json`. Only unowned upgrades from the shared visibility result qualify, and their native reveal and purchase predicates must both be satisfied now. Explicit spoiler browsing does not bypass a native reveal gate. Pending owned Astral locks are excluded from repurchase; eligible new locks carry a delayed-activation note. The engine never fills prerequisites, selects an OR path, changes milestones or applies a reset.

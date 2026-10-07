@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs'
 import type { Catalog } from '../../src/domain/types'
 import { emptyProfile } from '../../src/domain/types'
 import { visibility } from '../../src/domain/rules'
-import { tabThroughDiscovery } from './helpers/discovery-focus'
+import { focusedDiscoveryTitleIsReadable, tabThroughDiscovery } from './helpers/discovery-focus'
 
 const test = base.extend({
   page: async ({ baseURL }, use, info) => {
@@ -93,4 +93,19 @@ for (const layout of ['Game Layout', 'Detailed Layout']) test(`${layout} toolbar
   await page.getByRole('button', { name: 'Close dialog', exact: true }).click()
   await page.getByRole('button', { name: 'Next upgrade', exact: true }).click()
   await expect(page.getByRole('dialog', { name: 'Suggested next upgrade', exact: true })).toBeVisible()
+})
+
+test('search arrows expose a readable non-first candidate at the actual 200% browser font', async ({ page }) => {
+  await page.goto('./')
+  await expect(page.locator('html')).toHaveCSS('font-size', '32px')
+  await page.getByRole('searchbox').fill('Soul')
+  await page.getByRole('searchbox').press('ArrowUp')
+  await expect(page.locator('.search-result').last()).toBeFocused()
+  await focusedDiscoveryTitleIsReadable(page)
+  await page.keyboard.press('Home'); await page.keyboard.press('ArrowDown')
+  const chosen = page.locator('.search-result').nth(1), title = await chosen.locator('.discovery-title').innerText()
+  await expect(chosen).toBeFocused()
+  await focusedDiscoveryTitleIsReadable(page)
+  await page.keyboard.press('Enter')
+  await expect(page.locator('.details h2')).toHaveText(title)
 })
