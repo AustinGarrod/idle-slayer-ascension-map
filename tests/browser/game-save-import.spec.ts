@@ -1,4 +1,6 @@
-import { expect, test, type Page } from '@playwright/test'
+import { openProgress } from './helpers/app'
+import { expect, test } from './fixtures'
+import type { Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import type { Catalog } from '../../src/domain/types'
 import { emptyProfile } from '../../src/domain/types'
@@ -11,17 +13,6 @@ const start = catalog.startId
 const gatherer = '5ew02t2oprzthi4hmyk6'
 const quests = '6d44qruuppdrshhefq8b'
 const initial = emptyProfile(catalog.revision)
-const runtimeErrors: Error[] = []
-test.beforeEach(({ page }) => { runtimeErrors.length = 0; page.on('pageerror', (error) => runtimeErrors.push(error)) })
-test.afterEach(() => expect(runtimeErrors).toEqual([]))
-
-async function openProgress(page: Page) {
-  await expect(page.locator('.toolbar')).toBeVisible()
-  const button = page.getByRole('button', { name: 'Progress', exact: true })
-  if (!await button.isVisible()) await page.getByRole('button', { name: 'Map options', exact: true }).click()
-  await button.click()
-  return page.getByRole('dialog', { name: 'Your progress', exact: true })
-}
 
 async function chooseSave(page: Page, bytes: Uint8Array, retry = false) {
   const chooserEvent = page.waitForEvent('filechooser')

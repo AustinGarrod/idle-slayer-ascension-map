@@ -1,4 +1,6 @@
-import { expect, test, type Locator, type Page } from '@playwright/test'
+import { noPageOverflow, selectedNodeIsUsable } from './helpers/geometry'
+import { exposeMapAction, openProgress, showSpoilers, selectUpgrade, chooseLayout, undoProgress } from './helpers/app'
+import { expect, test } from './fixtures'
 import { readFileSync } from 'node:fs'
 import type { Catalog } from '../../src/domain/types'
 import { emptyProfile } from '../../src/domain/types'
@@ -9,79 +11,6 @@ const initial = emptyProfile(catalog.revision)
 const initialVisibility = visibility(catalog, initial)
 const start = catalog.upgrades.find((node) => node.id === catalog.startId)!
 const hidden = catalog.upgrades.find((node) => !initialVisibility.ids.has(node.id))!
-const runtimeErrors: Error[] = []
-test.beforeEach(({ page }) => { runtimeErrors.length = 0; page.on('pageerror', (error) => runtimeErrors.push(error)) })
-test.afterEach(() => expect(runtimeErrors).toEqual([]))
-
-async function exposeMapAction(page: Page, target: Locator) {
-  await expect(page.locator('.toolbar')).toBeVisible()
-  if (!await target.isVisible()) await page.getByRole('button', { name: 'Map options', exact: true }).click()
-}
-
-async function openProgress(page: Page) {
-  const action = page.getByRole('button', { name: 'Progress', exact: true })
-  await exposeMapAction(page, action)
-  await action.click()
-}
-
-async function showSpoilers(page: Page, shown: boolean) {
-  const checkbox = page.getByRole('checkbox', { name: 'Show spoilers', exact: true })
-  await exposeMapAction(page, checkbox)
-  await checkbox.setChecked(shown)
-  const options = page.getByRole('dialog', { name: 'Map options', exact: true })
-  if (await options.isVisible()) await options.getByRole('button', { name: 'Close dialog', exact: true }).click()
-}
-
-async function selectUpgrade(page: Page, title: string) {
-  await page.getByRole('searchbox').fill(title)
-  await page.locator('.search-result').filter({ hasText: title }).first().click()
-  await expect(page.locator('.details h2')).toHaveText(title)
-}
-
-async function chooseLayout(page: Page, name: 'Detailed Layout' | 'Game Layout') {
-  const action = page.getByRole('group', { name: 'Map layout', exact: true }).getByRole('button', { name, exact: true })
-  await action.click()
-  await expect(action).toHaveAttribute('aria-pressed', 'true')
-}
-
-async function undoProgress(page: Page) {
-  const undo = page.getByRole('button', { name: 'Undo', exact: true })
-  await exposeMapAction(page, undo)
-  await undo.click()
-  const options = page.getByRole('dialog', { name: 'Map options', exact: true })
-  if (await options.isVisible()) await options.getByRole('button', { name: 'Close dialog', exact: true }).click()
-}
-
-async function noPageOverflow(page: Page) {
-  await expect.poll(() => page.evaluate(() => ({
-    width: document.documentElement.scrollWidth - window.innerWidth,
-    height: document.documentElement.scrollHeight - window.innerHeight,
-    x: window.scrollX,
-    y: window.scrollY,
-  }))).toEqual({ width: 0, height: 0, x: 0, y: 0 })
-}
-
-async function selectedNodeIsUsable(page: Page, id: string) {
-  const node = page.locator(`.react-flow__node[data-id="${id}"]`)
-  await expect(node).toBeInViewport()
-  await expect.poll(() => node.evaluate((element) => {
-    const rect = element.getBoundingClientRect()
-    const map = element.closest('.map')!.getBoundingClientRect()
-    const overlaps = [...document.querySelectorAll('.camera-controls, .pan-controls, .map-summary')].filter((control) => {
-      const box = control.getBoundingClientRect()
-      return box.width > 0 && box.height > 0 && rect.left < box.right && rect.right > box.left && rect.top < box.bottom && rect.bottom > box.top
-    }).map((control) => control.className)
-    return {
-      fullyInsideCanvas: rect.left >= map.left - 1 && rect.right <= map.right + 1 && rect.top >= map.top - 1 && rect.bottom <= map.bottom + 1,
-      overlaps,
-    }
-  })).toEqual({ fullyInsideCanvas: true, overlaps: [] })
-  await expect.poll(() => node.evaluate((element) => {
-    const rect = element.getBoundingClientRect()
-    const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)
-    return hit?.closest('.react-flow__node')?.getAttribute('data-id')
-  })).toBe(id)
-}
 
 test('search centers the native node, purchase persists, and undo works', async ({ page }) => {
   await page.goto('./')
