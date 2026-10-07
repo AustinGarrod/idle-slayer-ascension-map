@@ -12,6 +12,8 @@ Recordings can include ordinary visible map progress: purchased/available/pendin
 
 Catalog startup failures display fixed public wording with a retry action. Parser excerpts and catalog-validation details are never stored in React state or displayed; `catalog_error` retains only its bounded `network` or `validation` category. The fixed loading/error screen can appear in recordings.
 
+Current action feedback and storage recovery warnings inside map dialogs use one accessible live region within the active modal. Its contents and controls are replay-blocked with `.telemetry-private rr-block`, including fixed restore/read/export failures. Global storage warnings use the same exclusions; bounded error event categories are unchanged. Heatmap coordinates still follow the existing exclusion limits.
+
 The disclosure and keyboard-accessible **Privacy & tracking** control remain available while the catalog is loading, stalled or unavailable. Opening the control and cross-tab preference changes refresh its controller status. Changing tracking from startup reloads without editing the existing stored map profile, because no map editing session has initialized yet. Once the map is loaded, its existing save/export/cancel protection still applies before a tracking reload.
 
 Standard collection also includes page visits, sanitized referral/campaign information, browser/device information, approximate location when available and bounded performance measurements. These service/session dimensions are separate from the application's allowlisted custom event properties below.

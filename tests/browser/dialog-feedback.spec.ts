@@ -1,0 +1,161 @@
+import { expect, test, type Page } from '@playwright/test'
+import { readFileSync } from 'node:fs'
+import { emptyProfile, type Catalog } from '../../src/domain/types'
+import { MAX_PROFILE_BYTES, PROFILE_STORAGE_KEY } from '../../src/domain/storage'
+
+const catalog = JSON.parse(readFileSync('public/catalog.json', 'utf8')) as Catalog
+
+async function openAction(page: Page, name: string) {
+  await expect(page.locator('.toolbar')).toBeVisible()
+  const action = page.getByRole('button', { name, exact: true })
+  if (!await action.isVisible()) await page.getByRole('button', { name: 'Map options', exact: true }).click()
+  await action.click()
+}
+async function assertLocalFeedback(page: Page, text: string) {
+  const dialog = page.getByRole('dialog')
+  const status = dialog.locator('.dialog-feedback[role="status"]')
+  await expect(status).toHaveCount(1)
+  await expect(status).toContainText(text)
+  await expect(status).toBeInViewport()
+  await expect(page.locator('.atlas > .sr-only[role="status"]')).toHaveCount(0)
+  await expect(page.locator('.toast')).toHaveCount(0)
+  expect(await status.evaluate((element) => {
+    const box = element.getBoundingClientRect()
+    const modal = element.closest('dialog')!.getBoundingClientRect()
+    return box.top >= modal.top && box.bottom <= Math.min(modal.bottom, window.innerHeight)
+  })).toBe(true)
+}
+
+test('blocked Ultra Ascension explains the result inside Progress at phone width without stale feedback', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 568 })
+  await page.goto('./'); await openAction(page, 'Progress')
+  const action = page.getByRole('button', { name: 'Ultra Ascend…', exact: true })
+  await action.click()
+  await assertLocalFeedback(page, 'Ultra Ascension requires:')
+  await expect(action).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(page.locator('.atlas > .sr-only[role="status"]')).toHaveText('')
+  await openAction(page, 'Progress')
+  await expect(page.getByRole('dialog').locator('.dialog-feedback')).toHaveText('')
+})
+
+test('invalid restore and successful export replace feedback inside Progress and keep the profile intact', async ({ page }) => {
+  const profile = { ...emptyProfile(catalog.revision), purchases: { 'unknown-fixture': { epoch: 0, active: false } } }
+  await page.addInitScript(({ key, profile }) => localStorage.setItem(key, JSON.stringify(profile)), { key: PROFILE_STORAGE_KEY, profile })
+  await page.setViewportSize({ width: 320, height: 568 })
+  await page.goto('./'); await openAction(page, 'Progress')
+  await page.getByLabel('Map progress JSON backup', { exact: true }).setInputFiles({ name: 'synthetic-invalid.json', mimeType: 'application/json', buffer: Buffer.from('BACKUP_PRIVATE_MARKER') })
+  await assertLocalFeedback(page, 'The backup is not valid JSON. Progress was not replaced.')
+  await expect(page.getByRole('dialog')).not.toContainText('BACKUP_PRIVATE_MARKER')
+  await page.getByLabel('Map progress JSON backup', { exact: true }).setInputFiles({ name: 'second-synthetic-invalid.json', mimeType: 'application/json', buffer: Buffer.from('ANOTHER_PRIVATE_MARKER') })
+  await assertLocalFeedback(page, 'The backup is not valid JSON. Progress was not replaced.')
+  await expect(page.getByRole('dialog').locator('.dialog-feedback p')).toHaveCount(1)
+  const download = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Export JSON backup', exact: true }).click()
+  expect(JSON.parse(readFileSync((await (await download).path())!, 'utf8'))).toEqual(profile)
+  await assertLocalFeedback(page, 'Progress backup exported.')
+  await expect(page.getByRole('dialog').locator('.dialog-feedback')).not.toContainText('not valid JSON')
+  expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), PROFILE_STORAGE_KEY)).toEqual(profile)
+})
+
+test('failed milestone saving exposes fixed feedback, export and retry inside its active dialog', async ({ page }) => {
+  const profile = { ...emptyProfile(catalog.revision), showSpoilers: true }
+  await page.addInitScript(({ key, profile }) => {
+    localStorage.setItem(key, JSON.stringify(profile))
+    const win = window as Window & { denyProfileWrites?: boolean }
+    win.denyProfileWrites = true
+    const native = Storage.prototype.setItem
+    Storage.prototype.setItem = function (target, value) {
+      if (target === key && win.denyProfileWrites) throw new DOMException('Synthetic private write detail', 'QuotaExceededError')
+      native.call(this, target, value)
+    }
+  }, { key: PROFILE_STORAGE_KEY, profile })
+  await page.setViewportSize({ width: 320, height: 568 })
+  await page.goto('./'); await openAction(page, 'Milestones')
+  const milestone = catalog.milestones[0]
+  await page.getByRole('checkbox', { name: new RegExp(milestone.title) }).check()
+  await assertLocalFeedback(page, 'Progress could not be saved on this device.')
+  const dialog = page.getByRole('dialog', { name: 'Milestones', exact: true })
+  await expect(dialog).not.toContainText('Synthetic private write detail')
+  await expect(dialog.getByRole('button', { name: 'Retry saving', exact: true })).toBeVisible()
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  const download = page.waitForEvent('download')
+  await dialog.getByRole('button', { name: 'Export backup', exact: true }).click()
+  expect(JSON.parse(readFileSync((await (await download).path())!, 'utf8')).milestones[milestone.id]).toBe(true)
+  await assertLocalFeedback(page, 'Progress backup exported.')
+  await page.evaluate(() => { (window as Window & { denyProfileWrites?: boolean }).denyProfileWrites = false })
+  await dialog.getByRole('button', { name: 'Retry saving', exact: true }).click()
+  await expect(dialog.locator('.dialog-feedback')).toHaveText('')
+  expect(await page.evaluate(({ key, id }) => JSON.parse(localStorage.getItem(key)!).milestones[id], { key: PROFILE_STORAGE_KEY, id: milestone.id })).toBe(true)
+  await page.keyboard.press('Tab')
+  expect(await page.evaluate(() => Boolean(document.activeElement?.closest('dialog')))).toBe(true)
+})
+
+test('export refusal remains visible inside Progress with recovery controls and no download', async ({ page }) => {
+  const profile = emptyProfile(catalog.revision)
+  const bytes = () => Buffer.byteLength(JSON.stringify(profile, null, 2))
+  for (let index = 0; index < 4_000; index++) profile.milestones[`future-${index}-${'x'.repeat(1_000)}`] = true
+  let index = 0
+  while (MAX_PROFILE_BYTES - bytes() > 48) {
+    const prefix = `padding-${index++}-`
+    const length = Math.min(1_024, MAX_PROFILE_BYTES - bytes() - 32)
+    profile.milestones[prefix + 'x'.repeat(length - prefix.length)] = true
+  }
+  expect(bytes()).toBeLessThanOrEqual(MAX_PROFILE_BYTES)
+  await page.addInitScript(({ key, profile }) => localStorage.setItem(key, JSON.stringify(profile)), { key: PROFILE_STORAGE_KEY, profile })
+  await page.goto('./')
+  await page.getByRole('button', { name: 'Return to start', exact: true }).click()
+  await page.getByRole('button', { name: 'Record purchase…', exact: true }).click()
+  await page.getByRole('button', { name: 'Apply purchases', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('4 MiB')
+  await page.setViewportSize({ width: 320, height: 568 })
+  await openAction(page, 'Progress')
+  const downloads: unknown[] = []
+  page.on('download', (download) => downloads.push(download))
+  await page.getByRole('button', { name: 'Export JSON backup', exact: true }).click()
+  await assertLocalFeedback(page, 'The profile exceeds the 4 MiB backup limit.')
+  await expect(page.getByRole('dialog').getByRole('button', { name: 'Retry saving', exact: true })).toBeVisible()
+  expect(downloads).toHaveLength(0)
+  expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), PROFILE_STORAGE_KEY)).toEqual(profile)
+})
+
+test('conflict and reload dialogs keep export feedback and move review into one active dialog', async ({ page, context }) => {
+  await page.addInitScript((key) => {
+    const native = Storage.prototype.setItem
+    Storage.prototype.setItem = function (target, value) {
+      if (target === key) throw new DOMException('Synthetic write refusal', 'QuotaExceededError')
+      native.call(this, target, value)
+    }
+  }, PROFILE_STORAGE_KEY)
+  await page.goto('./')
+  await page.getByRole('button', { name: 'Return to start', exact: true }).click()
+  await page.getByRole('button', { name: 'Record purchase…', exact: true }).click()
+  await page.getByRole('button', { name: 'Apply purchases', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('could not be saved')
+  const other = await context.newPage(); await other.goto(page.url())
+  await expect(other.locator('.toolbar')).toBeVisible()
+  const spoilers = other.getByRole('checkbox', { name: 'Show spoilers', exact: true })
+  if (!await spoilers.isVisible()) await other.getByRole('button', { name: 'Map options', exact: true }).click()
+  await spoilers.check()
+  await page.setViewportSize({ width: 320, height: 568 })
+  await page.getByRole('button', { name: 'Review progress conflict', exact: true }).click()
+  let download = page.waitForEvent('download')
+  await page.getByRole('dialog').getByRole('button', { name: 'Export this session', exact: true }).click()
+  expect(JSON.parse(readFileSync((await (await download).path())!, 'utf8')).purchases[catalog.startId]).toBeDefined()
+  await assertLocalFeedback(page, 'Progress backup exported.')
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+  await openAction(page, 'Privacy & tracking')
+  await page.getByRole('button', { name: 'Disable tracking and reload', exact: true }).click()
+  await expect(page.getByRole('dialog', { name: 'Reload with unsaved progress?', exact: true })).toBeVisible()
+  download = page.waitForEvent('download')
+  await page.getByRole('dialog').getByRole('button', { name: 'Export backup', exact: true }).click()
+  expect(JSON.parse(readFileSync((await (await download).path())!, 'utf8')).purchases[catalog.startId]).toBeDefined()
+  await assertLocalFeedback(page, 'Progress backup exported.')
+  await page.getByRole('dialog').getByRole('button', { name: 'Review progress conflict', exact: true }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(1)
+  await expect(page.getByRole('dialog', { name: 'Review progress conflict', exact: true })).toBeVisible()
+  await expect(page.locator('dialog[open]')).toHaveCount(1)
+  await expect(page.getByRole('dialog').locator('.dialog-feedback')).not.toContainText('Progress backup exported.')
+  expect(await page.evaluate(() => localStorage.getItem('idle-slayer-ascension-map.analytics.v1'))).toBeNull()
+})

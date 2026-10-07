@@ -187,6 +187,10 @@ dialog::backdrop { background: #0a0808c4; }
 .dialog-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
 .dialog-heading h2 { margin: 0; color: var(--bright-gold); }
 .dialog-heading > button { flex: 0 0 44px; }
+.dialog-feedback:not(:empty) { margin-bottom: 16px; padding: 12px; border: 1px solid var(--frame); border-radius: 6px; background: var(--raised); font-size: .875rem; line-height: 1.5; }
+.dialog-feedback p { margin: 0; }
+.dialog-feedback p + p { margin-top: 8px; }
+.dialog-feedback .dialog-actions { justify-content: flex-start; margin-top: 8px; }
 dialog > p { margin-bottom: 16px; font-size: .9375rem; }
 dialog > ul { max-height: 32dvh; overflow-y: auto; padding-left: 24px; line-height: 1.7; font-size: .875rem; }
 dialog > button { margin: 6px 8px 0 0; }
