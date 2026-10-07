@@ -285,3 +285,26 @@ test('long prerequisite return labels remain fully visible and clickable with la
   await expect(page.locator('.details h2')).toBeFocused()
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('idle-slayer-ascension-map.profile.v1')!))).toEqual(profile)
 })
+
+test('reference sheet controls and exact outgoing document reflow at actual 32px text', async ({ page }, info) => {
+  const catalog = JSON.parse(readFileSync('public/catalog.json', 'utf8')) as Catalog
+  await page.goto('./'); await expect(page.locator('html')).toHaveCSS('font-size', '32px')
+  await page.getByRole('searchbox').fill('Permanent Slayer')
+  await page.locator(`.search-result[data-upgrade-id="${catalog.startId}"]`).click()
+  await page.getByRole('button', { name: 'Show details', exact: true }).click()
+  await page.getByRole('button', { name: 'Add to reference sheet', exact: true }).click()
+  await page.getByRole('button', { name: 'Map options', exact: true }).click()
+  await page.getByRole('dialog', { name: 'Map options', exact: true }).getByRole('button', { name: 'Reference sheet', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Upgrade reference sheet', exact: true })
+  await dialog.getByRole('button', { name: 'Review outgoing sheet', exact: true }).click()
+  expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true)
+  for (const button of await dialog.locator('.reference-sheet-panel button').all()) {
+    await button.focus(); await expect(button).toBeFocused(); await expect(button).toBeInViewport()
+    expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44)
+    expect(await button.evaluate((element) => { const r = element.getBoundingClientRect(); const range = document.createRange(); range.selectNodeContents(element); return [...range.getClientRects()].every((box) => box.left >= r.left - 1 && box.right <= r.right + 1) })).toBe(true)
+  }
+  const body = page.frameLocator('iframe').locator('body')
+  expect(await body.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true)
+  await page.screenshot({ path: info.outputPath('reference-sheet-actual32.png') })
+  expect(await page.evaluate(() => localStorage.getItem('idle-slayer-ascension-map.profile.v1'))).toBeNull()
+})

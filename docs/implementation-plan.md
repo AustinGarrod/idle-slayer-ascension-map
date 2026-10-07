@@ -71,3 +71,5 @@ See `README.md` for exact clone and plain `yarn` commands. Use Node.js 24 with t
 
 
 Public native-ID reference links are read-only navigation using each recipient's current profile and spoiler setting. Catalog context warns of a later revision without claiming a frozen record. Capture and universal URL cleanup precede rendering; live reference navigation preserves telemetry suspension on dirty buffered addresses. Sender progress and private annotations never enter the link.
+
+Reference-sheet issue #89 adds bounded explicit public catalog selections, exact outgoing preview and local static HTML save/print. Native profile/Undo contracts remain unchanged, and default output is filtered before selection counts or content. No private annotations, ownership snapshot, connection excerpt, backend conversion or full-tree printing is included.

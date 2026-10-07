@@ -151,3 +151,5 @@ Never point automated suites, probes, API tests or scheduled checks at the live 
 
 
 Supported public upgrade fragments are captured in memory before URL cleanup. Startup cleanup finishes synchronously before the tracker or recorder can execute. Live fragment capture uses the installed history wrapper, preserving permanent suspension when a dirty URL may already be buffered. The public ID/revision never enters recorder, heatmap or referrer URLs; hidden reference outcomes reveal neither the ID nor title. Disabled tracking also receives universal address cleanup. The bounded `#analytics=off` sentinel survives preference-write failure. Sharing adds no telemetry event.
+
+Reference-sheet selection, feedback and complete iframe preview sit under `.telemetry-private.rr-block`. No new reference-sheet events are emitted. Generated static HTML and print tabs contain no tracking scripts; they use a no-referrer policy and source links retain noreferrer. Local actual-recorder snapshot/mutation tests inspect decoded blocked nodes and ensure the complete outgoing document and synthetic private markers never enter telemetry.

@@ -72,6 +72,12 @@ Native English localization supplies descriptions and icons. Fourteen effects ha
 
 
 Exact upgrade references can be copied or opened from expanded details. They contain only the public native ID and catalog revision in a fragment. Recipients use their own progress and spoiler choice; unavailable or missing targets receive the same generic response. An older revision is a warning to use current catalog facts, never frozen historical evidence. The address is cleaned before application startup and on live navigation even when analytics is disabled; enabled telemetry keeps its existing dirty-URL suspension rule. Reference controls are excluded from replay, no sender profile is transferred, and outgoing referrers are suppressed. The address bar stays canonical, so bookmark the generated reference link. Clipboard refusal offers selectable text.
+
+## Portable public reference sheets
+
+Inspect a visible upgrade, expand its details and choose Add to reference sheet. Map options > Reference sheet holds up to four explicit entries for this visit. Remove an entry or clear the selection there. Review outgoing sheet displays the complete file before Save reviewed HTML or Open reviewed sheet for printing. Use the separate document browser Print command (Ctrl+P) to print or save as PDF. If popups are blocked, save the HTML locally and open it instead.
+
+The file freezes reviewed catalog facts and sources; it follows your current spoiler setting before output. Requirements are visible excerpts, not complete routes or eligibility proof. No ownership, milestones, UA count, notes, connections or layout are exported. Hidden selections are pruned and Undo cannot restore them to the sheet. Changes that alter the output invalidate its preview. Reload starts an empty selection. Game content retains its own attribution; no wiki guide ordering is included.
 ## Goals and recurring rebuild intentions
 
 Expand an upgrade's details and choose **Set progression goal…**. Choose **Acquire**, **Activate**, or **Rebuild** for a repeat purchase, then **Save goal**. This saves an intention, never a purchase, prerequisite, external item or Astral activation. Review goals in **Progress**, inspect their native requirements, move visible goals higher/lower in priority, or deliberately retire one. Up to twenty stable-ID targets can be retained; duplicate titles remain separate IDs.
