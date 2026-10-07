@@ -7,6 +7,7 @@ import '@fontsource/press-start-2p/latin-400.css'
 import type { Catalog, Profile, Requirement, Upgrade } from './domain/types'
 import { emptyProfile } from './domain/types'
 import { planAstralActivation, planPurchase, planRemoval, planUltraAscension, satisfies, searchVisible, visibility } from './domain/rules'
+import { formatRequirement } from './domain/requirement-label'
 import { exportProfileBackup, parseProfileBackup, PROFILE_STORAGE_KEY } from './domain/storage'
 import { createProfileSession, type StoredSnapshot } from './domain/profile-session'
 import { createMapLayout, GAME_NODE_SIZE, MAP_NODE_HEIGHT, MAP_NODE_WIDTH } from './domain/map-layout'
@@ -397,14 +398,14 @@ function Atlas({ catalog }: { catalog: Catalog }) {
       markerEnd: gameLayout && !direction ? undefined : { type: MarkerType.ArrowClosed, markerUnits: 'userSpaceOnUse', width: gameLayout ? 24 : 32, height: gameLayout ? 24 : 32, color } }
   })
   function label(requirement: Requirement): string {
-    switch (requirement.kind) {
-      case 'always': return 'No prerequisites'
-      case 'ultra-ascended': return 'At least one Ultra Ascension'
-      case 'all': return requirement.requirements.map(label).join(' AND ')
-      case 'any': return requirement.requirements.map(label).join(' OR ')
-      case 'milestone': return visible.milestones.find((item) => item.id === requirement.id)?.title ?? 'Unrevealed milestone'
-      case 'owned': case 'active': return `${visible.ids.has(requirement.id) ? index.get(requirement.id)?.title ?? 'Unknown upgrade' : 'Unrevealed upgrade'}${requirement.kind === 'active' ? ' (active)' : ''}`
-    }
+    return formatRequirement(requirement, (leaf) => {
+      switch (leaf.kind) {
+        case 'always': return 'No prerequisites'
+        case 'ultra-ascended': return 'At least one Ultra Ascension'
+        case 'milestone': return visible.milestones.find((item) => item.id === leaf.id)?.title ?? 'Unrevealed milestone'
+        case 'owned': case 'active': return `${visible.ids.has(leaf.id) ? index.get(leaf.id)?.title ?? 'Unknown upgrade' : 'Unrevealed upgrade'}${leaf.kind === 'active' ? ' (active)' : ''}`
+      }
+    })
   }
   function previewRemoval(id: string, milestone = false) {
     const result = planRemoval(catalog, profile, id, milestone)
