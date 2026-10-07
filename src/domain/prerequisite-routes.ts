@@ -16,7 +16,7 @@ export type PrerequisiteRoute = {
   targets: { target: RouteTarget; added: string[]; unique: string[]; uniqueCost: string }[]
 }
 export type RouteComparison = { targets: RouteTarget[]; routes: PrerequisiteRoute[]; bounded: boolean }
-type Options = { assumedMilestones?: ReadonlySet<string>; maxWork?: number; maxCandidates?: number; maxSteps?: number; maxRoutes?: number }
+type Options = { viewer?: Profile; assumedMilestones?: ReadonlySet<string>; maxWork?: number; maxCandidates?: number; maxSteps?: number; maxRoutes?: number }
 type Branch = { profile: Profile; added: string[]; choices: RouteChoice[]; recorded: RecordedRequirement[]; assumptions: string[]; problems: RouteProblem[] }
 const unique = <T,>(items: T[]): T[] => [...new Map(items.map((item) => [JSON.stringify(item), item])).values()]
 
@@ -49,7 +49,8 @@ function branchKey(branch: Branch): string {
 
 /** Read-only current-progress routes. No reset, activation, milestone receipt or profile mutation is applied. */
 export function comparePrerequisiteRoutes(catalog: Catalog, original: Profile, requested: readonly RouteTarget[], options: Options = {}): RouteComparison {
-  const visible = visibility(catalog, original), nodes = new Map(visible.upgrades.map((node) => [node.id, node]))
+  // Future-stage callers freeze the real viewer's universe before any exploration.
+  const visible = visibility(catalog, options.viewer ?? original), nodes = new Map(visible.upgrades.map((node) => [node.id, node]))
   const milestoneIds = new Set(visible.milestones.map((item) => item.id))
   const targets = unique(requested.filter((target) => nodes.has(target.id) && ['acquire', 'activate', 'rebuild'].includes(target.mode)))
     .filter((target, position, values) => values.findIndex((other) => other.id === target.id) === position)
