@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Catalog, Profile } from './domain/types'
-import type { visibility } from './domain/rules'
-import { retainedPurchasesOnReset } from './domain/rules'
+import { retainedPurchasesOnReset, visibility } from './domain/rules'
 import { discoverUpgrades, upgradeState } from './domain/discovery'
 import { editComparison, emptyComparison, exportComparison, MAX_COMPARISON_BYTES, MAX_COMPARISON_ENTRIES, parseComparison, presentedComparison, type SavedComparison } from './domain/saved-comparison'
 import type { createComparisonSession, ComparisonState } from './domain/comparison-session'
@@ -14,8 +13,9 @@ const stateLabels = { available: 'Available · prerequisites recorded; SP balanc
 const choiceStateLabels = { available: 'Available', locked: 'Locked', purchased: 'Owned and active', pending: 'Owned · awaiting activation' }
 const cost = (value: string) => `${BigInt(value).toLocaleString('en')} SP`
 
-export function SavedComparisonPanel({ catalog, profile, visible, session, state, initialId, onInspect, onReview }: {
+export function SavedComparisonPanel({ catalog, profile, getProfile, visible, session, state, initialId, onInspect, onReview }: {
   catalog: Catalog; profile: Profile; visible: ReturnType<typeof visibility>
+  getProfile: () => Profile
   session: ReturnType<typeof createComparisonSession>; state: ComparisonState; initialId?: string
   onInspect: (id: string) => void; onReview: (route: RequirementRoute, origin: string) => void
 }) {
@@ -32,8 +32,7 @@ export function SavedComparisonPanel({ catalog, profile, visible, session, state
   const fileInput = useRef<HTMLInputElement>(null)
   const readGeneration = useRef(0)
   const visibleKey = JSON.stringify([...visible.ids])
-  const current = useRef({ version: state.version, visibleKey })
-  current.current = { version: state.version, visibleKey }
+  function current() { return { version: session.getState().version, visibleKey: JSON.stringify([...visibility(catalog, getProfile()).ids]) } }
   const found = discoverUpgrades(visible.upgrades, profile, query)
   const results = !query && initialId ? [...found.filter(({ node }) => node.id === initialId), ...found.filter(({ node }) => node.id !== initialId)] : found
   useEffect(() => {
@@ -42,29 +41,32 @@ export function SavedComparisonPanel({ catalog, profile, visible, session, state
   }, [state.version, visibleKey])
   useEffect(() => () => { readGeneration.current++ }, [])
   function edit(next: SavedComparison) {
-    if (session.edit(next, state.version)) { setReplace(undefined); setFeedback('Comparison updated. Progress is unchanged.') }
+    const projected = presentedComparison(next, catalog, visibility(catalog, getProfile()).ids)
+    if (session.edit(projected, state.version)) { setReplace(undefined); setFeedback('Comparison updated. Progress is unchanged.') }
   }
   function add(id: string) {
-    const next = editComparison(state.list, id, visible.ids, catalog, activeReplace)
+    const next = editComparison(session.getState().list, id, visibility(catalog, getProfile()).ids, catalog, activeReplace)
     if (next) edit(next)
   }
   function download() {
     try {
-      const blob = new Blob([exportComparison(list)], { type: 'application/json' })
+      const liveList = presentedComparison(session.getState().list, catalog, visibility(catalog, getProfile()).ids)
+      const blob = new Blob([exportComparison(liveList)], { type: 'application/json' })
       const url = URL.createObjectURL(blob), anchor = document.createElement('a')
       anchor.href = url; anchor.download = 'idle-slayer-upgrade-comparison.json'; anchor.click(); URL.revokeObjectURL(url)
       setFeedback('Comparison exported. This file contains no progress profile.')
     } catch { setFeedback('Comparison could not be exported. This session is unchanged.') }
   }
   async function readFile(file: File) {
-    const generation = ++readGeneration.current, snapshot = current.current
+    const generation = ++readGeneration.current, snapshot = current()
     setReading(true); setRestore(null); setFeedback('')
     try {
       const text = file.size <= MAX_COMPARISON_BYTES ? await file.text() : ''
-      if (generation !== readGeneration.current || snapshot.version !== current.current.version || snapshot.visibleKey !== current.current.visibleKey) return
+      const latest = current()
+      if (generation !== readGeneration.current || snapshot.version !== latest.version || snapshot.visibleKey !== latest.visibleKey) return
       const parsed = parseComparison(text)
       if (!parsed) { setFeedback('This file is not a supported comparison backup. Nothing was replaced.'); return }
-      setRestore({ list: presentedComparison(parsed, catalog, visible.ids), version: snapshot.version, visibleKey: snapshot.visibleKey })
+      setRestore({ list: presentedComparison(parsed, catalog, visibility(catalog, getProfile()).ids), version: snapshot.version, visibleKey: snapshot.visibleKey })
     } catch {
       if (generation === readGeneration.current) setFeedback('Comparison backup could not be read. Nothing was replaced.')
     } finally { if (generation === readGeneration.current) setReading(false) }
@@ -88,7 +90,7 @@ export function SavedComparisonPanel({ catalog, profile, visible, session, state
       <h3>Replace this comparison?</h3><p>This replaces only the reference list with the currently visible and unavailable entries below. Progress stays unchanged. Export this list first if you want to keep both.</p>
       <ul>{presentedComparison(restore.list, catalog, visible.ids).ids.map((id) => <li key={id}>{index.has(id) ? `${index.get(id)!.title} · ${cost(index.get(id)!.cost)} · ${id}` : 'Unavailable catalog entry'}</li>)}</ul>
       {!presentedComparison(restore.list, catalog, visible.ids).ids.length && <p>No visible or unavailable entries to restore.</p>}
-      <div className="dialog-actions"><button disabled={disabled} onClick={() => { if (restore.version === state.version && restore.visibleKey === visibleKey) edit(restore.list) }}>Replace comparison</button><button onClick={() => { readGeneration.current++; setRestore(null) }}>Cancel restore</button></div>
+      <div className="dialog-actions"><button disabled={disabled} onClick={() => { const latest = current(); if (restore.version === latest.version && restore.visibleKey === latest.visibleKey) edit(restore.list) }}>Replace comparison</button><button onClick={() => { readGeneration.current++; setRestore(null) }}>Cancel restore</button></div>
     </section>}
     {recovery && <section className="saved-comparison-confirm" aria-label="Review comparison recovery"><h3>{recovery.action === 'saved' ? 'Use saved comparison?' : 'Replace saved comparison?'}</h3><p>{recovery.action === 'saved' ? 'Discard this local reference list and load the checked saved comparison below.' : 'Replace the checked device comparison below with this local reference list. Another tab may be using the saved list.'} Export this list first to keep it. Progress is unchanged.</p><h3>Checked saved entries</h3>{state.savedList ? <><ul>{presentedComparison(state.savedList, catalog, visible.ids).ids.map((id) => <li key={id}>{index.has(id) ? `${index.get(id)!.title} · ${cost(index.get(id)!.cost)} · ${id}` : 'Unavailable catalog entry'}</li>)}</ul><small>Only currently visible and unavailable saved entries are shown.</small></> : <p>Saved comparison cannot be read as a supported reference list.</p>}<div className="dialog-actions"><button disabled={disabled} onClick={() => { if (recovery.action === 'saved') session.useSaved(recovery.version); else void session.save(true, recovery.version); setRecovery(null) }}>Confirm comparison recovery</button><button onClick={() => setRecovery(null)}>Cancel recovery</button></div></section>}
     <h3>Compared entries · {list.ids.length} / {MAX_COMPARISON_ENTRIES}</h3>
