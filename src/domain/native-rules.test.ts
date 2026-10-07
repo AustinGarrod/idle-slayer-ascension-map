@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { planPurchase, planRemoval, planUltraAscension, retainedPurchasesOnReset, satisfies, searchVisible, visibility } from './rules'
+import { conditionallyRetainedPurchases, planPurchase, planRemoval, planUltraAscension, retainedPurchasesOnReset, satisfies, searchVisible, visibility } from './rules'
 import { emptyProfile, type Catalog, type Profile } from './types'
 
 const catalog = JSON.parse(readFileSync('public/catalog.json', 'utf8')) as Catalog
@@ -106,7 +106,7 @@ describe('reviewed native build 25551532 rules using the complete catalog', () =
     const reset = planUltraAscension(catalog, profile)
     expect(reset).not.toBeNull()
     expect(reset!.activated).toContain(ids.eternalRage)
-    expect(reset!.granted).toContain(ids.rageMode)
+    expect(reset!.conditionallyRetained).toContain(ids.rageMode)
     expect(reset!.profile.purchases[ids.eternalRage]).toEqual({ epoch: 1, active: true })
     expect(reset!.profile.purchases[ids.rageMode]).toEqual({ epoch: 1, active: true })
     expect(reset!.profile.purchases[ids.ultraAscension]).toBeUndefined()
@@ -118,7 +118,7 @@ describe('reviewed native build 25551532 rules using the complete catalog', () =
     const reset = planUltraAscension(catalog, resetFixture(false))!
     expect(reset.profile.purchases[ids.eternalRage].active).toBe(true)
     expect(reset.profile.purchases[ids.rageMode]).toBeUndefined()
-    expect(reset.granted).not.toContain(ids.rageMode)
+    expect(reset.conditionallyRetained).not.toContain(ids.rageMode)
   })
 
   it('clears the Legendary Rage Mode when its Astral retention source is absent', () => {
@@ -143,17 +143,17 @@ describe('reviewed native build 25551532 rules using the complete catalog', () =
     const reset = planUltraAscension(catalog, profile)!
     expect(reset.profile.purchases[source].active).toBe(true)
     expect(reset.profile.purchases[target]).toEqual({ epoch: 1, active: true })
-    expect(reset.granted).toContain(target)
+    expect(reset.conditionallyRetained).toContain(target)
     delete profile.purchases[target]
     const absentTarget = planUltraAscension(catalog, profile)!
     expect(absentTarget.profile.purchases[target]).toBeUndefined()
-    expect(absentTarget.granted).not.toContain(target)
+    expect(absentTarget.conditionallyRetained).not.toContain(target)
   })
 
-  for (const grant of catalog.grants) {
-    if (grant.when.kind !== 'active') throw new Error('Expected reviewed active-source retention')
-    const source = node(grant.when.id)
-    const target = grant.ids[0]
+  for (const retention of catalog.grants) {
+    if (retention.when.kind !== 'active') throw new Error('Expected reviewed active-source retention')
+    const source = node(retention.when.id)
+    const target = retention.ids[0]
     it.each(['active', 'pending', 'absent-source', 'absent-target'] as const)(`predicts ${source.title} reset retention with %s ownership without changing progress`, (condition) => {
       const profile = emptyProfile(catalog.revision)
       profile.epoch = 1
@@ -161,11 +161,14 @@ describe('reviewed native build 25551532 rules using the complete catalog', () =
       if (condition !== 'absent-source') own(profile, source.id, condition !== 'pending')
       if (condition !== 'absent-target') own(profile, target)
       const before = structuredClone(profile)
+      const currentRetention = conditionallyRetainedPurchases(catalog, profile)
+      expect(currentRetention.has(target)).toBe(condition === 'active')
+      expect([...currentRetention].every((id) => Object.hasOwn(profile.purchases, id))).toBe(true)
       const retained = retainedPurchasesOnReset(catalog, profile)
       const expected = condition === 'active' || condition === 'pending' && source.activation === 'after-ultra-ascension'
       expect(retained.has(target)).toBe(expected)
       const reset = planUltraAscension(catalog, profile)!
-      expect(reset.granted.includes(target)).toBe(expected)
+      expect(reset.conditionallyRetained.includes(target)).toBe(expected)
       expect(reset.profile.purchases[target]).toEqual(expected ? before.purchases[target] : undefined)
       expect(profile).toEqual(before)
     })

@@ -37,7 +37,7 @@ export function visibleRequirement(requirement: Requirement, profile: Profile, v
 
 /** A review destination, not a purchase suggestion or an invented prerequisite route. */
 export function requirementReviewTarget(visible: VisibleProgress, profile: Profile, selected: string | null): Upgrade | undefined {
-  const blocked = visible.upgrades.filter((upgrade) => !Object.hasOwn(profile.purchases, upgrade.id) && !visible.grants.has(upgrade.id)
+  const blocked = visible.upgrades.filter((upgrade) => !Object.hasOwn(profile.purchases, upgrade.id)
     && (!satisfies(upgrade.purchase, profile) || !satisfies(upgrade.reveal, profile)))
   return blocked.find((upgrade) => upgrade.id === selected) ?? blocked[0]
 }

@@ -11,11 +11,11 @@ const ua = catalog.upgrades.find((node) => node.title === 'Ultra Ascension')!
 const cases = ['active', 'pending', 'absent-source', 'absent-target'] as const
 const retainedText = 'Existing purchase · retained by Astral progress on reset'
 
-for (const grant of catalog.grants) {
-  if (grant.when.kind !== 'active') throw new Error('Expected reviewed active-source retention')
-  const sourceId = grant.when.id
+for (const retention of catalog.grants) {
+  if (retention.when.kind !== 'active') throw new Error('Expected reviewed active-source retention')
+  const sourceId = retention.when.id
   const source = catalog.upgrades.find((node) => node.id === sourceId)!
-  const target = catalog.upgrades.find((node) => node.id === grant.ids[0])!
+  const target = catalog.upgrades.find((node) => node.id === retention.ids[0])!
   for (const condition of cases) {
     test(`${target.title} details match reset with ${condition} ${source.title}`, async ({ page }) => {
       const profile = { ...emptyProfile(catalog.revision), epoch: 1 }
@@ -30,11 +30,13 @@ for (const grant of catalog.grants) {
       await page.locator('.search-result').filter({ hasText: target.title }).first().click()
       const explanation = page.locator('.details dl dd').last()
       await expect(explanation).toHaveText(retained ? retainedText : condition === 'absent-target' ? 'Repeat purchase · not currently owned' : 'Repeat purchase · clears on reset')
+      await expect(page.locator('.details').getByRole('button', { name: condition === 'absent-target' ? 'Record purchase…' : 'Remove purchase…', exact: true })).toBeVisible()
+      await expect(page.locator('.details').getByRole('button', { name: condition === 'absent-target' ? 'Remove purchase…' : 'Record purchase…', exact: true })).toHaveCount(0)
       if (!visibility(catalog, profile).ids.has(source.id)) await expect(page.locator('.details')).not.toContainText(source.title)
       expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), PROFILE_STORAGE_KEY)).toEqual(before)
       await openProgress(page)
       await page.getByRole('button', { name: 'Ultra Ascend…', exact: true }).click()
-      const retainedGroup = page.getByRole('dialog').locator('section').filter({ has: page.getByRole('heading', { name: /Purchased grant targets retained/ }) })
+      const retainedGroup = page.getByRole('dialog').locator('section').filter({ has: page.getByRole('heading', { name: /Conditionally retained purchases/ }) })
       if (retained) await expect(retainedGroup).toContainText(target.title)
       else await expect(retainedGroup).not.toContainText(target.title)
       await page.getByRole('button', { name: 'Apply changes', exact: true }).click()

@@ -107,7 +107,7 @@ describe('Steam game-save snapshot import', () => {
     expect(result.warnings).toContain('The save records current ownership, not purchase history. Active permanent and retained upgrades use an earlier-ascension baseline for map edits.')
   })
 
-  it('protects only already-owned grant targets and reevaluates retention on the next Ultra Ascension', () => {
+  it('protects only already-owned retention targets and reevaluates retention on the next Ultra Ascension', () => {
     const result = preview(model('3', { ...preparedUltraStates(), [locked.id]: 2, [target.id]: 1 }))
     expect(result.profile.purchases[target.id]).toEqual({ epoch: 2, active: true })
     const noTarget = preview(model('3', { [locked.id]: 2 }))
@@ -121,7 +121,7 @@ describe('Steam game-save snapshot import', () => {
     expect(reset.profile.purchases[target.id]).toBeUndefined()
   })
 
-  it('activates imported pending locks at the next reset without inventing a missing grant target', () => {
+  it('activates imported pending locks at the next reset without inventing a missing retention target', () => {
     const result = preview(model('3', { [locked.id]: 1, [ultra.id]: 1 }))
     const reset = planUltraAscension(catalog, result.profile)!
     expect(reset.activated).toContain(locked.id)
