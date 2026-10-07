@@ -149,7 +149,7 @@ export async function decodeProgressTransfer(input: string, catalogRevision: str
     if (compressed.length > MAX_PROFILE_BYTES) return tooLarge()
     const plain = await bounded(new Blob([new Uint8Array(compressed)]).stream().pipeThrough(new DecompressionStream('gzip')))
     const wire: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(plain))
-    if (!record(wire) || wire.format !== 'ISAM' || wire.version !== 1 || !['native', 'web'].includes(String(wire.layout))) return invalid()
+    if (!record(wire) || wire.format !== 'ISAM' || wire.version !== 1 || (wire.layout !== 'native' && wire.layout !== 'web')) return invalid()
     let profile: Profile | unknown
     if (wire.encoding === 'compact') {
       if (!keys(wire, ['format', 'version', 'layout', 'encoding', 'dictionary', 'profile'])) return invalid()
@@ -159,7 +159,7 @@ export async function decodeProgressTransfer(input: string, catalogRevision: str
     } else if (wire.encoding === 'profile' && keys(wire, ['format', 'version', 'layout', 'encoding', 'profile'])) profile = wire.profile
     else return invalid()
     const validation = parseProfileBackup(JSON.stringify(profile), catalogRevision)
-    return validation.ok ? { ok: true, profile: validation.profile, layout: wire.layout as MapLayoutMode } : validation.error.kind === 'too-large' ? tooLarge() : invalid()
+    return validation.ok ? { ok: true, profile: validation.profile, layout: wire.layout } : validation.error.kind === 'too-large' ? tooLarge() : invalid()
   } catch (error) { return error instanceof Error && error.message === 'size' ? tooLarge() : invalid() }
 }
 

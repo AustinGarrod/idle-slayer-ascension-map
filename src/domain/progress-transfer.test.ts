@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { gzipSync } from 'node:zlib'
+import { gunzipSync, gzipSync } from 'node:zlib'
 import { emptyProfile, MAX_PROFILE_EPOCH, type Catalog } from './types'
 import { captureProgressTransfer, decodeProgressTransfer, encodeProgressTransfer, MAX_TRANSFER_INPUT_CHARS, MAX_TRANSFER_TOKEN_CHARS, progressTransferLink } from './progress-transfer'
 import { createTransferQr } from './transfer-qr'
@@ -63,6 +63,17 @@ describe('local versioned progress transfer', () => {
       { format: 'ISAM', version: 1, layout: 'web', encoding: 'profile', profile: { ...profile, purchases: { unknown: { epoch: -1, active: true } } } },
       { format: 'ISAM', version: 1, layout: 'web', encoding: 'compact', dictionary: catalog.revision, profile: {} },
     ]) expect(await decodeProgressTransfer(wireToken(wire), catalog.revision)).toMatchObject({ ok: false })
+  })
+  it.each(['compact', 'profile'])('rejects non-string layouts in an otherwise valid %s envelope', async (encoding) => {
+    const sourceCatalog = encoding === 'compact' ? catalog : { ...catalog, revision: 'synthetic-other-dictionary' }
+    const encoded = await encodeProgressTransfer(sourceCatalog, profile, 'native')
+    if (!encoded.ok) throw new Error(encoded.error)
+    const wire = JSON.parse(gunzipSync(Buffer.from(encoded.token.slice(3), 'base64url')).toString('utf8'))
+    expect(wire.encoding).toBe(encoding)
+    expect((await decodeProgressTransfer(encoded.token, catalog.revision)).ok).toBe(true)
+    for (const layout of [['native'], ['web'], [], null, true, 1, { value: 'native' }]) {
+      expect(await decodeProgressTransfer(wireToken({ ...wire, layout }), catalog.revision)).toMatchObject({ ok: false })
+    }
   })
   it('caps both encoded input and decompressed bytes, refusing compression bombs and oversized profiles', async () => {
     expect(await decodeProgressTransfer('x'.repeat(MAX_TRANSFER_INPUT_CHARS + 1), catalog.revision)).toMatchObject({ ok: false, error: expect.stringContaining('4 MiB') })

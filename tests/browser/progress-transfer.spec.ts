@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
+import { gunzipSync, gzipSync } from 'node:zlib'
 import { emptyProfile, type Catalog } from '../../src/domain/types'
 import { encodeProgressTransfer, progressTransferLink } from '../../src/domain/progress-transfer'
 import { PROFILE_STORAGE_KEY } from '../../src/domain/storage'
@@ -74,6 +75,32 @@ test('desktop snapshot opens a mobile preview, cancels safely, then applies and 
     expect(requests.some((url) => url.includes('transfer=') || url.includes('v1.'))).toBe(false)
     expect(await saved(page)).toEqual(source)
   } finally { await mobileContext.close() }
+})
+
+test('non-string layouts fail before preview or replacement in both transfer encodings', async ({ page, baseURL }) => {
+  await page.addInitScript(({ key, layoutKey, destination }) => {
+    if (localStorage.getItem(key) === null) localStorage.setItem(key, JSON.stringify(destination))
+    localStorage.setItem(layoutKey, 'native')
+  }, { key: PROFILE_STORAGE_KEY, layoutKey: LAYOUT_PREFERENCE_KEY, destination })
+  await page.goto('./'); await openTransfer(page, 'receive')
+  for (const encoding of ['compact', 'profile']) {
+    const encoded = await encodeProgressTransfer(encoding === 'compact' ? catalog : { ...catalog, revision: 'synthetic-other-dictionary' }, source, 'native')
+    if (!encoded.ok) throw new Error(encoded.error)
+    const wire = JSON.parse(gunzipSync(Buffer.from(encoded.token.slice(3), 'base64url')).toString('utf8'))
+    expect(wire.encoding).toBe(encoding)
+    for (const layout of [['native'], ['web']]) {
+      const token = 'v1.' + gzipSync(JSON.stringify({ ...wire, layout })).toString('base64url')
+      const base = new URL(baseURL!)
+      await page.getByRole('textbox', { name: 'Transfer link or code', exact: true }).fill(progressTransferLink(token, base.origin, base.pathname))
+      await page.getByRole('button', { name: 'Review transfer', exact: true }).click()
+      await expect(page.getByRole('dialog').locator('.dialog-feedback')).toContainText('incomplete, corrupt or unsupported')
+      await expect(page.getByRole('button', { name: 'Apply transfer', exact: true })).toHaveCount(0)
+      expect(await saved(page)).toEqual(destination)
+      expect(await page.evaluate((key) => localStorage.getItem(key), LAYOUT_PREFERENCE_KEY)).toBe('native')
+    }
+  }
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Game Layout', exact: true })).toHaveAttribute('aria-pressed', 'true')
 })
 
 test('malformed and unsupported links fail locally, while oversized snapshots keep an explicit backup fallback', async ({ page, baseURL }) => {
