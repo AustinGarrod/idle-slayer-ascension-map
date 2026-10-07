@@ -149,3 +149,6 @@ Keep motion brief and purposeful, such as centering a selected node. Respect red
 
 
 Public reference copying belongs to expanded upgrade details. Its optional manual text field and buttons wrap at enlarged browser fonts, preserve 44px controls and never add permanent map rails. Opening a reference focuses visible details; hidden or missing targets receive a fixed generic announcement without changing spoiler choice. Page title and preview metadata remain generic.
+## Optional player intentions
+
+Goals stay in the existing scrollable Progress dialog, with entry from expanded upgrade details. No permanent rail competes with the map or selected inspector. A compact completion selector distinguishes acquisition, activation and a repeat-purchase rebuild; full explanatory wording stays alongside it. Current visible rows pair stable ID/exact cost with status and native requirement inspection, explicit ordering and retirement controls. Goal panels, choices and recovery feedback are excluded from replay. Intentions never become actual progress or a recommended optimal build.
