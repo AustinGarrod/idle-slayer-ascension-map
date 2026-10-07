@@ -86,7 +86,7 @@ test('invalid JSON backup keeps the current profile without displaying a restore
   await page.getByLabel('Map progress JSON backup', { exact: true }).setInputFiles({
     name: 'invalid-synthetic-profile.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ ...current, showSpoilers: 'true' })),
   })
-  await expect(page.getByRole('status')).toContainText('does not match the supported profile format')
+  await expect(page.getByRole('status', { name: 'Map action feedback', exact: true })).toContainText('does not match the supported profile format')
   await expect(page.getByRole('dialog', { name: 'Restore progress?', exact: true })).toHaveCount(0)
   expect(await stored(page)).toEqual(current)
 })

@@ -38,6 +38,8 @@ Milestones represent the actual item received/crafted or Upgrade bought. Checkli
 
 Purchase, removal and reset confirmation rows pair each visible upgrade title with its exact native SP cost. This distinguishes the eleven same-titled Astral Keys while stable native IDs remain the mutation identities; long costs wrap within narrow dialogs.
 
+Search selection uses real native button focus rather than a synthetic listbox. The disclosure button exposes expanded state and controls the visible-result region; the native search field references that region and private live status. Candidate descriptions report only the current visible ordinal. Arrow navigation and row Home/End preserve native field editing, ordinary Tab/pointer access, stable-ID selection and measured sticky-header clearance. Query/filter changes reset the candidate; removed focused candidates return to the field. Automated keyboard and accessibility-structure checks cover this contract. Actual screen-reader announcements remain unverified; a direct reader session is optional follow-up rather than an acceptance requirement.
+
 ## Single-event forward impact
 
 `forward-impact.ts` clones the recorded profile only after validating an explicit currently visible, unowned purchase against both native gates, or an unrecorded visible item milestone. It evaluates that one native purchase/receipt only. It never calls prerequisite filling, activates a lock, performs a reset, writes progress or goals, or adds history. A hypothetical Astral Lock purchase retains the current epoch and remains pending; future activation requires a full reviewed UA transition rather than a flag change or historical correction.
