@@ -1,9 +1,10 @@
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
+import { runtimeNoticesPlugin } from './scripts/runtime-notices.ts'
 
 export default defineConfig({
   base: '/idle-slayer-ascension-map/',
-  plugins: [react()],
+  plugins: [react(), runtimeNoticesPlugin(process.cwd())],
   server: {
     fs: {
       deny: [

@@ -1,0 +1,296 @@
+{
+  "schemaVersion": 1,
+  "packages": [
+    {
+      "name": "@dagrejs/dagre",
+      "version": "3.1.1",
+      "license": "MIT",
+      "inclusion": "module",
+      "notices": [
+        {
+          "source": "LICENSE",
+          "file": "dagre-MIT.txt",
+          "sha256": "6a349742a6cb219d5a2fc8d0844f6d89a6efc62e20c664450d884fc7ff2d6015"
+        }
+      ]
+    },
+    {
+      "name": "@dagrejs/graphlib",
+      "version": "4.0.5",
+      "license": "MIT",
+      "inclusion": "embedded",
+      "notices": [
+        {
+          "source": "LICENSE",
+          "file": "graphlib-MIT.txt",
+          "sha256": "6a349742a6cb219d5a2fc8d0844f6d89a6efc62e20c664450d884fc7ff2d6015"
+        }
+      ]
+    },
+    {
+      "name": "@fontsource/press-start-2p",
+      "version": "5.3.0",
+      "license": "OFL-1.1",
+      "inclusion": "module",
+      "notices": [
+        {
+          "source": "LICENSE",
+          "file": "press-start-2p-OFL.txt",
+          "sha256": "98e451fe911e5ee4a1a45359535dc30ea7df28b8d9a9cd1f741778efab1387ee"
+        }
+      ]
+    },
+    {
+      "name": "@xyflow/react",
+      "version": "12.12.0",
+      "license": "MIT",
+      "inclusion": "module",
+      "notices": [
+        {
+          "source": "LICENSE",
+          "file": "xyflow-react-MIT.txt",
+          "sha256": "023119ac20fb1c8c9930abe0bcd196989a1960388529a96fc43cebf96f07c9ff"
+        }
+      ]
+    },
+    {
+      "name": "@xyflow/system",
+      "version": "0.0.83",
+      "license": "MIT",
+      "inclusion": "module",
+      "notices": [
+        {
+          "source": "LICENSE",
+          "file": "xyflow-system-MIT.txt",
+          "sha256": "023119ac20fb1c8c9930abe0bcd196989a1960388529a96fc43cebf96f07c9ff"
+        }
+      ]
+    },
+    {
+      "name": "classcat",
+      "version": "5.0.5",
+      "license": "MIT",
+      "inclusion": "module",
+      "notices": [
+        {
+          "source": "LICENSE.md",
+          "file": "classcat-MIT.txt",
+          "sha256": "f101c761d255d0dddc77dd8a9327733b03d381798ec54a1bb718367207b48a8e"
+        }
+      ]
+    },
+    {
+      "name": "d3-color",
+      "version": "3.1.0",
+      "license": "ISC",
+      "inclusion": "module",
+      "notices": [
+        {
+          "source": "LICENSE",
+          "file": "d3-color-ISC.txt",
+          "sha256": "faa682e3e430941f958d26180458f5934a62f58dac4d70ccdd15608c15d0f884"
+        }
+      ]
+    },
+    {
+      "name": "d3-dispatch",
+      "version": "3.0.1",
+      "license": "ISC",
+      "inclusion": "module",
+      "notices": [
+        {
+          "source": "LICENSE",
+          "file": "d3-dispatch-ISC.txt",
+          "sha256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee"
+        }
+      ]
+    },
+    {
+      "name": "d3-drag",
+      "version": "3.0.0",
+      "license": "ISC",
+      "inclusion": "module",
+      "notices": [
+        {
+          "source": "LICENSE",
+          "file": "d3-drag-ISC.txt",
+          "sha256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee"
+        }
+      ]
+    },
+    {
+      "name": "d3-ease",
+      "version": "3.0.1",
+      "license": "BSD-3-Clause",
+      "inclusion": "module",
+      "notices": [
+        {
+          "source": "LICENSE",
+          "file": "d3-ease-BSD-3-Clause.txt",
+          "sha256": "b989d9085148d21ff64a75e14462aefa06b2589a55553b07b1460c70081c7d08"
+        }
+      ]
+    },
+    {
+      "name": "d3-interpolate",
+      "version": "3.0.1",
+      "license": "ISC",
+      "inclusion": "module",
+      "notices": [
+        {
+          "source": "LICENSE",
+          "file": "d3-interpolate-ISC.txt",
+          "sha256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee"
+        }
+      ]
+    },
+    {
+      "name": "d3-selection",
+      "version": "3.0.0",
+      "license": "ISC",
+      "inclusion": "module",
+      "notices": [
+        {
+          "source": "LICENSE",
+          "file": "d3-selection-ISC.txt",
+          "sha256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee"
+        }
+      ]
+    },
+    {
+      "name": "d3-timer",
+      "version": "3.0.1",
+      "license": "ISC",
+      "inclusion": "module",
+      "notices": [
+        {
+          "source": "LICENSE",
+          "file": "d3-timer-ISC.txt",
+          "sha256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee"
+        }
+      ]
+    },
+    {
+      "name": "d3-transition",
+      "version": "3.0.1",
+      "license": "ISC",
+      "inclusion": "module",
+      "notices": [
+        {
+          "source": "LICENSE",
+          "file": "d3-transition-ISC.txt",
+          "sha256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee"
+        }
+      ]
+    },
+    {
+      "name": "d3-zoom",
+      "version": "3.0.0",
+      "license": "ISC",
+      "inclusion": "module",
+      "notices": [
+        {
+          "source": "LICENSE",
+          "file": "d3-zoom-ISC.txt",
+          "sha256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee"
+        }
+      ]
+    },
+    {
+      "name": "react",
+      "version": "19.2.8",
+      "license": "MIT",
+      "inclusion": "module",
+      "notices": [
+        {
+          "source": "LICENSE",
+          "file": "react-MIT.txt",
+          "sha256": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93"
+        }
+      ]
+    },
+    {
+      "name": "react-dom",
+      "version": "19.2.8",
+      "license": "MIT",
+      "inclusion": "module",
+      "notices": [
+        {
+          "source": "LICENSE",
+          "file": "react-dom-MIT.txt",
+          "sha256": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93"
+        }
+      ]
+    },
+    {
+      "name": "rolldown",
+      "version": "1.2.12",
+      "license": "MIT",
+      "inclusion": "helper",
+      "notices": [
+        {
+          "source": "LICENSE",
+          "file": "rolldown-MIT.txt",
+          "sha256": "23ecfff35a5a2e80d92142f75228912c3b1abc4b5a8337a821ff4397e2f9f734"
+        },
+        {
+          "source": "THIRD-PARTY-LICENSE",
+          "file": "rolldown-THIRD-PARTY-LICENSE.txt",
+          "sha256": "a877291d800ed43692f3f9ae09d8e01cc6f7293ad39d43896059c188ffbb8b7c"
+        }
+      ]
+    },
+    {
+      "name": "scheduler",
+      "version": "0.27.0",
+      "license": "MIT",
+      "inclusion": "module",
+      "notices": [
+        {
+          "source": "LICENSE",
+          "file": "scheduler-MIT.txt",
+          "sha256": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93"
+        }
+      ]
+    },
+    {
+      "name": "use-sync-external-store",
+      "version": "1.7.0",
+      "license": "MIT",
+      "inclusion": "module",
+      "notices": [
+        {
+          "source": "LICENSE",
+          "file": "use-sync-external-store-MIT.txt",
+          "sha256": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93"
+        }
+      ]
+    },
+    {
+      "name": "vite",
+      "version": "8.3.2",
+      "license": "MIT",
+      "inclusion": "helper",
+      "notices": [
+        {
+          "source": "LICENSE.md",
+          "file": "vite-MIT.txt",
+          "sha256": "a47172e44a86a7e2cd1c16282341f7726ec60caafe3a6166fe3e0602005b6fa6"
+        }
+      ]
+    },
+    {
+      "name": "zustand",
+      "version": "4.5.7",
+      "license": "MIT",
+      "inclusion": "module",
+      "notices": [
+        {
+          "source": "LICENSE",
+          "file": "zustand-MIT.txt",
+          "sha256": "c1e6e266563517467b1bf874817d23e426f3149252bd7d42758cd697514b8417"
+        }
+      ]
+    }
+  ]
+}

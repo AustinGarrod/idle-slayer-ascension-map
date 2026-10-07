@@ -232,6 +232,7 @@ test('entering history keeps repeat purchases current and removal still cascades
   await page.getByRole('button', { name: 'Remove purchase…', exact: true }).click()
   await expect(page.getByRole('dialog')).toContainText(child.title)
   await page.getByRole('button', { name: 'Apply changes', exact: true }).click()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('idle-slayer-ascension-map.profile.v1')!))).toEqual({ ...initial, epoch: 1 })
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('idle-slayer-ascension-map.profile.v1')!))
   expect(saved.epoch).toBe(1)
   expect(saved.purchases[child.id]).toBeUndefined()
