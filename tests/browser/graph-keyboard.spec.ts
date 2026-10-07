@@ -109,26 +109,28 @@ for (const layout of ['Game Layout', 'Detailed Layout'] as const) {
     })
   }
 
-  test(`${layout} makes every spoiler-visible upgrade keyboard reachable and restores the visible focus universe`, async ({ page }) => {
+  for (const spoilers of [false, true]) test(`${layout} makes every ${spoilers ? 'spoiler-visible' : 'default-visible'} upgrade keyboard reachable and restores the visible focus universe`, async ({ page }) => {
     test.setTimeout(90_000)
     await page.goto('./')
     await page.getByRole('group', { name: 'Map layout' }).getByRole('button', { name: layout, exact: true }).click()
     const shortcut = page.getByRole('button', { name: 'Skip upgrades to camera controls', exact: true })
-    for (const spoilers of [false, true]) {
-      if (spoilers) await showSpoilers(page, true)
-      const visible = visibility(catalog, { ...emptyProfile(catalog.revision), showSpoilers: spoilers })
-      await expect(page.locator('.react-flow__node')).toHaveCount(visible.upgrades.length)
-      await shortcut.focus(); await page.keyboard.press('Tab'); await page.keyboard.press('Home')
-      for (const upgrade of visible.upgrades) {
-        expect(await focusedId(page)).toBe(upgrade.id)
-        await expect(node(page, upgrade.id)).toHaveAttribute('tabindex', '0')
-        await page.keyboard.press('ArrowRight')
-      }
-      expect(await focusedId(page)).toBe(visible.upgrades[0].id)
-      await expect(page.locator('.react-flow__node[tabindex="0"]')).toHaveCount(1)
+    if (spoilers) await showSpoilers(page, true)
+    const visible = visibility(catalog, { ...emptyProfile(catalog.revision), showSpoilers: spoilers })
+    await expect(page.locator('.react-flow__node')).toHaveCount(visible.upgrades.length)
+    await shortcut.focus(); await page.keyboard.press('Tab'); await page.keyboard.press('Home')
+    for (const upgrade of visible.upgrades) {
+      await expect.poll(() => page.evaluate(() => {
+        const focused = document.activeElement as HTMLElement | null
+        return { id: focused?.dataset.id, tabIndex: focused?.getAttribute('tabindex') }
+      })).toEqual({ id: upgrade.id, tabIndex: '0' })
+      await page.keyboard.press('ArrowRight')
     }
-    await node(page, hidden.id).focus()
-    await showSpoilers(page, false)
+    expect(await focusedId(page)).toBe(visible.upgrades[0].id)
+    await expect(page.locator('.react-flow__node[tabindex="0"]')).toHaveCount(1)
+    if (spoilers) {
+      await node(page, hidden.id).focus()
+      await showSpoilers(page, false)
+    }
     await expect(node(page, hidden.id)).toHaveCount(0)
     await expect(page.locator('.react-flow__node[tabindex="0"]')).toHaveCount(1)
     await shortcut.focus(); await page.keyboard.press('Tab')
