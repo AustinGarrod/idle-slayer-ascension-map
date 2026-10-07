@@ -326,7 +326,7 @@ dialog > button { margin: 6px 8px 0 0; }
 .recommendation-activation { color: #e3b7da; }
 .recommendation-source { display: inline-block; min-height: 44px; padding: 8px 0; max-width: 100%; font-size: .8125rem; line-height: 1.5; overflow-wrap: anywhere; }
 .recommendation-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
-.recommendation-actions > button { flex: 1 1 140px; font-size: .875rem; }
+.recommendation-actions > button { flex: 1 1 140px; min-width: 0; max-width: 100%; font-size: .875rem; overflow-wrap: anywhere; }
 .recommendation-alternatives { display: grid; gap: 10px; }
 .recommendation-alternatives > h3 { margin: 0; color: var(--bright-gold); font-size: .875rem; }
 .recommendation-empty { margin: 0; padding: 16px; border: 1px solid #79603b; border-radius: 6px; font-size: .9375rem; line-height: 1.6; }

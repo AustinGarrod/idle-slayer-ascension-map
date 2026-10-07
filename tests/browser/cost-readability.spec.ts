@@ -84,6 +84,13 @@ for (const fontSize of [16, 32]) test.describe(`${fontSize}px browser font`, () 
     await expect(recommendations.locator('.recommendation-main')).toHaveAttribute('data-upgrade-id', key.id)
     await exactCompact(recommendations.locator('.recommendation-cost').getByRole('math'))
     expect(await recommendations.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true)
+    for (const button of await recommendations.locator('.recommendation-actions > button').all()) {
+      await button.scrollIntoViewIfNeeded()
+      expect(await button.evaluate((element) => {
+        const boundary = element.getBoundingClientRect(), range = document.createRange(); range.selectNodeContents(element)
+        return element.scrollWidth <= element.clientWidth + 1 && [...range.getClientRects()].every((box) => box.left >= boundary.left - 1 && box.right <= boundary.right + 1)
+      })).toBe(true)
+    }
     await recommendations.locator('.recommendation-cost').scrollIntoViewIfNeeded(); await page.screenshot({ path: info.outputPath('exact-cost-recommendation.png') })
     await recommendations.getByRole('button', { name: 'Close dialog', exact: true }).click()
     await page.getByRole('button', { name: 'Map options', exact: true }).click()
