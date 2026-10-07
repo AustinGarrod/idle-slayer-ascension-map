@@ -1,4 +1,4 @@
-import { emptyProfile, type Profile } from './types'
+import { emptyProfile, MAX_PROFILE_EPOCH, type Profile } from './types'
 
 export const PROFILE_STORAGE_KEY = 'idle-slayer-ascension-map.profile.v1'
 export const MAX_PROFILE_BYTES = 4 * 1024 * 1024
@@ -63,7 +63,7 @@ function isId(value: string): boolean {
 }
 
 function isEpoch(value: unknown): value is number {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && value <= MAX_PROFILE_EPOCH
 }
 
 function validateProfile(value: unknown): ParseProfileResult {

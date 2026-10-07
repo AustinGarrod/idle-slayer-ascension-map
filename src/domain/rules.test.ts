@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { emptyProfile } from './types'
+import { emptyProfile, MAX_PROFILE_EPOCH } from './types'
+import { exportProfileBackup, parseProfileBackup } from './storage'
 import type { Catalog, Requirement, Upgrade } from './types'
 import { permanentGrants, planAstralActivation, planPurchase, planRemoval, planUltraAscension, searchVisible, visibility } from './rules'
 
@@ -140,6 +141,37 @@ describe('manual Astral activation', () => {
 })
 
 describe('Ultra Ascension', () => {
+  it('refuses the maximum accepted epoch before activating, clearing or changing progress', () => {
+    const profile = { ...emptyProfile('fixture'), epoch: MAX_PROFILE_EPOCH, purchases: {
+      a: { epoch: MAX_PROFILE_EPOCH, active: true }, astral: { epoch: MAX_PROFILE_EPOCH, active: false }, grant: { epoch: 1, active: true }, unknown: { epoch: 0, active: false },
+    }, milestones: { item: true as const } }
+    const before = structuredClone(profile)
+    const backup = exportProfileBackup(profile)
+    expect(backup.ok).toBe(true)
+    if (!backup.ok) throw new Error('The maximum safe epoch must remain supported')
+    expect(parseProfileBackup(backup.text).ok).toBe(true)
+    expect(planUltraAscension(catalog, profile)).toBeNull()
+    expect(profile).toEqual(before)
+    expect(exportProfileBackup(profile)).toEqual(backup)
+  })
+
+  it('allows the final safe increment and produces a valid exportable profile', () => {
+    const profile = { ...emptyProfile('fixture'), epoch: MAX_PROFILE_EPOCH - 1, purchases: {
+      a: { epoch: MAX_PROFILE_EPOCH - 1, active: true }, astral: { epoch: MAX_PROFILE_EPOCH - 1, active: false }, grant: { epoch: 1, active: true }, unknown: { epoch: 0, active: false },
+    }, milestones: { item: true as const } }
+    const reset = planUltraAscension(catalog, profile)!
+    expect(reset.profile.epoch).toBe(MAX_PROFILE_EPOCH)
+    expect(reset.profile.purchases.astral.active).toBe(true)
+    expect(reset.cleared).toContain('a')
+    expect(reset.profile.purchases.unknown).toEqual(profile.purchases.unknown)
+    expect(reset.profile.milestones).toEqual(profile.milestones)
+    const backup = exportProfileBackup(reset.profile)
+    expect(backup.ok).toBe(true)
+    if (!backup.ok) throw new Error('Expected a valid final safe increment')
+    expect(parseProfileBackup(backup.text)).toEqual({ ok: true, profile: reset.profile })
+    expect(planUltraAscension(catalog, reset.profile)).toBeNull()
+  })
+
   it('separates ownership, epoch and activation through repeated resets and grants', () => {
     const result = planPurchase(catalog, emptyProfile('fixture'), 'astral')
     if (result.kind !== 'ready') throw new Error('fixture')

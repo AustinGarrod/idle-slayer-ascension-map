@@ -53,6 +53,8 @@ export interface Catalog {
   }
 }
 
+export const MAX_PROFILE_EPOCH = Number.MAX_SAFE_INTEGER
+
 export interface Profile {
   version: 1
   catalogRevision: string

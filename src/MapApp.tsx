@@ -5,7 +5,7 @@ import type { Node, NodeProps } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import '@fontsource/press-start-2p/latin-400.css'
 import type { Catalog, Profile, Requirement, Upgrade } from './domain/types'
-import { emptyProfile } from './domain/types'
+import { emptyProfile, MAX_PROFILE_EPOCH } from './domain/types'
 import { planAstralActivation, planPurchase, planRemoval, planUltraAscension, satisfies, searchVisible, visibility } from './domain/rules'
 import { formatRequirement } from './domain/requirement-label'
 import { exportProfileBackup, parseProfileBackup, PROFILE_STORAGE_KEY } from './domain/storage'
@@ -419,7 +419,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
   }
   function ultra() {
     const result = planUltraAscension(catalog, profile)
-    if (!result) { setMessage(`Ultra Ascension requires: ${label(catalog.ultraAscension)}.`); return }
+    if (!result) { setMessage(profile.epoch >= MAX_PROFILE_EPOCH ? 'The supported Ultra Ascension count limit has been reached. Progress was not changed; your current backup remains usable.' : `Ultra Ascension requires: ${label(catalog.ultraAscension)}.`); return }
     setMenu(null)
     setPreview({ operation: 'ultra_ascension', title: 'Ultra Ascend?', text: `Start epoch ${result.profile.epoch}. Clear ${result.cleared.length} repeat purchases, activate ${result.activated.length} Astral locks, and retain ${result.granted.length} purchased grant targets. Keep Astral ownership and milestones.`, profile: result.profile, groups: [{ label: 'Repeat purchases cleared', ids: result.cleared }, { label: 'Astral locks activated', ids: result.activated }, { label: 'Purchased grant targets retained', ids: result.granted }] })
   }
