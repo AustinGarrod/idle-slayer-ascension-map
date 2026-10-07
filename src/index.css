@@ -424,3 +424,12 @@ dialog:has(.game-save-import-panel) .dialog-heading { position: sticky; top: -20
 .tracking-status { padding: 10px 12px; border: 1px solid #79603b; border-radius: 4px; background: var(--raised); }
 dialog:has(.privacy-panel) { scroll-padding-top: 76px; }
 dialog:has(.privacy-panel) .dialog-heading { position: sticky; top: -20px; z-index: 1; margin-left: -20px; margin-right: -20px; padding-left: 20px; padding-right: 20px; background: var(--surface); box-shadow: 0 12px var(--surface); }
+/* Optional help stays inside the existing scrollable dialog. */
+dialog:has(.map-help) { overflow-wrap: anywhere; }
+.map-help { font-size: .9375rem; line-height: 1.6; }
+.map-help button { max-width: 100%; font-size: .875rem; }
+.map-help .dialog-actions > button { flex: 1 1 180px; }
+.map-help h3 { margin-top: 1.25rem; }
+.map-help-legend { display: block; }
+.map-help-legend dt { margin-top: .75rem; font-weight: 700; }
+.map-help-legend dd { margin: .25rem 0 0; }
