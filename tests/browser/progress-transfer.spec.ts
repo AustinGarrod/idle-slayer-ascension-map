@@ -49,10 +49,11 @@ test('desktop snapshot opens a mobile preview, cancels safely, then applies and 
   const receiverErrors: string[] = []
   mobileContext.on('page', (receiver) => receiver.on('pageerror', (error) => receiverErrors.push(error.message)))
   try {
-    await mobileContext.addInitScript(({ key, layout, tracking, destination }) => {
+    await mobileContext.addInitScript(({ key, layout, tracking, destination, appOrigin }) => {
+      if (location.origin !== appOrigin) return
       if (localStorage.getItem(key) === null) localStorage.setItem(key, JSON.stringify(destination))
       localStorage.setItem(layout, 'native'); localStorage.setItem(tracking, 'enabled')
-    }, { key: PROFILE_STORAGE_KEY, layout: LAYOUT_PREFERENCE_KEY, tracking: ANALYTICS_PREFERENCE_KEY, destination })
+    }, { key: PROFILE_STORAGE_KEY, layout: LAYOUT_PREFERENCE_KEY, tracking: ANALYTICS_PREFERENCE_KEY, destination, appOrigin: new URL(link).origin })
     const mobile = await mobileContext.newPage(), requests: string[] = []
     mobile.on('request', (request) => requests.push(request.url()))
     await mobile.goto(link)
