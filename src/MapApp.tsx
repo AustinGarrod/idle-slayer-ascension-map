@@ -24,8 +24,9 @@ import { MAX_GAME_SAVE_BYTES } from './domain/save-codec'
 import { GameSaveImportPanel } from './GameSaveImportPanel'
 import { planPriorAscensions } from './domain/prior-ascensions'
 import { PriorAscensionsForm } from './PriorAscensionsForm'
-import { captureProgressTransfer, decodeProgressTransfer, encodeProgressTransfer, progressTransferLink } from './domain/progress-transfer'
+import { decodeProgressTransfer, encodeProgressTransfer, progressTransferLink } from './domain/progress-transfer'
 import type { TransferCapture } from './domain/progress-transfer'
+import type { ProgressTransferInbox } from './progress-transfer-inbox'
 import { createTransferQr } from './domain/transfer-qr'
 import type { TransferQrResult } from './domain/transfer-qr'
 import type { MapLayoutMode } from './domain/map-layout'
@@ -92,7 +93,7 @@ function Dialog({ title, children, close }: { title: string; children: ReactNode
   </dialog>
 }
 
-function Atlas({ catalog, initialTransfer }: { catalog: Catalog; initialTransfer: TransferCapture }) {
+function Atlas({ catalog, transferInbox }: { catalog: Catalog; transferInbox: ProgressTransferInbox }) {
   const profileSession = useMemo(() => createProfileSession({ revision: catalog.revision, storage: () => window.localStorage, locks: () => window.navigator.locks }), [catalog.revision])
   const [profile, setProfile] = useState(() => emptyProfile(catalog.revision))
   const [loaded, setLoaded] = useState(false)
@@ -117,7 +118,6 @@ function Atlas({ catalog, initialTransfer }: { catalog: Catalog; initialTransfer
   const [transferGenerated, setTransferGenerated] = useState<{ link: string; qr: TransferQrResult } | null>(null)
   const [transferPreview, setTransferPreview] = useState<TransferPreview | null>(null)
   const transferRequest = useRef(0)
-  const initialTransferHandled = useRef(false)
   const transferLayoutUndo = useRef(new WeakMap<Profile, { before: MapLayoutMode; after: MapLayoutMode }>())
   const gameImportRequest = useRef(0)
   const restoreRequest = useRef(0)
@@ -494,20 +494,18 @@ function Atlas({ catalog, initialTransfer }: { catalog: Catalog; initialTransfer
       void receiveTransfer(token)
     }
   })
+  const deliverTransferArrival = useEffectEvent(() => {
+    const arrival = transferInbox.take()
+    if (!arrival) return
+    if (arrival.capture) receiveCapturedTransfer(arrival.capture)
+    else if (menu === 'transfer') closeTransfer()
+  })
   useEffect(() => {
-    if (!loaded || initialTransferHandled.current) return
-    initialTransferHandled.current = true
-    if (initialTransfer) receiveCapturedTransfer(initialTransfer)
-  }, [loaded])
-  useEffect(() => {
-    const changed = () => {
-      const received = captureProgressTransfer(window)
-      if (!received) return
-      receiveCapturedTransfer(received)
-    }
-    window.addEventListener('hashchange', changed, true)
-    return () => window.removeEventListener('hashchange', changed, true)
-  }, [])
+    if (!loaded) return
+    const unsubscribe = transferInbox.subscribe(deliverTransferArrival)
+    deliverTransferArrival()
+    return unsubscribe
+  }, [loaded, transferInbox])
   function finishTrackingChange(enabled: boolean) {
     const result = setTrackingPreference(enabled)
     // A fragment-only navigation does not tear down the recorder's listeners.
@@ -768,6 +766,6 @@ function Atlas({ catalog, initialTransfer }: { catalog: Catalog; initialTransfer
   </main></DialogFeedbackContext.Provider>
 }
 
-export default function MapApp({ catalog, initialTransfer = null }: { catalog: Catalog; initialTransfer?: TransferCapture }) {
-  return <ReactFlowProvider><Atlas catalog={catalog} initialTransfer={initialTransfer} /></ReactFlowProvider>
+export default function MapApp({ catalog, transferInbox }: { catalog: Catalog; transferInbox: ProgressTransferInbox }) {
+  return <ReactFlowProvider><Atlas catalog={catalog} transferInbox={transferInbox} /></ReactFlowProvider>
 }

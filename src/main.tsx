@@ -3,13 +3,13 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 import { initializeAnalytics } from './analytics'
-import { captureProgressTransfer } from './domain/progress-transfer'
+import { createProgressTransferInbox } from './progress-transfer-inbox'
 
-const initialTransfer = captureProgressTransfer(window)
-if (initialTransfer?.cleaned !== false) initializeAnalytics()
+const transferInbox = createProgressTransferInbox(window)
+if (transferInbox.trackingSafe) initializeAnalytics()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App initialTransfer={initialTransfer} />
+    <App transferInbox={transferInbox} />
   </StrictMode>,
 )

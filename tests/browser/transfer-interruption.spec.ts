@@ -299,3 +299,35 @@ test('an arrival cancels a pending confirmed conflict write without reviving rec
   await page.getByRole('button', { name: 'Export JSON backup', exact: true }).click()
   expect(JSON.parse(readFileSync((await (await download).path())!, 'utf8'))).toEqual({ ...initial, showSpoilers: false })
 })
+
+test('navigation away cancels a received preview and a pending decode without applying stale progress', async ({ page, baseURL }) => {
+  await seed(page)
+  await page.goto('./')
+  const transfer = await link(baseURL!)
+  await arrive(page, transfer, true)
+  await page.evaluate(() => { location.hash = '#elsewhere' })
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  expect(await saved(page)).toEqual(initial)
+  await page.evaluate(() => {
+    const win = window as Window & { releaseDecode?: () => void; decodeFinished?: boolean }
+    const native = DecompressionStream
+    const ready = new Promise<void>((resolve) => { win.releaseDecode = resolve })
+    window.DecompressionStream = class {
+      readable: ReadableStream<Uint8Array>; writable: WritableStream<BufferSource>
+      constructor(format: CompressionFormat) {
+        const delayed = new TransformStream<BufferSource, BufferSource>({ async transform(chunk, controller) { await ready; controller.enqueue(chunk); win.decodeFinished = true } })
+        this.writable = delayed.writable; this.readable = delayed.readable.pipeThrough(new native(format))
+      }
+    } as unknown as typeof DecompressionStream
+  })
+  await page.evaluate((hash) => { location.hash = hash }, new URL(transfer).hash)
+  await expect(page.getByRole('dialog')).toContainText('Reading transfer locally')
+  await page.evaluate(() => { location.hash = '#left-transfer' })
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await page.evaluate(() => (window as Window & { releaseDecode?: () => void }).releaseDecode?.())
+  await expect.poll(() => page.evaluate(() => (window as Window & { decodeFinished?: boolean }).decodeFinished)).toBe(true)
+  await openAction(page, 'Progress')
+  await expect(page.getByRole('dialog', { name: 'Your progress', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Apply transfer', exact: true })).toHaveCount(0)
+  expect(await saved(page)).toEqual(initial)
+})

@@ -1097,3 +1097,75 @@ test('transfer URL cleanup failure prevents tracker and recorder startup', async
   expect(capture.submissions).toEqual([])
   expect(capture.unexpected).toEqual([])
 })
+
+for (const tracking of ['enabled', 'disabled'] as const) {
+  for (const outcome of ['valid', 'malformed', 'navigate away'] as const) {
+    test(`deferred catalog receives only the latest transfer ${outcome} with tracking ${tracking}`, async ({ page, context, baseURL }) => {
+      const origin = new URL(baseURL!).origin
+      const marker = 'SENTINEL-delayed-transfer-profile-61928'
+      const destination = { ...initial, epoch: 2, purchases: { [catalog.startId]: { epoch: 2, active: true } } }
+      const incoming = { ...initial, epoch: 7, purchases: { [catalog.startId]: { epoch: 7, active: true }, [marker]: { epoch: 3, active: false } } }
+      const older = await encodeProgressTransfer(catalog, { ...incoming, epoch: 8 }, 'native')
+      const latest = await encodeProgressTransfer(catalog, incoming, 'web')
+      if (!older.ok || !latest.ok) throw new Error('Synthetic delayed-transfer fixture failed')
+      const capture = await installLocalRoutes(context, origin)
+      await serveIsolatedApplication(context, origin)
+      let releaseCatalog!: () => void
+      const catalogReady = new Promise<void>((resolve) => { releaseCatalog = resolve })
+      await context.route(`${origin}${appFixturePath}catalog.json`, async (route) => {
+        await catalogReady
+        await route.fulfill({ json: catalog })
+      })
+      await page.addInitScript(({ preferenceKey, profileKey, tracking, destination }) => {
+        localStorage.setItem(preferenceKey, tracking); localStorage.setItem(profileKey, JSON.stringify(destination))
+      }, { preferenceKey, profileKey, tracking, destination })
+      const requests: { url: string; referrer: string | undefined }[] = []
+      page.on('request', (request) => requests.push({ url: request.url(), referrer: request.headers().referer }))
+      await page.goto(outcome === 'valid' ? `${origin}${appFixturePath}` : progressTransferLink(older.token, origin, appFixturePath))
+      await expect(page.getByRole('status')).toHaveText('Loading the native Ascension tree…')
+      expect(new URL(page.url()).hash).toBe('')
+      if (tracking === 'enabled') {
+        await waitForActive(page)
+        await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 2))
+      }
+      // Exercise supersession before either the catalog or Atlas exists. The
+      // early listener must run ahead of the production URL sanitizer.
+      for (const hash of ['#transfer=v1.invalid', `#transfer=${latest.token}`]) {
+        await page.evaluate((value) => { location.hash = value }, hash)
+        await expect.poll(() => new URL(page.url()).hash).toBe('')
+        await expect(page.getByRole('dialog')).toHaveCount(0)
+      }
+      if (outcome === 'malformed') {
+        await page.evaluate(() => { location.hash = '#transfer=v1.invalid' })
+        await expect.poll(() => new URL(page.url()).hash).toBe('')
+      } else if (outcome === 'navigate away') {
+        await page.evaluate(() => { location.hash = '#elsewhere' })
+        await expect.poll(() => new URL(page.url()).hash).toBe(tracking === 'enabled' ? '' : '#elsewhere')
+      }
+      releaseCatalog()
+      await expect(page.locator('.toolbar')).toBeVisible()
+      const receiver = page.getByRole('dialog', { name: 'Transfer map progress', exact: true })
+      if (outcome === 'navigate away') {
+        await expect(page.getByRole('dialog')).toHaveCount(0)
+      } else {
+        await expect(receiver).toBeVisible()
+        await expect(page.getByRole('dialog')).toHaveCount(1)
+        if (outcome === 'valid') {
+          await expect(receiver.getByRole('heading', { name: 'Review transfer', exact: true })).toBeFocused()
+          await expect(receiver.getByRole('row', { name: 'Ultra Ascensions 2 7', exact: true })).toBeVisible()
+        } else {
+          await expect(receiver.locator('.dialog-feedback')).toContainText('incomplete, corrupt or unsupported')
+          await expect(receiver.getByRole('button', { name: 'Apply transfer', exact: true })).toHaveCount(0)
+        }
+        await receiver.getByRole('button', { name: 'Cancel', exact: true }).click()
+        await expect(page.getByRole('dialog')).toHaveCount(0)
+      }
+      expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), profileKey)).toEqual(destination)
+      expect(await page.evaluate((key) => localStorage.getItem(key), preferenceKey)).toBe(tracking)
+      const evidence = JSON.stringify({ submissions: capture.submissions, replay: replayEvents(capture), requests })
+      for (const secret of [marker, older.token, latest.token, 'transfer=']) expect(evidence).not.toContain(secret)
+      if (tracking === 'disabled') { expect(capture.scriptRequests).toEqual([]); expect(capture.submissions).toEqual([]) }
+      expect(capture.unexpected).toEqual([])
+    })
+  }
+}
