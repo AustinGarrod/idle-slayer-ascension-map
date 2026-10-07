@@ -11,6 +11,7 @@ import type { Catalog } from '../../src/domain/types'
 import { emptyProfile } from '../../src/domain/types'
 import { visibility } from '../../src/domain/rules'
 import { encodeGameSaveFixture, nativeSaveFixture } from '../fixtures/game-save'
+import { CHECKPOINT_STORAGE_KEY, emptyCheckpoints, exportCheckpoints } from '../../src/domain/checkpoints'
 
 const fixtureRoot = 'tests/fixtures/umami-3.4.0'
 const provenance = JSON.parse(readFileSync(`${fixtureRoot}/provenance.json`, 'utf8')) as { artifacts: Record<string, string> }
@@ -707,6 +708,49 @@ test('active dialog feedback remains private in actual recorder snapshots and mu
   await expect(page.locator('body')).not.toContainText(fileMarker)
   await expect(page.locator('body')).not.toContainText(readMarker)
   await expect.poll(() => capture.submissions.some((item) => item.payload.name === 'backup_error' && (item.payload.data as Record<string, unknown> | undefined)?.reason === 'read')).toBe(true)
+  expect(capture.unexpected).toEqual([])
+})
+
+test('named checkpoint snapshots and edits stay excluded from actual recorder snapshots, mutations and event data', async ({ page, context, baseURL }) => {
+  const origin = new URL(baseURL!).origin
+  let releaseRecorder!: () => void
+  const recorderReady = new Promise<void>((resolve) => { releaseRecorder = resolve })
+  const capture = await installLocalRoutes(context, origin, { recorderReady })
+  await serveIsolatedApplication(context, origin)
+  const names = ['CHECKPOINT_PRIVATE_STORED_NAME', 'CHECKPOINT_PRIVATE_CAPTURE_NAME', 'CHECKPOINT_PRIVATE_RENAME_NAME']
+  const snapshotProof = 'CHECKPOINT_PUBLIC_SNAPSHOT_PROOF', mutationProof = 'CHECKPOINT_PUBLIC_MUTATION_PROOF'
+  const unknown = 'CHECKPOINT_PRIVATE_UNKNOWN_RECORD', fileMarker = 'CHECKPOINT_PRIVATE_BACKUP_CONTENT'
+  await page.addInitScript(({ key, text }) => localStorage.setItem(key, text), {
+    key: CHECKPOINT_STORAGE_KEY,
+    text: exportCheckpoints({ ...emptyCheckpoints(), entries: [{ id: 'stored', name: names[0], capturedRevision: catalog.revision, profile: { ...initial, purchases: { [unknown]: { epoch: 0, active: false } } } }] }, catalog.revision)!,
+  })
+  await page.goto(`${origin}${appFixturePath}`)
+  await (await openProgress(page)).getByRole('button', { name: 'Progress checkpoints…', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Progress checkpoints', exact: true })
+  await expect(dialog.locator('.checkpoint-list')).toContainText(names[0])
+  await page.evaluate((proof) => {
+    const node = document.createElement('p'); node.id = 'checkpoint-public-proof'; node.textContent = proof
+    document.querySelector('dialog[open]')!.appendChild(node)
+  }, snapshotProof)
+  await waitForActive(page)
+  releaseRecorder()
+  const snapshot = await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 2 && JSON.stringify(event).includes(snapshotProof)))
+  expect(blockedReplayNodes(snapshot).some((node) => node.attributes.class.includes('checkpoint-panel') && !(node.childNodes?.length))).toBe(true)
+  await dialog.getByLabel('Name current checkpoint', { exact: true }).fill(names[1])
+  await dialog.getByRole('button', { name: 'Capture current progress', exact: true }).click()
+  await expect(dialog.getByRole('status', { name: 'Checkpoint storage and actions' })).toContainText('saved on this device')
+  await dialog.getByRole('button', { name: 'Rename checkpoint 2…', exact: true }).click()
+  await dialog.getByLabel('New checkpoint name', { exact: true }).fill(names[2])
+  await dialog.getByRole('button', { name: 'Save checkpoint name', exact: true }).click()
+  await expect(dialog.locator('.checkpoint-list')).toContainText(names[2])
+  await dialog.getByLabel('Progress checkpoints JSON backup', { exact: true }).setInputFiles({ name: 'private-checkpoints.json', mimeType: 'application/json', buffer: Buffer.from(fileMarker) })
+  await expect(dialog).toContainText('not a supported checkpoint collection')
+  await page.locator('#checkpoint-public-proof').evaluate((node, proof) => { node.textContent = proof }, mutationProof)
+  await page.locator('#checkpoint-public-proof').click()
+  const events = await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 3 && JSON.stringify(event).includes(mutationProof)))
+  const evidence = JSON.stringify({ submissions: capture.submissions, replay: events })
+  for (const marker of [...names, unknown, fileMarker, 'private-checkpoints.json']) expect(evidence.includes(marker), 'Checkpoint private content leaked into telemetry').toBe(false)
+  expect(capture.submissions.some((item) => /checkpoint/i.test(String(item.payload.name ?? '')))).toBe(false)
   expect(capture.unexpected).toEqual([])
 })
 

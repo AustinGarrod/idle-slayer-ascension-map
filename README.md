@@ -15,9 +15,11 @@ A free, unofficial companion for Idle Slayer: explore the Ascension tree, record
 
 Use **Map view…** on desktop or **Map options → Overview visible map** on phones to orient within the visible tree. **Return to inspection** or **Refocus selected upgrade** brings back your current target without changing progress.
 
+**Progress → Progress checkpoints…** keeps up to four named, read-only snapshots for comparing recorded ownership, Astral activation, milestones and the UA counter. Both sides use your current map's revealed entries. Checkpoints use separate local storage and a separate JSON export/restore; they never replace active progress or change Undo/Redo. Only uniquely matching operations in this visit's bounded history can explain a difference; portable and prior-visit snapshots establish state, not a game activity log.
+
 **Map help…** in Map options, Progress or About gives optional setup and state guidance. [The player guide](docs/player-guide.md) explains layouts, existing-progress setup, pending Astrals, milestones, reset/history entry, backup/restore and recommendations. [Steam import compatibility](docs/save-import.md) explains supported files and the retained-ownership baseline. The app does not simulate SP balances or Stone allocation.
 
-**Privacy:** the production map starts self-hosted Umami usage analytics and session recording unless disabled through **About & sources → Privacy & tracking**, Do Not Track or Global Privacy Control. Recordings can include visible map progress. Selected saves and JSON backups are excluded and never uploaded; file inputs, search text, counters and import/restore contents are blocked from replay. Layout and tracking preferences are separate from progress. See [privacy details and operator documentation](docs/analytics.md).
+**Privacy:** the production map starts self-hosted Umami usage analytics and session recording unless disabled through **About & sources → Privacy & tracking**, Do Not Track or Global Privacy Control. Recordings can include visible map progress. Selected saves and JSON backups are excluded and never uploaded; file inputs, search text, counters, checkpoint names/snapshots and import/restore contents are blocked from replay. Layout and tracking preferences are separate from progress. See [privacy details and operator documentation](docs/analytics.md).
 
 ## Run locally on Windows
 
