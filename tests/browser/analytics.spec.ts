@@ -859,6 +859,84 @@ test('actual application handlers count confirmed purchase and recommendation on
   expect(capture.unexpected).toEqual([])
 })
 
+test('search events count input edits without counting purchase or undo result recomputation', async ({ page, context, baseURL }) => {
+  const origin = new URL(baseURL!).origin
+  const capture = await installLocalRoutes(context, origin, { recorderBody: '' })
+  await serveIsolatedApplication(context, origin)
+  await page.goto(`${origin}${appFixturePath}`)
+  await expect(page.locator('.toolbar')).toBeVisible()
+  await waitForActive(page)
+  const searches = () => capture.submissions.filter((submission) => submission.type === 'event' && submission.payload.name === 'search_performed')
+  const input = page.getByRole('searchbox')
+  await input.fill(firstUpgrade.title)
+  await expect.poll(() => searches().length).toBe(1)
+  const observed = [searches().length]
+  await page.locator('.search-result').filter({ hasText: firstUpgrade.title }).first().click()
+  await page.getByRole('button', { name: 'Record purchase…', exact: true }).click()
+  await page.getByRole('button', { name: 'Apply purchases', exact: true }).click()
+  await expect(page.locator('.map-summary')).toContainText('1 /')
+  await page.waitForTimeout(750)
+  observed.push(searches().length)
+  const undo = page.getByRole('button', { name: 'Undo', exact: true })
+  if (!await undo.isVisible()) await page.getByRole('button', { name: 'Map options', exact: true }).click()
+  await undo.click()
+  const options = page.getByRole('dialog', { name: 'Map options', exact: true })
+  if (await options.isVisible()) await options.getByRole('button', { name: 'Close dialog', exact: true }).click()
+  await expect(page.locator('.map-summary')).toContainText('0 /')
+  await page.waitForTimeout(750)
+  observed.push(searches().length)
+  expect(observed).toEqual([1, 1, 1])
+  await input.focus()
+  await page.waitForTimeout(750)
+  expect(searches()).toHaveLength(1)
+  await input.fill('   ')
+  await page.waitForTimeout(750)
+  expect(searches()).toHaveLength(1)
+  for (const text of ['Perm', 'Permanent', firstUpgrade.title]) await input.fill(text)
+  await expect.poll(() => searches().length).toBe(2)
+  await page.waitForTimeout(750)
+  expect(searches()).toHaveLength(2)
+  const marker = 'SEARCH_EVENT_PRIVATE_MARKER_DO_NOT_UPLOAD'
+  await input.fill(marker)
+  await expect.poll(() => searches().length).toBe(3)
+  expect(searches().map((event) => event.payload.data)).toEqual([
+    expect.objectContaining({ query_length: '11-30', results: '1-5' }),
+    expect.objectContaining({ query_length: '11-30', results: '1-5' }),
+    expect.objectContaining({ query_length: '31+', results: '0' }),
+  ])
+  const fields = ['app_version', 'catalog_version', 'catalog_revision', 'screen_layout', 'layout', 'spoilers', 'query_length', 'results']
+  for (const event of searches()) expect(Object.keys(event.payload.data as object).sort()).toEqual([...fields].sort())
+  expect(JSON.stringify(capture.submissions)).not.toContain(marker)
+  expect(capture.unexpected).toEqual([])
+})
+
+test('a pending search uses current visible results and context without restarting its debounce', async ({ page, context, baseURL }) => {
+  const origin = new URL(baseURL!).origin
+  const capture = await installLocalRoutes(context, origin, { recorderBody: '' })
+  await serveIsolatedApplication(context, origin)
+  await page.clock.install()
+  await page.goto(`${origin}${appFixturePath}`)
+  await expect(page.locator('.toolbar')).toBeVisible()
+  await waitForActive(page)
+  const other = await context.newPage()
+  await other.goto(`${origin}${fixturePath}`)
+  await page.clock.pauseAt(await page.evaluate(() => Date.now()) + 1000)
+  const searches = () => capture.submissions.filter((submission) => submission.type === 'event' && submission.payload.name === 'search_performed')
+  await page.getByRole('searchbox').fill('Astral')
+  await expect(page.locator('.results-heading')).toContainText('0 visible results')
+  await page.clock.runFor(300)
+  await other.evaluate(({ key, profile }) => localStorage.setItem(key, JSON.stringify(profile)), { key: profileKey, profile: { ...initial, showSpoilers: true } })
+  await expect(page.locator('.results-heading')).toContainText('16 visible results')
+  await page.clock.runFor(200)
+  await expect.poll(() => searches().length).toBe(1)
+  expect(searches()[0].payload.data).toMatchObject({ query_length: '4-10', results: '6-20', spoilers: true })
+  await other.evaluate(({ key, profile }) => localStorage.setItem(key, JSON.stringify(profile)), { key: profileKey, profile: initial })
+  await expect(page.locator('.results-heading')).toContainText('0 visible results')
+  await page.clock.runFor(1000)
+  expect(searches()).toHaveLength(1)
+  expect(capture.unexpected).toEqual([])
+})
+
 test('renamed layout controls retain bounded game and web analytics values', async ({ page, context, baseURL }) => {
   const origin = new URL(baseURL!).origin
   const capture = await installLocalRoutes(context, origin, { recorderBody: '' })

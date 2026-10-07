@@ -43,6 +43,8 @@ The analytics adapter owns tracking. Pure game rules, save decoding and profile 
 
 Search length buckets are `1-3`, `4-10`, `11-30`, `31+`; result buckets are `0`, `1-5`, `6-20`, `21+`. Recommendation positions are 1–3 and basis is `wiki` or `catalog-fallback`. During script startup, the bounded in-memory event queue retains at most 100 entries, drops the oldest on overflow and expires entries after 30 seconds; visibility IDs are checked again at flush. API exceptions/rejections are ignored safely. Runtime failures emit fixed categories at most once per category per 30 seconds and ten times per page, without messages/stacks.
 
+Search events follow deliberate input edits after 500 ms of idle input. Rapid edits coalesce, and an empty/whitespace-only input cancels the pending event. Purchases, Undo, spoiler changes and cross-tab progress updates can recalculate visible results; they update a pending search's bounded result bucket without restarting its timer or counting another search. Focusing or reopening an unchanged query also does not count as new input. Only bounded length/result buckets are retained for that timer.
+
 | Area | Exact event names | Event properties and meaning |
 | --- | --- | --- |
 | Startup and reliability | `app_ready`, `catalog_error`, `runtime_error`, `storage_error`, `storage_recovered` | Fixed `reason`/`action` categories as applicable. Readiness means the catalog and local profile initialization finished; it does not imply a saved edit or a production release. |
