@@ -1,10 +1,11 @@
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 import { runtimeNoticesPlugin } from './scripts/runtime-notices.ts'
+import { pwaPlugin } from './scripts/pwa.ts'
 
 export default defineConfig({
   base: '/idle-slayer-ascension-map/',
-  plugins: [react(), runtimeNoticesPlugin(process.cwd())],
+  plugins: [react(), runtimeNoticesPlugin(process.cwd()), pwaPlugin(process.cwd())],
   server: {
     fs: {
       deny: [
