@@ -5,7 +5,9 @@ import '@xyflow/react/dist/style.css'
 import '@fontsource/press-start-2p/latin-400.css'
 import type { Catalog, Profile, Requirement, Upgrade } from './domain/types'
 import { emptyProfile, MAX_PROFILE_EPOCH } from './domain/types'
-import { planAstralActivation, planPurchase, planRemoval, planUltraAscension, retainedPurchasesOnReset, satisfies, searchVisible, visibility } from './domain/rules'
+import { planAstralActivation, planPurchase, planRemoval, planUltraAscension, retainedPurchasesOnReset, satisfies, visibility } from './domain/rules'
+import { upgradeState } from './domain/discovery'
+import { SearchPanel } from './SearchPanel'
 import { formatRequirement } from './domain/requirement-label'
 import { requirementReviewTarget } from './domain/requirement-view'
 import type { RequirementRoute } from './domain/requirement-view'
@@ -68,8 +70,6 @@ function Atlas({ catalog }: { catalog: Catalog }) {
   const [graphFocus, setGraphFocus] = useState(catalog.startId)
   const graphHasFocus = useRef(false)
   const [detailFocusRevision, setDetailFocusRevision] = useState(0)
-  const [query, setQuery] = useState('')
-  const [queryRevision, setQueryRevision] = useState(0)
   const [searchOpen, setSearchOpen] = useState(false)
   const [menu, setMenuState] = useState<Menu>(null)
   const [gameImport, setGameImport] = useState<{ result: GameSaveImportPreview; original: Profile } | null>(null)
@@ -171,12 +171,6 @@ function Atlas({ catalog }: { catalog: Catalog }) {
   const incoming = visible.connections.filter((edge) => edge.to === detail?.id).map((edge) => index.get(edge.from)!)
   const outgoing = visible.connections.filter((edge) => edge.from === detail?.id).map((edge) => index.get(edge.to)!)
   const related = new Set([...incoming, ...outgoing].map((node) => node.id))
-  const results = useMemo(() => searchVisible(catalog, profile, query), [catalog, profile, query])
-  const latestSearch = useRef<{ query_length: '1-3' | '4-10' | '11-30' | '31+'; results: '0' | '1-5' | '6-20' | '21+' } | null>(null)
-  latestSearch.current = query.trim() ? {
-    query_length: query.length <= 3 ? '1-3' : query.length <= 10 ? '4-10' : query.length <= 30 ? '11-30' : '31+',
-    results: results.length === 0 ? '0' : results.length <= 5 ? '1-5' : results.length <= 20 ? '6-20' : '21+',
-  } : null
   const purchasePlan = purchaseTarget ? planPurchase(catalog, profile, purchaseTarget, choices) : null
   const activeDialogTitle = preview?.title
     ?? (purchasePlan && purchaseTarget ? purchasePlan.kind === 'choice' ? 'Choose a prerequisite path' : purchasePlan.kind === 'blocked' ? 'Explicit progress required' : 'Record purchase?' : null)
@@ -209,13 +203,6 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     syncAnalyticsContext()
     if (loaded && !appReadyReported.current) { appReadyReported.current = true; trackEvent('app_ready') }
   }, [catalog, layoutMode, loaded, profile.showSpoilers, visible])
-  useEffect(() => {
-    if (!queryRevision || !latestSearch.current) return
-    const timer = window.setTimeout(() => {
-      if (latestSearch.current) trackEvent('search_performed', latestSearch.current)
-    }, 500)
-    return () => window.clearTimeout(timer)
-  }, [queryRevision])
   useEffect(() => {
     if (!purchasePlan || !purchaseTarget) { purchaseEventKey.current = ''; return }
     const key = `${purchaseTarget}:${purchasePlan.kind}`
@@ -487,9 +474,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     observer.observe(mapElement.current)
     return () => observer.disconnect()
   }, [loaded])
-  const state = (node: Upgrade) => satisfies({ kind: 'owned', id: node.id }, profile)
-    ? satisfies({ kind: 'active', id: node.id }, profile) ? 'purchased' : 'pending'
-    : satisfies(node.purchase, profile) && satisfies(node.reveal, profile) ? 'available' : 'locked'
+  const state = (node: Upgrade) => upgradeState(node, profile)
   const nodes: UpgradeNode[] = visible.upgrades.map((node) => ({ id: node.id, type: 'upgrade', position: layout.centers.get(node.id)!,
     data: { upgrade: node, state: state(node) }, selected: selected === node.id,
     className: detail && node.id !== detail.id ? related.has(node.id) ? 'node-related' : 'node-muted' : '',
@@ -634,9 +619,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
   return <DialogFeedbackContext.Provider value={{ title: activeDialogTitle, announcement: [...new Set([message, storageError].filter(Boolean))].join(' '), sequence: messageSequence, content: feedbackContent, clear: () => setMessage('') }}><main ref={atlasElement} className="atlas" aria-busy={saving}>
     <header ref={toolbarElement} className="toolbar">
       <div className="brand"><span className="brand-mark" aria-hidden="true">✦</span><div><h1>Ascension Map</h1><p>Idle Slayer · {catalog.gameVersion}</p></div></div>
-      <div className="search-box"><label className="sr-only" htmlFor="search">Search visible upgrade titles</label><span aria-hidden="true">⌕</span><input className="telemetry-private rr-block" id="search" ref={searchInput} type="search" autoComplete="off" placeholder="Find an upgrade…" value={query} onFocus={() => setSearchOpen(true)} onChange={(event) => { setQuery(event.target.value); setQueryRevision((revision) => revision + 1); setSearchOpen(true) }} onKeyDown={(event) => { if (event.key === 'Escape') setSearchOpen(false); if (event.key === 'Enter' && results[0]) { event.preventDefault(); center(results[0].id, 'search', true) } }} />
-        {searchOpen && <div className="search-results" aria-label="Visible upgrade results"><div className="results-heading"><span>{results.length} visible results</span><button onClick={() => setSearchOpen(false)} aria-label="Close search results">×</button></div>{results.slice(0, 40).map((node) => <button className="search-result" key={node.id} onClick={(event) => center(node.id, 'search', event.detail === 0)}><Icon node={node} /><span>{node.title}<small>{cost(node.cost)} SP</small></span></button>)}{results.length > 40 && <p>Refine your search to see more results.</p>}{results.length === 0 && <p>No visible upgrades match.</p>}</div>}
-      </div>
+      <SearchPanel upgrades={visible.upgrades} profile={profile} inputRef={searchInput} open={searchOpen} onOpenChange={setSearchOpen} onSelect={(id, keyboard) => center(id, 'search', keyboard)} />
       <button className="next-upgrade" onClick={() => { setSearchOpen(false); setMenu('recommendations') }}>Next upgrade</button>
       <div className="layout-control" role="group" aria-label="Map layout"><button aria-pressed={layoutMode === 'native'} onClick={() => changeLayout('native')} title="Original game positions">Game Layout</button><button aria-pressed={layoutMode === 'web'} onClick={() => changeLayout('web')} title="Readable dependency layout">Detailed Layout</button></div>
       <label className="spoiler-control desktop-action"><input type="checkbox" disabled={saving} checked={profile.showSpoilers} onChange={(event) => toggleSpoilers(event.target.checked)} />Show spoilers</label>
