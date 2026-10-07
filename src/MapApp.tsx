@@ -85,6 +85,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
   const [selected, setSelected] = useState<string | null>(null)
   const [detailFocusRevision, setDetailFocusRevision] = useState(0)
   const [query, setQuery] = useState('')
+  const [queryRevision, setQueryRevision] = useState(0)
   const [searchOpen, setSearchOpen] = useState(false)
   const [menu, setMenuState] = useState<Menu>(null)
   const [gameImport, setGameImport] = useState<{ result: GameSaveImportPreview; original: Profile } | null>(null)
@@ -166,6 +167,11 @@ function Atlas({ catalog }: { catalog: Catalog }) {
   const outgoing = visible.connections.filter((edge) => edge.from === detail?.id).map((edge) => index.get(edge.to)!)
   const related = new Set([...incoming, ...outgoing].map((node) => node.id))
   const results = useMemo(() => searchVisible(catalog, profile, query), [catalog, profile, query])
+  const latestSearch = useRef<{ query_length: '1-3' | '4-10' | '11-30' | '31+'; results: '0' | '1-5' | '6-20' | '21+' } | null>(null)
+  latestSearch.current = query.trim() ? {
+    query_length: query.length <= 3 ? '1-3' : query.length <= 10 ? '4-10' : query.length <= 30 ? '11-30' : '31+',
+    results: results.length === 0 ? '0' : results.length <= 5 ? '1-5' : results.length <= 20 ? '6-20' : '21+',
+  } : null
   const purchasePlan = purchaseTarget ? planPurchase(catalog, profile, purchaseTarget, choices) : null
   const recommendations = useMemo(() => recommendUpgrades(catalog, profile, wikiPriorities), [catalog, profile])
   const progressStatus = {
@@ -190,13 +196,12 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     if (loaded && !appReadyReported.current) { appReadyReported.current = true; trackEvent('app_ready') }
   }, [catalog, layoutMode, loaded, profile.showSpoilers, visible])
   useEffect(() => {
-    if (!query.trim()) return
-    const timer = window.setTimeout(() => trackEvent('search_performed', {
-      query_length: query.length <= 3 ? '1-3' : query.length <= 10 ? '4-10' : query.length <= 30 ? '11-30' : '31+',
-      results: results.length === 0 ? '0' : results.length <= 5 ? '1-5' : results.length <= 20 ? '6-20' : '21+',
-    }), 500)
+    if (!queryRevision || !latestSearch.current) return
+    const timer = window.setTimeout(() => {
+      if (latestSearch.current) trackEvent('search_performed', latestSearch.current)
+    }, 500)
     return () => window.clearTimeout(timer)
-  }, [query, results])
+  }, [queryRevision])
   useEffect(() => {
     if (!purchasePlan || !purchaseTarget) { purchaseEventKey.current = ''; return }
     const key = `${purchaseTarget}:${purchasePlan.kind}`
@@ -566,7 +571,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
   return <main ref={atlasElement} className="atlas" aria-busy={saving}>
     <header ref={toolbarElement} className="toolbar">
       <div className="brand"><span className="brand-mark" aria-hidden="true">✦</span><div><h1>Ascension Map</h1><p>Idle Slayer · {catalog.gameVersion}</p></div></div>
-      <div className="search-box"><label className="sr-only" htmlFor="search">Search visible upgrade titles</label><span aria-hidden="true">⌕</span><input className="telemetry-private rr-block" id="search" ref={searchInput} type="search" autoComplete="off" placeholder="Find an upgrade…" value={query} onFocus={() => setSearchOpen(true)} onChange={(event) => { setQuery(event.target.value); setSearchOpen(true) }} onKeyDown={(event) => { if (event.key === 'Escape') setSearchOpen(false); if (event.key === 'Enter' && results[0]) { event.preventDefault(); center(results[0].id, 'search', true) } }} />
+      <div className="search-box"><label className="sr-only" htmlFor="search">Search visible upgrade titles</label><span aria-hidden="true">⌕</span><input className="telemetry-private rr-block" id="search" ref={searchInput} type="search" autoComplete="off" placeholder="Find an upgrade…" value={query} onFocus={() => setSearchOpen(true)} onChange={(event) => { setQuery(event.target.value); setQueryRevision((revision) => revision + 1); setSearchOpen(true) }} onKeyDown={(event) => { if (event.key === 'Escape') setSearchOpen(false); if (event.key === 'Enter' && results[0]) { event.preventDefault(); center(results[0].id, 'search', true) } }} />
         {searchOpen && <div className="search-results" aria-label="Visible upgrade results"><div className="results-heading"><span>{results.length} visible results</span><button onClick={() => setSearchOpen(false)} aria-label="Close search results">×</button></div>{results.slice(0, 40).map((node) => <button className="search-result" key={node.id} onClick={(event) => center(node.id, 'search', event.detail === 0)}><Icon node={node} /><span>{node.title}<small>{cost(node.cost)} SP</small></span></button>)}{results.length > 40 && <p>Refine your search to see more results.</p>}{results.length === 0 && <p>No visible upgrades match.</p>}</div>}
       </div>
       <button className="next-upgrade" onClick={() => { setSearchOpen(false); setMenu('recommendations') }}>Next upgrade</button>
