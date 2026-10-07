@@ -151,6 +151,22 @@ test('check refuses pending hashes, changed source bytes and a stale index witho
   assert.deepEqual(f.snapshot(), before)
 })
 
+test('Windows case aliases are rejected before either command writes any artifact', (t) => {
+  const f = fixture(t)
+  assert.equal(f.run('refresh').status, 0)
+  const second = f.add('second-runtime')
+  writeFileSync(join(f.root, 'node_modules/second-runtime/LICENSE'), 'Distinct complete synthetic second notice\n')
+  second.notices[0].file = f.manifest.packages[0].notices[0].file.toUpperCase().replace(/\.TXT$/, '.txt')
+  f.save()
+  const before = f.snapshot()
+  for (const mode of ['check', 'refresh']) {
+    const result = f.run(mode)
+    assert.equal(result.status, 1)
+    assert.match(result.stderr, /Invalid or duplicate reviewed notice file/)
+    assert.deepEqual(f.snapshot(), before, 'case aliases must fail during preflight, before copies or index/manifest writes')
+  }
+})
+
 test('empty upstream notices and invalid commands are refused without writes', (t) => {
   const f = fixture(t)
   writeFileSync(join(f.root, 'node_modules/fixture-runtime/LICENSE'), '')

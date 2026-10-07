@@ -41,18 +41,19 @@ function maintain(root, operation) {
     }
     for (const notice of item.notices) {
       if (!notice || !['LICENSE', 'LICENSE.md', 'THIRD-PARTY-LICENSE'].includes(notice.source)
-        || typeof notice.file !== 'string' || !/^[a-zA-Z0-9_-]+\.txt$/.test(notice.file) || files.has(notice.file)
+        || typeof notice.file !== 'string' || !/^[a-zA-Z0-9_-]+\.txt$/.test(notice.file) || files.has(notice.file.toLowerCase())
         || typeof notice.sha256 !== 'string' || !/^(?:[a-f0-9]{64})?$/.test(notice.sha256)) {
         throw new Error('Invalid or duplicate reviewed notice file: ' + item.name)
       }
-      files.add(notice.file)
+      // Windows aliases ASCII case variants; reject them before planning any writes.
+      files.add(notice.file.toLowerCase())
       const bytes = readFileSync(resolve(root, 'node_modules', item.name, notice.source))
       if (!bytes.length) throw new Error('Empty upstream notice: ' + item.name + '/' + notice.source)
       copies.push({ file: notice.file, bytes })
       if (operation === 'refresh') notice.sha256 = noticeHash(bytes)
     }
   }
-  const unused = readdirSync(directory).filter((file) => file.endsWith('.txt') && !files.has(file)).sort()
+  const unused = readdirSync(directory).filter((file) => file.toLowerCase().endsWith('.txt') && !files.has(file.toLowerCase())).sort()
   if (unused.length) {
     throw new Error('Unreferenced notice files require manual removal review: ' + unused.join(', ') + '. Remove only the confirmed obsolete files from public/licenses, then rerun.')
   }
