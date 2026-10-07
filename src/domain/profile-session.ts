@@ -1,5 +1,5 @@
 import { emptyProfile, type Profile } from './types'
-import { exportProfileBackup, migrateProfile, parseProfileBackup, PROFILE_STORAGE_KEY, type ProfileErrorKind, type ProfileStorageReader, type ProfileStorageWriter } from './storage'
+import { exportProfileBackup, parseProfileBackup, PROFILE_STORAGE_KEY, type ProfileErrorKind, type ProfileStorageReader, type ProfileStorageWriter } from './storage'
 
 export const PROFILE_WRITE_LOCK = `${PROFILE_STORAGE_KEY}.write`
 type Storage = ProfileStorageReader & ProfileStorageWriter
@@ -46,8 +46,8 @@ export function createProfileSession(options: { revision: string; storage: () =>
       return { kind: 'unavailable', error: 'Saved progress could not be read. Current progress remains available in this session.', errorKind: 'storage-read' }
     }
     if (text === null) return { kind: 'valid', text, profile: emptyProfile(options.revision) }
-    const result = parseProfileBackup(text)
-    return result.ok ? { kind: 'valid', text, profile: migrateProfile(result.profile, options.revision) }
+    const result = parseProfileBackup(text, options.revision)
+    return result.ok ? { kind: 'valid', text, profile: result.profile }
       : { kind: 'invalid', text, error: result.error.message, errorKind: result.error.kind }
   }
   function initialize() {

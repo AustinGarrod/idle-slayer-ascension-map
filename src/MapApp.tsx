@@ -477,7 +477,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     let text: string
     try { text = await file.text() } catch { if (request !== restoreRequest.current) return; setMessage('The backup could not be read. Progress was not replaced.'); trackEvent('backup_error', { reason: 'read' }); return }
     if (request !== restoreRequest.current) return
-    const result = parseProfileBackup(text)
+    const result = parseProfileBackup(text, catalog.revision)
     if (!result.ok) { setMessage(result.error.message); trackEvent('backup_error', { reason: result.error.kind }); return }
     setMenu(null)
     setPreview({ operation: 'restore', title: 'Restore progress?', text: `Replace this profile and its stored data with ${Object.keys(result.profile.purchases).length} recorded purchases and ${Object.keys(result.profile.milestones).length} milestones, in epoch ${result.profile.epoch}. Unknown IDs are retained. Undo remains available.`, profile: { ...result.profile, catalogRevision: catalog.revision }, replaceStorage: true })

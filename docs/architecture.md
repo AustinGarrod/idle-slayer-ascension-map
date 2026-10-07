@@ -34,7 +34,7 @@ The version 1 profile continues to accept nonnegative safe-integer epochs throug
 
 ## Storage and migration
 
-`storage.ts` stores version 1 at `idle-slayer-ascension-map.profile.v1`. It validates exact fields, safe IDs, booleans, and nonnegative integer purchase epochs bounded by the profile epoch. Backups have a 4 MiB limit and validate before a restore preview. Catalog migration changes the revision while cloning and retaining every known/unknown purchase and milestone. No earlier profile schema exists; unsupported versions are rejected. Future schema changes need explicit migrations and round-trip/malformed-input tests.
+`storage.ts` stores version 1 at `idle-slayer-ascension-map.profile.v1`. It validates exact fields, safe IDs, booleans, and nonnegative integer purchase epochs bounded by the profile epoch. Backups have a 4 MiB limit on both incoming UTF-8 bytes and the canonical indented save/export representation, checked before a restore preview and again after applying the current catalog revision. Catalog migration changes the revision while cloning and retaining every known/unknown purchase and milestone; a migration that exceeds the portable size limit is refused without replacement. No earlier profile schema exists; unsupported versions are rejected. Future schema changes need explicit migrations and round-trip/malformed-input tests.
 
 Read failures report errors without silently deleting stored data. Write failures keep the in-memory session usable and expose retry/export. A reload restores the last successful save; undo is session-only. Clearing all progress requires a preview and remains undoable. Backups contain progress, never saves or Steam metadata.
 

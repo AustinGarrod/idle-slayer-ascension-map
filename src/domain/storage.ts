@@ -110,7 +110,7 @@ function validateProfile(value: unknown): ParseProfileResult {
 }
 
 /** Parse and validate before replacing the in-memory profile. Unknown IDs remain intact. */
-export function parseProfileBackup(text: string): ParseProfileResult {
+export function parseProfileBackup(text: string, catalogRevision?: string): ParseProfileResult {
   if (new TextEncoder().encode(text).byteLength > MAX_PROFILE_BYTES) {
     return failure('too-large', 'The backup exceeds the 4 MiB limit. Progress was not replaced.')
   }
@@ -120,7 +120,18 @@ export function parseProfileBackup(text: string): ParseProfileResult {
   } catch {
     return failure('invalid-json', 'The backup is not valid JSON. Progress was not replaced.')
   }
-  return validateProfile(value)
+  const validation = validateProfile(value)
+  if (!validation.ok) return validation
+  const profile = catalogRevision === undefined
+    ? validation.profile
+    : migrateProfile(validation.profile, catalogRevision)
+  const portable = exportProfileBackup(profile)
+  if (!portable.ok) {
+    return portable.error.kind === 'too-large'
+      ? failure('too-large', 'The backup exceeds the 4 MiB save and export limit after validation. Progress was not replaced.')
+      : portable
+  }
+  return { ok: true, profile }
 }
 
 /** Produce a portable backup with the same validation applied to imported files. */
@@ -159,9 +170,12 @@ export function loadProfile(storage: ProfileStorageReader, catalogRevision: stri
   if (text === null) return { ok: true, profile: emptyProfile(catalogRevision), source: 'new', migrated: false }
   const parsed = parseProfileBackup(text)
   if (!parsed.ok) return parsed
+  const profile = migrateProfile(parsed.profile, catalogRevision)
+  const portable = exportProfileBackup(profile)
+  if (!portable.ok) return portable
   return {
     ok: true,
-    profile: migrateProfile(parsed.profile, catalogRevision),
+    profile,
     source: 'stored',
     migrated: parsed.profile.catalogRevision !== catalogRevision,
   }
