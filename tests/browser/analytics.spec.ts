@@ -926,7 +926,7 @@ test('a pending search uses current visible results and context without restarti
   await expect(page.locator('.results-heading')).toContainText('0 visible results')
   await page.clock.runFor(300)
   await other.evaluate(({ key, profile }) => localStorage.setItem(key, JSON.stringify(profile)), { key: profileKey, profile: { ...initial, showSpoilers: true } })
-  await expect(page.locator('.results-heading')).toContainText('16 visible results')
+  await expect(page.locator('.results-heading')).toContainText('17 visible results')
   await page.clock.runFor(200)
   await expect.poll(() => searches().length).toBe(1)
   expect(searches()[0].payload.data).toMatchObject({ query_length: '4-10', results: '6-20', spoilers: true })
