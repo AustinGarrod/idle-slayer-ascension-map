@@ -4,6 +4,20 @@ function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 const safeId = (value: unknown): value is string => typeof value === 'string' && /^[a-zA-Z0-9:_-]+$/.test(value) && !['constructor', '__proto__', 'prototype'].includes(value)
+function validSources(value: unknown): boolean {
+  return Array.isArray(value) && value.length > 0 && value.every((source) => {
+    if (!record(source) || typeof source.label !== 'string' || !source.label.trim()) return false
+    if (source.evidence !== undefined && typeof source.evidence !== 'string') return false
+    if (source.url !== undefined) {
+      if (typeof source.url !== 'string' || !source.url.trim()) return false
+      try {
+        const url = new URL(source.url)
+        if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return false
+      } catch { return false }
+    }
+    return true
+  })
+}
 
 /** Validate every browser-facing record before using it, including dependency references. */
 export function catalogErrors(value: unknown): string[] {
@@ -21,13 +35,14 @@ export function catalogErrors(value: unknown): string[] {
     if (!record(node.position) || !Number.isFinite(node.position.x) || !Number.isFinite(node.position.y)) errors.push(`Invalid coordinates ${node.id}.`)
     if (!['repeat', 'permanent', 'astral'].includes(String(node.retention)) || !['immediate', 'after-ultra-ascension'].includes(String(node.activation))) errors.push(`Invalid reset policy ${node.id}.`)
     if (node.activation === 'after-ultra-ascension' && node.retention === 'repeat') errors.push(`Repeat upgrade cannot have an Astral lock ${node.id}.`)
-    if (!Array.isArray(node.sources) || !node.sources.length) errors.push(`Missing source ${node.id}.`)
+    if (!validSources(node.sources)) errors.push(`Invalid source ${node.id}.`)
   }
   for (const item of value.milestones) {
     if (!record(item) || !safeId(item.id)) { errors.push('Invalid milestone identity.'); continue }
     if (milestoneIds.has(item.id)) errors.push(`Duplicate milestone ${item.id}.`)
     milestoneIds.add(item.id)
     if (typeof item.title !== 'string' || !item.title.trim() || typeof item.description !== 'string' || !item.description.trim()) errors.push(`Missing milestone text ${item.id}.`)
+    if (!validSources(item.sources)) errors.push(`Invalid milestone source ${item.id}.`)
   }
   function requirement(item: unknown, path: string, depth = 0) {
     if (depth > 100 || !record(item)) { errors.push(`Invalid requirement ${path}.`); return }

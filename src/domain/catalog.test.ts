@@ -35,6 +35,18 @@ describe('installed-game catalog', () => {
     expect(keys.length).toBeGreaterThan(1)
     expect(new Set(keys.map((node) => node.id)).size).toBe(keys.length)
   })
+  it.each([null, [], 'source', { label: '' }, { label: 3 }, { label: 'Source', url: {} }, { label: 'Source', url: '' }, { label: 'Source', url: '/relative' }, { label: 'Source', url: 'javascript:alert(1)' }, { label: 'Source', url: 'https://user:example@example.test' }, { label: 'Source', evidence: false }].map((source) => [source]))('rejects malformed upgrade and milestone provenance: %j', (source) => {
+    for (const collection of ['upgrades', 'milestones'] as const) {
+      const invalid = structuredClone(catalog)
+      Object.assign(invalid[collection][0], { sources: [source] })
+      expect(catalogErrors(invalid)).toEqual(expect.arrayContaining([expect.stringContaining('source')]))
+    }
+  })
+  it('accepts native evidence-only and safe linked source records', () => {
+    const valid = structuredClone(catalog)
+    valid.upgrades[0].sources = [{ label: 'Reviewed native evidence', evidence: 'Native registry receipt' }, { label: 'Public source', url: 'https://example.test/source' }]
+    expect(catalogErrors(valid)).toEqual([])
+  })
   it('matches the reviewed native registry, coordinates, rules and sprite bytes', () => {
     expect(sha('public/catalog.json')).toBe(receipt.catalogSha256)
     expect(sha('scripts/logic/native-method-receipt.json')).toBe(receipt.nativeMethodsReceiptSha256)
