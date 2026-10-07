@@ -1,4 +1,5 @@
-import { chromium, expect, test, type Page } from '@playwright/test'
+import { expect, test } from './fixtures'
+import { chromium, type Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -306,8 +307,11 @@ test('comparison reflows with actual 32px browser text in portrait and landscape
   await mkdir(join(directory, 'Default'), { recursive: true })
   await writeFile(join(directory, 'Default', 'Preferences'), JSON.stringify({ webkit: { webprefs: { default_font_size: 32 } } }))
   const context = await chromium.launchPersistentContext(directory, { channel: 'chromium', headless: true, ignoreDefaultArgs: ['--hide-scrollbars'], baseURL, viewport: { width: 320, height: 568 }, ...(info.project.name === 'mobile' ? { isMobile: true, hasTouch: true } : {}) })
+  const errors: string[] = []
+  const watch = (page: Page) => page.on('pageerror', (error) => errors.push(error.message))
+  context.pages().forEach(watch); context.on('page', watch)
   try {
-    await context.addInitScript(() => localStorage.setItem('idle-slayer-ascension-map.analytics.v1', 'disabled'))
+    await context.addInitScript(() => { if (location.origin !== 'null') localStorage.setItem('idle-slayer-ascension-map.analytics.v1', 'disabled') })
     await context.route('https://analytics.garrod.house/**', (route) => route.abort())
     const page = await context.newPage()
     await seed(page, { ...initial, showSpoilers: true }, ids(['Limit Break', 'Coimbo Release']))
@@ -334,5 +338,5 @@ test('comparison reflows with actual 32px browser text in portrait and landscape
     await expect(dialog.locator(`article[data-upgrade-id="${largest.id}"]`)).toContainText(cost(largest.cost))
     await page.screenshot({ path: info.outputPath('comparison-32-largest-choice.png') })
     await page.keyboard.press('Escape'); await expect(dialog).toHaveCount(0)
-  } finally { await context.close() }
+  } finally { await context.close(); expect(errors, 'Unhandled browser errors during actual-font comparison').toEqual([]) }
 })
