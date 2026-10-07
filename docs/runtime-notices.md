@@ -49,6 +49,12 @@ node .yarn/releases/yarn-4.13.0.cjs notices:refresh
    obsolete `.txt` file before deleting it from `public/licenses`. The tool reports
    unreferenced filenames and refuses both check and refresh until this review is
    resolved; it does not delete files or remove inventory entries automatically.
+   Destination identities are case-insensitively unique. A case-only rename must
+   also match the actual directory entry before either command proceeds; explicitly
+   rename the reviewed copy through a temporary filename on Windows (for example,
+   `git mv public/licenses/old.txt public/licenses/notice-rename.tmp`, then
+   `git mv public/licenses/notice-rename.tmp public/licenses/Old.txt`). Review both
+   paths first. The tool never silently approves or performs file renames.
 5. Regenerate and inspect the mechanical changes:
 
    ```powershell

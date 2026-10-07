@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, renameSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve, sep } from 'node:path'
 import test from 'node:test'
@@ -175,4 +175,28 @@ test('empty upstream notices and invalid commands are refused without writes', (
   assert.equal(f.run('update').status, 1)
   assert.match(f.run('check', ['--approve-licenses']).stderr, /Usage:/)
   assert.deepEqual(f.snapshot(), before)
+})
+
+test('existing filename casing must be explicitly renamed before portable refresh', (t) => {
+  const f = fixture(t)
+  assert.equal(f.run('refresh').status, 0)
+  const original = f.manifest.packages[0].notices[0].file
+  const reviewed = original[0].toUpperCase() + original.slice(1)
+  f.manifest.packages[0].notices[0].file = reviewed
+  f.save()
+  const before = f.snapshot()
+  for (const mode of ['check', 'refresh']) {
+    const result = f.run(mode)
+    assert.equal(result.status, 1)
+    assert.match(result.stderr, /Case-only notice filename changes require manual rename review/)
+    assert.deepEqual(f.snapshot(), before, 'physical casing mismatch must fail before manifest/index or notice writes')
+  }
+  const directory = join(f.root, 'public/licenses')
+  const intermediate = join(directory, 'reviewed-case-rename.tmp')
+  renameSync(join(directory, original), intermediate)
+  renameSync(intermediate, join(directory, reviewed))
+  assert.equal(f.run('refresh').status, 0)
+  assert.equal(f.run('check').status, 0)
+  assert.ok(readdirSync(directory).includes(reviewed))
+  assert.ok(!readdirSync(directory).includes(original))
 })

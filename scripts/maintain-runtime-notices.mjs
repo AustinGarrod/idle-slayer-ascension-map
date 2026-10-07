@@ -53,7 +53,14 @@ function maintain(root, operation) {
       if (operation === 'refresh') notice.sha256 = noticeHash(bytes)
     }
   }
-  const unused = readdirSync(directory).filter((file) => file.toLowerCase().endsWith('.txt') && !files.has(file.toLowerCase())).sort()
+  const existingNotices = readdirSync(directory).filter((file) => file.toLowerCase().endsWith('.txt'))
+  for (const existing of existingNotices) {
+    const reviewed = copies.find((copy) => copy.file.toLowerCase() === existing.toLowerCase())
+    if (reviewed && reviewed.file !== existing) {
+      throw new Error(`Case-only notice filename changes require manual rename review: ${existing} -> ${reviewed.file}. Rename the reviewed copy explicitly before running check or refresh.`)
+    }
+  }
+  const unused = existingNotices.filter((file) => !files.has(file.toLowerCase())).sort()
   if (unused.length) {
     throw new Error('Unreferenced notice files require manual removal review: ' + unused.join(', ') + '. Remove only the confirmed obsolete files from public/licenses, then rerun.')
   }
