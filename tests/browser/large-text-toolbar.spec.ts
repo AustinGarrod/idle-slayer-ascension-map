@@ -1,4 +1,4 @@
-import { chromium, expect, test as base, type BrowserContext } from '@playwright/test'
+import { chromium, expect, test as base, type BrowserContext, type Page } from '@playwright/test'
 import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { readFileSync } from 'node:fs'
@@ -13,11 +13,15 @@ const test = base.extend({
     await mkdir(join(directory, 'Default'), { recursive: true })
     await writeFile(join(directory, 'Default', 'Preferences'), JSON.stringify({ webkit: { webprefs: { default_font_size: 32 } } }))
     let context: BrowserContext | undefined
+    const errors: string[] = []
+    const watch = (page: Page) => page.on('pageerror', (error) => errors.push(error.message))
     try {
       context = await chromium.launchPersistentContext(directory, {
         channel: 'chromium', headless: true, ignoreDefaultArgs: ['--hide-scrollbars'], baseURL, viewport: { width: 320, height: 568 },
         ...(info.project.name === 'mobile' ? { isMobile: true, hasTouch: true, userAgent: info.project.use.userAgent, deviceScaleFactor: info.project.use.deviceScaleFactor } : {}),
       })
+      context.pages().forEach(watch)
+      context.on('page', watch)
       await context.addInitScript(() => localStorage.setItem('idle-slayer-ascension-map.analytics.v1', 'disabled'))
       await context.route('https://analytics.garrod.house/**', (route) => route.abort())
       const page = await context.newPage()
@@ -27,6 +31,7 @@ const test = base.extend({
       await context?.close()
       if (dirname(resolve(directory)) !== resolve(info.outputDir)) throw new Error('Refusing to remove a browser profile outside this test output directory')
       await rm(directory, { recursive: true, force: true })
+      expect(errors, 'Unhandled browser errors during this large-text scenario').toEqual([])
     }
   },
 })

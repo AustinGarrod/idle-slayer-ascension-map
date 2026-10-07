@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
-import { expect, test, type Page, type BrowserContext } from '@playwright/test'
+import { expect, test } from './fixtures'
+import type { Page, BrowserContext } from '@playwright/test'
 import { emptyProfile, type Catalog, type Profile } from '../../src/domain/types'
 import { planPurchase, visibility } from '../../src/domain/rules'
 import { PROFILE_STORAGE_KEY } from '../../src/domain/storage'
