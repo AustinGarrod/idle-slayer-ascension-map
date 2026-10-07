@@ -22,7 +22,7 @@ const test = base.extend({
       })
       context.pages().forEach(watch)
       context.on('page', watch)
-      await context.addInitScript(() => localStorage.setItem('idle-slayer-ascension-map.analytics.v1', 'disabled'))
+      await context.addInitScript(() => { if (location.origin !== 'null') localStorage.setItem('idle-slayer-ascension-map.analytics.v1', 'disabled') })
       await context.route('https://analytics.garrod.house/**', (route) => route.abort())
       const page = await context.newPage()
       await page.emulateMedia({ reducedMotion: 'reduce' })
