@@ -17,11 +17,26 @@ const reasons = {
 
 export function UARoadmapPanel({ catalog, profile, getProfile, initialId }: { catalog: Catalog; profile: Profile; getProfile: () => Profile; initialId?: string }) {
   const visible = useMemo(() => visibility(catalog, profile), [catalog, profile])
-  const [plans, setPlans] = useState<RoadmapPlan[]>(() => [{ name: '', stages: [{ ...emptyRoadmapStage(), targets: initialId && visible.ids.has(initialId) ? [{ id: initialId, mode: 'acquire' }] : [] }] }])
-  const [active, setActive] = useState(0)
+  const [workspace, setWorkspace] = useState<{ plans: RoadmapPlan[]; active: number }>(() => ({ plans: [{ name: '', stages: [{ ...emptyRoadmapStage(), targets: initialId && visible.ids.has(initialId) ? [{ id: initialId, mode: 'acquire' }] : [] }] }], active: 0 }))
+  const { plans, active } = workspace
   const panel = useRef<HTMLElement>(null), frame = useRef<number | undefined>(undefined)
   const results = useMemo(() => plans.map((plan) => simulateRoadmap(catalog, profile, plan)), [catalog, profile, plans])
-  function update(change: (plan: RoadmapPlan) => RoadmapPlan) { if (getProfile() === profile) setPlans((values) => values.map((plan, index) => index === active ? change(plan) : plan)) }
+  function update(change: (plan: RoadmapPlan) => RoadmapPlan) {
+    if (getProfile() !== profile) return
+    setWorkspace((current) => {
+      if (getProfile() !== profile || current.active !== active) return current
+      const next = change(current.plans[active])
+      return next === current.plans[active] ? current : { ...current, plans: current.plans.map((plan, index) => index === active ? next : plan) }
+    })
+  }
+  function choosePlan(index: number) {
+    setWorkspace((current) => getProfile() !== profile || index < 0 || index >= current.plans.length ? current : { ...current, active: index })
+  }
+  function addPlan() {
+    setWorkspace((current) => getProfile() !== profile || current.plans.length >= ROADMAP_PLAN_LIMIT ? current : {
+      plans: [...current.plans, { name: '', stages: [emptyRoadmapStage()] }], active: current.plans.length,
+    })
+  }
   function clearFocusedTitle() {
     const button = document.activeElement instanceof HTMLElement ? document.activeElement.closest<HTMLElement>('button[data-roadmap-choice]') : null
     if (!button || !panel.current?.contains(button) || !button.matches(':focus-visible')) return
@@ -50,15 +65,15 @@ export function UARoadmapPanel({ catalog, profile, getProfile, initialId }: { ca
     <small>Native game {catalog.gameVersion} · Steam build {catalog.steamBuild}. All names, counts, costs and gates stay within the original current visible map, even after hypothetical receipts or resets. Browse spoilers explicitly outside this dialog for a broader starting view.</small>
     <p>Starting ownership is your actual snapshot, not recovered purchase chronology. Imported saves use the documented synthetic retained-ownership baseline. Later ownership, activation and receipts below are hypothetical stage state.</p>
     <p>No SP/USP balances, profitability, optimal UA timing, Stones, Dark Divinities, minions, quests or Astral Key payouts are modeled.</p>
-    <div className="roadmap-plan-actions" role="group" aria-label="Choose sequence">{plans.map((entry, index) => <button key={index} aria-pressed={active === index} onClick={() => setActive(index)}>{entry.name.trim() || `Unnamed sequence ${index + 1}`}</button>)}
-      {plans.length < ROADMAP_PLAN_LIMIT && <button onClick={() => { if (getProfile() !== profile) return; setPlans((values) => [...values, { name: '', stages: [emptyRoadmapStage()] }]); setActive(plans.length) }}>Add comparison sequence</button>}</div>
+    <div className="roadmap-plan-actions" role="group" aria-label="Choose sequence">{plans.map((entry, index) => <button key={index} aria-pressed={active === index} onClick={() => choosePlan(index)}>{entry.name.trim() || `Unnamed sequence ${index + 1}`}</button>)}
+      {plans.length < ROADMAP_PLAN_LIMIT && <button onClick={addPlan}>Add comparison sequence</button>}</div>
     <label>Plan name<input aria-label="Plan name" maxLength={64} value={plan.name} onChange={(event) => update((value) => ({ ...value, name: event.target.value }))} /></label>
     {!named && <p role="status">Name this sequence deliberately to review its results.</p>}
     <div className="roadmap-summary" aria-label="Named sequence comparison">{plans.map((entry, index) => entry.name.trim() ? <article key={index} data-roadmap-summary={index}><h3>{entry.name}</h3><p>{results[index].complete ? 'Chosen sequence supported by reviewed tree rules' : 'Incomplete sequence; full total withheld'}</p><p>{results[index].cost === null ? <>Shown visible purchase subtotal: <SPCost value={results[index].subtotal} /></> : <>Exact purchase sum across stages: <SPCost value={results[index].cost} /></>}</p></article> : null)}</div>
     {plan.stages.map((stage, position) => <StageEditor key={`${active}/${position}`} catalog={catalog} actual={profile} visible={visible} stage={stage} result={result.stages[position]} position={position} named={named}
-      edit={(change) => update((value) => editRoadmapStage(value, position, change))} intend={(key) => update((value) => intendRoadmapRoute(value, position, key))} />)}
-    <div className="roadmap-plan-actions"><button disabled={plan.stages.length >= ROADMAP_STAGE_LIMIT} onClick={() => update((value) => ({ ...value, stages: [...value.stages, emptyRoadmapStage()] }))}>Add purchase stage</button>
-      <button disabled={plan.stages.length <= 1} onClick={() => update((value) => ({ ...value, stages: value.stages.slice(0, -1) }))}>Remove last stage</button></div>
+      edit={(change) => update((value) => value.stages[position] === stage ? editRoadmapStage(value, position, change) : value)} intend={(key) => update((value) => value.stages[position] === stage ? intendRoadmapRoute(value, position, key) : value)} />)}
+    <div className="roadmap-plan-actions"><button disabled={plan.stages.length >= ROADMAP_STAGE_LIMIT} onClick={() => update((value) => value.stages.length >= ROADMAP_STAGE_LIMIT ? value : { ...value, stages: [...value.stages, emptyRoadmapStage()] })}>Add purchase stage</button>
+      <button disabled={plan.stages.length <= 1} onClick={() => update((value) => value.stages.length <= 1 ? value : { ...value, stages: value.stages.slice(0, -1) })}>Remove last stage</button></div>
     <small>At most four stages, three full reset boundaries and four visible targets per stage. Shared additions count once per stage; reacquiring cleared repeat purchases counts again. Partial or unresolved stages stop future claims and withhold complete totals. Exact catalog sums do not establish affordability or an optimal build.</small>
   </section>
 }

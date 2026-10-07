@@ -179,6 +179,42 @@ test('compact details preserve the native purchase Tab path while auxiliary road
   for (let index = 0; index < 5; index++) { await page.keyboard.press('Tab'); if (await page.getByRole('button', { name: 'Record purchase…', exact: true }).evaluate((button) => button === document.activeElement)) { reached = true; break } }
   expect(reached).toBe(true)
 })
+test('same-task duplicate controls enforce two plans, four stages and one minimum stage', async ({ page }) => {
+  await page.goto('./'); const dialog = await open(page); await dialog.getByRole('textbox', { name: 'Plan name', exact: true }).fill('First bounded sequence')
+  const connected = await dialog.getByRole('button', { name: 'Add comparison sequence', exact: true }).evaluate((element) => { const button = element as HTMLButtonElement; button.click(); const connected = button.isConnected; button.click(); return connected })
+  expect(connected).toBe(true)
+  await expect(dialog.getByRole('group', { name: 'Choose sequence', exact: true }).getByRole('button')).toHaveCount(2)
+  await expect(dialog.getByRole('textbox', { name: 'Plan name', exact: true })).toHaveValue('')
+  await dialog.getByRole('textbox', { name: 'Plan name', exact: true }).fill('Second bounded sequence')
+  await dialog.getByRole('button', { name: 'Add purchase stage', exact: true }).evaluate((element) => { const button = element as HTMLButtonElement; for (let index = 0; index < 7; index++) button.click() })
+  await expect(dialog.locator('[data-roadmap-stage]')).toHaveCount(4); await expect(dialog.getByRole('button', { name: 'Add purchase stage', exact: true })).toBeDisabled()
+  await dialog.getByRole('button', { name: 'Remove last stage', exact: true }).evaluate((element) => { const button = element as HTMLButtonElement; for (let index = 0; index < 8; index++) button.click() })
+  await expect(dialog.locator('[data-roadmap-stage]')).toHaveCount(1); await expect(dialog.getByRole('button', { name: 'Remove last stage', exact: true })).toBeDisabled()
+  expect(await stored(page)).toBeNull(); expect(await page.evaluate((key) => localStorage.getItem(key), GOALS_STORAGE_KEY)).toBeNull()
+})
+test('a queued plan switch rejects the old active plan stage and target handlers', async ({ page }) => {
+  await page.goto('./'); const dialog = await open(page); await dialog.getByRole('textbox', { name: 'Plan name', exact: true }).fill('First sequence'); await add(dialog, 1, 'Permanent Quests')
+  await dialog.getByRole('button', { name: 'Add comparison sequence', exact: true }).click(); await dialog.getByRole('textbox', { name: 'Plan name', exact: true }).fill('Second sequence')
+  const picker = stage(dialog, 1).locator('.roadmap-picker'); await picker.locator('summary').click(); await picker.getByRole('searchbox').fill('Permanent Slayer')
+  const connected = await dialog.evaluate((element, id) => {
+    const first = [...element.querySelectorAll<HTMLButtonElement>('[aria-label="Choose sequence"] button')].find((button) => button.textContent === 'First sequence')!
+    const oldAdd = [...element.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent === 'Add purchase stage')!, oldTarget = element.querySelector<HTMLButtonElement>(`[data-roadmap-choice="${id}"]`)!
+    first.click(); const connected = oldAdd.isConnected && oldTarget.isConnected; oldAdd.click(); oldTarget.click(); return connected
+  }, catalog.startId)
+  expect(connected).toBe(true); await expect(dialog.getByRole('textbox', { name: 'Plan name', exact: true })).toHaveValue('First sequence')
+  await expect(dialog.locator('[data-roadmap-stage]')).toHaveCount(1); await expect(dialog.locator('[data-roadmap-target]')).toHaveCount(1); await expect(dialog.locator(`[data-roadmap-target="${node('Permanent Quests').id}"]`)).toHaveCount(1)
+  await dialog.getByRole('group', { name: 'Choose sequence', exact: true }).getByRole('button', { name: 'Second sequence', exact: true }).click()
+  await expect(dialog.locator('[data-roadmap-stage]')).toHaveCount(1); await expect(dialog.locator('[data-roadmap-target]')).toHaveCount(0); expect(await stored(page)).toBeNull()
+})
+test('a queued removed-stage picker cannot edit the new stage at the same position', async ({ page }) => {
+  await page.goto('./'); const dialog = await open(page); await dialog.getByRole('textbox', { name: 'Plan name', exact: true }).fill('Stage identity guard'); await dialog.getByRole('button', { name: 'Add purchase stage', exact: true }).click()
+  const picker = stage(dialog, 2).locator('.roadmap-picker'); await picker.locator('summary').click(); await picker.getByRole('searchbox').fill('Permanent Slayer')
+  const connected = await dialog.evaluate((element, id) => {
+    const buttons = [...element.querySelectorAll<HTMLButtonElement>('button')], remove = buttons.find((button) => button.textContent === 'Remove last stage')!, add = buttons.find((button) => button.textContent === 'Add purchase stage')!, oldTarget = element.querySelector<HTMLButtonElement>(`[data-roadmap-stage="2"] [data-roadmap-choice="${id}"]`)!
+    remove.click(); add.click(); const connected = oldTarget.isConnected; oldTarget.click(); return connected
+  }, catalog.startId)
+  expect(connected).toBe(true); await expect(dialog.locator('[data-roadmap-stage]')).toHaveCount(2); await expect(stage(dialog, 2).locator('[data-roadmap-target]')).toHaveCount(0); expect(await stored(page)).toBeNull()
+})
 test('roadmap choices, boundaries and comparison remain reachable with real 32px text and native Tab', async ({ baseURL }, info) => {
   const directory = info.outputPath('roadmap-font-profile'); await mkdir(join(directory, 'Default'), { recursive: true }); await writeFile(join(directory, 'Default', 'Preferences'), JSON.stringify({ webkit: { webprefs: { default_font_size: 32 } } }))
   const context = await chromium.launchPersistentContext(directory, { channel: 'chromium', headless: true, ignoreDefaultArgs: ['--hide-scrollbars'], baseURL, viewport: { width: 320, height: 568 }, ...(info.project.name === 'mobile' ? { isMobile: true, hasTouch: true } : {}) })
