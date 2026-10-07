@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { planPurchase, planRemoval, planUltraAscension, satisfies, searchVisible, visibility } from './rules'
+import { planPurchase, planRemoval, planUltraAscension, retainedPurchasesOnReset, satisfies, searchVisible, visibility } from './rules'
 import { emptyProfile, type Catalog, type Profile } from './types'
 
 const catalog = JSON.parse(readFileSync('public/catalog.json', 'utf8')) as Catalog
@@ -149,6 +149,27 @@ describe('reviewed native build 25551532 rules using the complete catalog', () =
     expect(absentTarget.profile.purchases[target]).toBeUndefined()
     expect(absentTarget.granted).not.toContain(target)
   })
+
+  for (const grant of catalog.grants) {
+    if (grant.when.kind !== 'active') throw new Error('Expected reviewed active-source retention')
+    const source = node(grant.when.id)
+    const target = grant.ids[0]
+    it.each(['active', 'pending', 'absent-source', 'absent-target'] as const)(`predicts ${source.title} reset retention with %s ownership without changing progress`, (condition) => {
+      const profile = emptyProfile(catalog.revision)
+      profile.epoch = 1
+      own(profile, ids.ultraAscension)
+      if (condition !== 'absent-source') own(profile, source.id, condition !== 'pending')
+      if (condition !== 'absent-target') own(profile, target)
+      const before = structuredClone(profile)
+      const retained = retainedPurchasesOnReset(catalog, profile)
+      const expected = condition === 'active' || condition === 'pending' && source.activation === 'after-ultra-ascension'
+      expect(retained.has(target)).toBe(expected)
+      const reset = planUltraAscension(catalog, profile)!
+      expect(reset.granted.includes(target)).toBe(expected)
+      expect(reset.profile.purchases[target]).toEqual(expected ? before.purchases[target] : undefined)
+      expect(profile).toEqual(before)
+    })
+  }
 
   it('preserves historical retention on manual removal then reevaluates it at the next Ultra Ascension', () => {
     const reset = planUltraAscension(catalog, resetFixture(true))!

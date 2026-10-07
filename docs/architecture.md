@@ -28,6 +28,8 @@ The source is wiki revision 7187, marked for game 7.0.0, reviewed against the co
 
 Ownership, purchase epoch and activation remain independent. A reset activates eligible owned Astral locks, keeps Astrals, retains existing targets of active native retention sources, clears repeat purchases, keeps milestones and advances the epoch. Retention exceptions never award absent upgrades. Each later reset reevaluates the active source conditions. Native source/target pairs and ordering are documented in scripts/logic/README.md. Unknown IDs survive updates and resets because their future rules are unknown.
 
+Upgrade details use the same Astral activation phase to predict conditional retention of existing purchases, including an owned lock that will activate during reset. The explanation uses generic Astral wording without hidden source titles. An absent repeat target is described as unowned and is never granted by the prediction or reset.
+
 Recording prior Ultra Ascensions enters existing history without applying a reset. Counts cannot be lowered through that control. The app does not model SP/USP balances, Stones, Dark Divinity reset overrides or gameplay effects outside this tree.
 
 The version 1 profile continues to accept nonnegative safe-integer epochs through `Number.MAX_SAFE_INTEGER`. Ultra Ascension refuses an increment at that limit before producing a preview, activating locks or clearing purchases. The previous epoch can still advance to the maximum and remain saveable/exportable. Manual history entry and native import retain their existing 1,000,000 entry bound.
