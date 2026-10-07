@@ -673,6 +673,47 @@ test('catalog parsing errors show only fixed public wording in the actual record
   expect(capture.unexpected).toEqual([])
 })
 
+test('active dialog feedback remains private in actual recorder snapshots and mutations', async ({ page, context, baseURL }) => {
+  const origin = new URL(baseURL!).origin
+  let releaseRecorder!: () => void
+  const recorderReady = new Promise<void>((resolve) => { releaseRecorder = resolve })
+  const capture = await installLocalRoutes(context, origin, { recorderReady })
+  await serveIsolatedApplication(context, origin)
+  const fileMarker = 'MODAL_BACKUP_PRIVATE_CONTENT'
+  const readMarker = 'MODAL_PRIVATE_READ_DETAIL'
+  const snapshotProof = 'DIALOG_FEEDBACK_PUBLIC_SNAPSHOT'
+  const mutationProof = 'DIALOG_FEEDBACK_PUBLIC_MUTATION'
+  const invalidError = 'The backup is not valid JSON. Progress was not replaced.'
+  const readError = 'The backup could not be read. Progress was not replaced.'
+  await page.goto(`${origin}${appFixturePath}`)
+  await expect(page.locator('.toolbar')).toBeVisible()
+  await openProgress(page)
+  await page.getByLabel('Map progress JSON backup', { exact: true }).setInputFiles({ name: 'synthetic-invalid.json', mimeType: 'application/json', buffer: Buffer.from(fileMarker) })
+  await expect(page.getByRole('dialog').locator('.dialog-feedback')).toContainText(invalidError)
+  await page.evaluate((proof) => {
+    const node = document.createElement('p'); node.id = 'dialog-feedback-public-proof'; node.textContent = proof
+    document.querySelector('dialog[open]')!.appendChild(node)
+  }, snapshotProof)
+  await waitForActive(page)
+  releaseRecorder()
+  const snapshot = await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 2 && JSON.stringify(event).includes(snapshotProof)))
+  expect(blockedReplayNodes(snapshot).some((node) => node.attributes.class.includes('dialog-feedback') && !(node.childNodes?.length))).toBe(true)
+  await page.evaluate((marker) => {
+    File.prototype.text = async function () { throw new Error(marker) }
+  }, readMarker)
+  await page.getByLabel('Map progress JSON backup', { exact: true }).setInputFiles({ name: 'synthetic-unreadable.json', mimeType: 'application/json', buffer: Buffer.from('{}') })
+  await expect(page.getByRole('dialog').locator('.dialog-feedback')).toContainText(readError)
+  await page.locator('#dialog-feedback-public-proof').evaluate((node, proof) => { node.textContent = proof }, mutationProof)
+  await page.locator('#dialog-feedback-public-proof').click()
+  const events = await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 3 && JSON.stringify(event).includes(mutationProof)))
+  const evidence = JSON.stringify({ submissions: capture.submissions, replay: events })
+  for (const privateText of [fileMarker, readMarker, invalidError, readError]) expect(evidence).not.toContain(privateText)
+  await expect(page.locator('body')).not.toContainText(fileMarker)
+  await expect(page.locator('body')).not.toContainText(readMarker)
+  await expect.poll(() => capture.submissions.some((item) => item.payload.name === 'backup_error' && (item.payload.data as Record<string, unknown> | undefined)?.reason === 'read')).toBe(true)
+  expect(capture.unexpected).toEqual([])
+})
+
 test('real recorder proves moderate input masking, blocking and safe application save import', async ({ page, context, baseURL }) => {
   const origin = new URL(baseURL!).origin
   let releaseRecorder!: () => void
