@@ -477,3 +477,7 @@ dialog:has(.purchase-confirm-actions) { overflow-wrap: anywhere; }
 @media (max-width: 15rem) {
   .detail-actions { position: static; }
 }
+
+@media (max-width: 68.75em), (max-height: 540px) {
+  .details:not(.expanded) > .detail-secondary { display: none; }
+}
