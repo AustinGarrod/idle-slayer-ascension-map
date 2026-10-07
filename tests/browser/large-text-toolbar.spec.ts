@@ -1,0 +1,61 @@
+import { chromium, expect, test as base, type BrowserContext } from '@playwright/test'
+import { mkdir, rm, writeFile } from 'node:fs/promises'
+import { dirname, join, resolve } from 'node:path'
+
+const test = base.extend({
+  page: async ({ baseURL }, use, info) => {
+    const directory = info.outputPath('chromium-font-profile')
+    await mkdir(join(directory, 'Default'), { recursive: true })
+    await writeFile(join(directory, 'Default', 'Preferences'), JSON.stringify({ webkit: { webprefs: { default_font_size: 32 } } }))
+    let context: BrowserContext | undefined
+    try {
+      context = await chromium.launchPersistentContext(directory, {
+        channel: 'chromium', headless: true, ignoreDefaultArgs: ['--hide-scrollbars'], baseURL, viewport: { width: 320, height: 568 },
+        ...(info.project.name === 'mobile' ? { isMobile: true, hasTouch: true, userAgent: info.project.use.userAgent, deviceScaleFactor: info.project.use.deviceScaleFactor } : {}),
+      })
+      await context.addInitScript(() => localStorage.setItem('idle-slayer-ascension-map.analytics.v1', 'disabled'))
+      await context.route('https://analytics.garrod.house/**', (route) => route.abort())
+      const page = await context.newPage()
+      await page.emulateMedia({ reducedMotion: 'reduce' })
+      await use(page)
+    } finally {
+      await context?.close()
+      if (dirname(resolve(directory)) !== resolve(info.outputDir)) throw new Error('Refusing to remove a browser profile outside this test output directory')
+      await rm(directory, { recursive: true, force: true })
+    }
+  },
+})
+
+for (const layout of ['Game Layout', 'Detailed Layout']) test(`${layout} toolbar reflows with the actual browser default font at 200%`, async ({ page }) => {
+  await page.goto('./')
+  await expect(page.locator('.toolbar')).toBeVisible()
+  await page.evaluate(async () => { await document.fonts.ready })
+  await expect(page.locator('html')).toHaveCSS('font-size', '32px')
+  await expect.poll(() => page.locator('.toolbar').evaluate((toolbar) => {
+    const controls = [...toolbar.querySelectorAll<HTMLElement>('.brand h1, .layout-control button, .mobile-options, .search-box input, .next-upgrade')]
+    const boxes = controls.map((element) => element.getBoundingClientRect())
+    const overflow = controls.filter((element) => element.tagName !== 'INPUT' && (element.scrollWidth > element.clientWidth + 1 || element.scrollHeight > element.clientHeight + 1)).map((element) => element.textContent?.trim())
+    const overlaps = boxes.flatMap((first, index) => boxes.slice(index + 1).filter((second) => first.left < second.right && first.right > second.left && first.top < second.bottom && first.bottom > second.top))
+    return { overflow, overlaps: overlaps.length, inside: boxes.every((box) => box.left >= 0 && box.right <= document.documentElement.clientWidth && box.top >= 0 && box.bottom <= innerHeight), horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth }
+  })).toEqual({ overflow: [], overlaps: 0, inside: true, horizontalOverflow: false })
+  await page.screenshot({ path: test.info().outputPath('toolbar-200-percent.png') })
+
+  await page.getByRole('group', { name: 'Map layout', exact: true }).getByRole('button', { name: layout, exact: true }).click()
+  await expect(page.getByRole('button', { name: layout, exact: true })).toHaveAttribute('aria-pressed', 'true')
+  await page.getByRole('searchbox').fill('Permanent Slayer')
+  await page.locator('.search-result').filter({ hasText: 'Permanent Slayer' }).click()
+  await expect(page.locator('.details h2')).toHaveText('Permanent Slayer')
+  await expect.poll(() => page.locator('.react-flow__node.selected').evaluate((element) => {
+    const rect = element.getBoundingClientRect(), map = element.closest('.map')!.getBoundingClientRect()
+    const overlaps = [...document.querySelectorAll('.camera-controls, .react-flow__attribution')].filter((control) => {
+      const box = control.getBoundingClientRect()
+      return rect.left < box.right && rect.right > box.left && rect.top < box.bottom && rect.bottom > box.top
+    }).map((control) => control.className)
+    return { overlaps, usable: rect.width >= 44 && rect.height >= 44 && rect.left >= map.left && rect.right <= map.right && rect.top >= map.top && rect.bottom <= map.bottom }
+  })).toEqual({ overlaps: [], usable: true })
+  await page.getByRole('button', { name: 'Map options', exact: true }).click()
+  await expect(page.getByRole('dialog', { name: 'Map options', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Close dialog', exact: true }).click()
+  await page.getByRole('button', { name: 'Next upgrade', exact: true }).click()
+  await expect(page.getByRole('dialog', { name: 'Suggested next upgrade', exact: true })).toBeVisible()
+})
