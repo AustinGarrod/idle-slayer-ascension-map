@@ -202,6 +202,13 @@ dialog > button { margin: 6px 8px 0 0; }
 .prior-ascensions input { width: 108px; flex: 0 0 108px; }
 .prior-ascensions input[aria-invalid="true"] { border-color: var(--bright-gold); outline: 1px solid var(--bright-gold); }
 .prior-ascensions button { text-align: left; }
+.progress-transfer { display: flex; flex-direction: column; gap: 12px; font-size: .9375rem; line-height: 1.5; }
+.progress-transfer p { margin: 0; }
+.progress-transfer textarea { display: block; width: 100%; min-height: 88px; margin-top: 6px; padding: 10px; resize: vertical; border: 1px solid var(--frame); border-radius: 4px; color: #f8efd9; background: var(--canvas); font: .8125rem/1.5 monospace; overflow-wrap: anywhere; }
+.progress-transfer dl { margin: 0; }
+.progress-transfer dd { margin: 4px 0 10px; }
+.transfer-qr { align-self: center; width: min(100%, 480px); background: #fff; }
+.transfer-qr svg { display: block; width: 100%; height: auto; }
 .map-options p { margin-bottom: 2px; font-size: .875rem; }
 .map-options .spoiler-control { white-space: normal; }
 .milestone { display: flex; align-items: flex-start; gap: 12px; min-height: 44px; padding: 14px 0; border-top: 1px solid #574631; cursor: pointer; }

@@ -24,6 +24,10 @@ The importer supports the reviewed **Windows Steam 7.2.0** save format. Close th
 
 The selected file is decoded entirely in the browser. It is never uploaded, modified, bundled or stored as a game save. Only the map's recognized progress is retained; account preferences and unrelated native data are discarded. Exact purchase history is unavailable, so active permanent and retained ownership use a documented snapshot baseline. Android progress can be imported from a Steam copy after the game's existing cross-platform sync; direct mobile file access and cloud login are outside this feature. [Format, native evidence and compatibility](docs/save-import.md).
 
+## Copy progress to another device
+
+Open **Progress → Transfer to another device…**, create a snapshot, then scan the QR code with the phone's camera and review it in the browser. **Receive transfer…** accepts a copied link when scanning is unavailable. Applying replaces the complete normalized map profile and layout; cancel keeps current progress, and Undo restores it in this session. Tracking preferences remain independent. Codes and links contain the profile, so share them privately. Large snapshots offer the existing JSON backup fallback. [Transfer format, privacy and validation](docs/progress-transfer.md).
+
 ## Usage analytics and recordings
 
 The production app uses self-hosted [Umami](https://analytics.garrod.house) for page views, bounded interaction events, browser/device and referral/campaign information, approximate location when available, performance data and session recordings. Recordings can include the visible map and its recorded progress. Selected game saves and JSON backups are never uploaded; file inputs, search text, counters and import/restore previews are excluded from replay contents. Heatmaps still collect coarse click and scroll coordinates, including over excluded elements.

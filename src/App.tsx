@@ -4,8 +4,9 @@ import MapApp from './MapApp'
 import { catalogErrors } from './domain/catalog'
 import { ANALYTICS_PREFERENCE_KEY, getTrackingStatus, setTrackingPreference, trackEvent } from './analytics'
 import { PrivacyPanel, trackingDisclosure } from './PrivacyPanel'
+import type { TransferCapture } from './domain/progress-transfer'
 
-export default function App() {
+export default function App({ initialTransfer = null }: { initialTransfer?: TransferCapture }) {
   const [catalog, setCatalog] = useState<Catalog | null>(null)
   const [loadFailed, setLoadFailed] = useState(false)
   const [trackingStatus, setTrackingStatus] = useState(getTrackingStatus)
@@ -26,7 +27,7 @@ export default function App() {
       .catch(() => { if (!controller.signal.aborted) { setLoadFailed(true); trackEvent('catalog_error', { reason: failure }) } })
     return () => controller.abort()
   }, [])
-  if (catalog) return <MapApp catalog={catalog} />
+  if (catalog) return <MapApp catalog={catalog} initialTransfer={initialTransfer} />
   return <main className="loading">
     <h1>Ascension Map</h1>
     <p role="status">{loadFailed ? 'The verified game catalog could not be loaded. Please try again.' : 'Loading the native Ascension tree…'}</p>

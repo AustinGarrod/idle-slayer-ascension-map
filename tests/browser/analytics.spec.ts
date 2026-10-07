@@ -9,6 +9,7 @@ import type { Catalog } from '../../src/domain/types'
 import { emptyProfile } from '../../src/domain/types'
 import { visibility } from '../../src/domain/rules'
 import { encodeGameSaveFixture, nativeSaveFixture } from '../fixtures/game-save'
+import { encodeProgressTransfer, progressTransferLink } from '../../src/domain/progress-transfer'
 
 const fixtureRoot = 'tests/fixtures/umami-3.4.0'
 const provenance = JSON.parse(readFileSync(`${fixtureRoot}/provenance.json`, 'utf8')) as { artifacts: Record<string, string> }
@@ -1044,5 +1045,55 @@ test('unsaved progress opt-out preserves cancellation and exports current memory
   expect(await page.evaluate((key) => localStorage.getItem(key), preferenceKey)).toBe('disabled')
   expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), profileKey)).toEqual(initial)
   expect(capture.scriptRequests).toEqual([])
+  expect(capture.unexpected).toEqual([])
+})
+
+
+test('real recorder excludes transfer URL payloads, QR contents, links and replacement previews', async ({ page, context, baseURL }) => {
+  const origin = new URL(baseURL!).origin
+  const marker = 'SENTINEL-private-transfer-progress-27591'
+  const outgoing = { ...initial, purchases: { [marker]: { epoch: 0, active: false } } }
+  const incoming = { ...initial, epoch: 314159, purchases: { [marker]: { epoch: 2, active: false }, [catalog.startId]: { epoch: 314159, active: true } } }
+  const encoded = await encodeProgressTransfer(catalog, incoming, 'web')
+  if (!encoded.ok) throw new Error(encoded.error)
+  const link = progressTransferLink(encoded.token, origin, appFixturePath)
+  const capture = await installLocalRoutes(context, origin)
+  await serveIsolatedApplication(context, origin)
+  await page.addInitScript(({ key, outgoing }) => localStorage.setItem(key, JSON.stringify(outgoing)), { key: profileKey, outgoing })
+  await page.goto(link)
+  await waitForActive(page)
+  const dialog = page.getByRole('dialog', { name: 'Transfer map progress', exact: true })
+  await expect(dialog.getByRole('heading', { name: 'Review transfer', exact: true })).toBeVisible()
+  expect(new URL(page.url()).hash).toBe('')
+  await expect(dialog).not.toContainText(marker)
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
+  await openProgress(page)
+  await page.getByRole('button', { name: 'Transfer to another device…', exact: true }).click()
+  await page.getByRole('button', { name: 'Create transfer snapshot', exact: true }).click()
+  await expect(page.getByRole('img', { name: 'Progress transfer QR code', exact: true })).toBeVisible()
+  const generatedLink = await page.getByRole('textbox', { name: 'Private transfer link', exact: true }).inputValue()
+  await page.evaluate((proof) => {
+    const button = document.createElement('button'); button.id = 'transfer-public-replay-proof'; button.textContent = proof
+    document.querySelector('dialog')!.appendChild(button)
+  }, publicMarker)
+  await page.locator('#transfer-public-replay-proof').click()
+  const events = await waitForReplayEvents(capture, (events) => events.some((event) => JSON.stringify(event).includes(publicMarker)))
+  const evidence = JSON.stringify({ submissions: capture.submissions, replay: events })
+  for (const privateValue of [marker, encoded.token, generatedLink, '314159']) expect(evidence).not.toContain(privateValue)
+  expect(blockedReplayNodes(events.find((event) => event.type === 2)!).some((node) => node.attributes.class.includes('progress-transfer') && !(node.childNodes?.length))).toBe(true)
+  expect(capture.unexpected).toEqual([])
+})
+
+test('transfer URL cleanup failure prevents tracker and recorder startup', async ({ page, context, baseURL }) => {
+  const origin = new URL(baseURL!).origin
+  const encoded = await encodeProgressTransfer(catalog, initial, 'native')
+  if (!encoded.ok) throw new Error(encoded.error)
+  const capture = await installLocalRoutes(context, origin)
+  await serveIsolatedApplication(context, origin)
+  await page.addInitScript(() => { history.replaceState = () => { throw new DOMException('Synthetic blocked transfer URL cleanup', 'SecurityError') } })
+  await page.goto(progressTransferLink(encoded.token, origin, appFixturePath))
+  await expect(page.getByRole('dialog').locator('.dialog-feedback')).toContainText('Tracking was kept off')
+  expect(capture.scriptRequests).toEqual([])
+  expect(capture.submissions).toEqual([])
   expect(capture.unexpected).toEqual([])
 })

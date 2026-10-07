@@ -62,6 +62,8 @@ An applied event means the current in-memory map session changed after confirmat
 
 Cross-tab recovery uses the same bounded recovery events and storage error categories. Conflict summaries and replacement previews are replay-blocked like import/restore previews; stored text, unknown IDs and full profiles never enter their DOM or event properties. A pending profile write can be cancelled before a privacy reload, and a held write lock promptly exposes the existing export/reload/cancel choices rather than blocking opt-out.
 
+QR progress transfer captures and removes its URL fragment before analytics startup; failed cleanup suppresses tracker/recorder initialization. Same-document transfers use a capture-phase hash listener and the existing dirty-URL suspension. QR codes, generated links, paste fields, replacement previews and copy feedback are inside `.telemetry-private rr-block`. Only the bounded `transfer` panel value is added; no profile, encoded link, token or exact counter becomes an event property. The destination tracking preference is never included or overwritten. Local real-recorder fixtures verify content and URL exclusions. [Transfer privacy contract](progress-transfer.md).
+
 ## Private Umami setup and reports
 
 Use Chrome to inspect and configure the existing website. The board and reports remain private; do not enable website/report share links. The definitions below were configured and read back on October 5–6, 2026. Empty reports do not establish that production telemetry arrived.
