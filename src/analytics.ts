@@ -69,7 +69,7 @@ const enums: Record<string, readonly string[]> = {
   phase: ['previewed', 'applied', 'cancelled'],
   source: ['map', 'search', 'neighbor', 'recommendation', 'start', 'details', 'progress', 'milestones', 'keyboard', 'pointer', 'controls', 'about'],
   action: ['zoom_in', 'zoom_out', 'zoom', 'pan', 'pan_zoom', 'navigation_toggle', 'return_start', 'wiki', 'github', 'license', 'game', 'other', 'load', 'save', 'retry', 'confirm', 'cancel', 'open', 'close', 'purchase', 'show'],
-  panel: ['options', 'progress', 'milestones', 'about', 'recommendations', 'game-import', 'privacy'],
+  panel: ['options', 'progress', 'milestones', 'about', 'recommendations', 'game-import', 'privacy', 'keyboard-help'],
   layout: ['web', 'game'],
   reason: ['network', 'validation', 'read', 'size', 'stale', 'milestone', 'pending', 'reveal', 'runtime', 'unhandled-rejection', 'unavailable', 'invalid-json', 'invalid-profile', 'too-large', 'storage-read', 'storage-write', 'wiki', 'catalog-fallback', 'all-owned', 'blocked'],
   query_length: ['1-3', '4-10', '11-30', '31+'],

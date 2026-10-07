@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createProfileSession, PROFILE_WRITE_LOCK, type ProfileLocks } from './profile-session'
 import { emptyProfile, type Profile } from './types'
-import { exportProfileBackup, PROFILE_STORAGE_KEY } from './storage'
+import { exportProfileBackup, MAX_PROFILE_BYTES, parseProfileBackup, PROFILE_STORAGE_KEY } from './storage'
 
 const profile = (id: string): Profile => ({ ...emptyProfile('fixture'), purchases: { [id]: { epoch: 0, active: true } } })
-function fixture(initial: string | null = null, locks?: ProfileLocks | false) {
+function fixture(initial: string | null = null, locks?: ProfileLocks | false, revision = 'fixture') {
   let stored = initial
   let unavailable = false
   let denyWrites = false
@@ -13,7 +13,7 @@ function fixture(initial: string | null = null, locks?: ProfileLocks | false) {
     setItem: vi.fn((key: string, text: string) => { if (denyWrites) throw new Error('Synthetic quota failure'); expect(key).toBe(PROFILE_STORAGE_KEY); stored = text }),
   }
   const coordination: ProfileLocks = { request: vi.fn(async (_name, _options, callback) => callback({})) }
-  const session = createProfileSession({ revision: 'fixture', storage: () => storage, locks: () => locks === false ? undefined : locks ?? coordination })
+  const session = createProfileSession({ revision, storage: () => storage, locks: () => locks === false ? undefined : locks ?? coordination })
   session.initialize()
   return { session, storage, coordination, stored: () => stored, external: (text: string | null) => { stored = text }, failReads: (failed = true) => { unavailable = failed }, failWrites: (failed = true) => { denyWrites = failed } }
 }
@@ -25,6 +25,75 @@ function delayedLocks() {
 }
 
 describe('coordinated profile persistence', () => {
+  it('loads and migrates every portable field without rewriting saved input', () => {
+    const incoming: Profile = {
+      ...emptyProfile('older'), epoch: 3, showSpoilers: true,
+      purchases: { known: { epoch: 3, active: true }, unknown: { epoch: 1, active: false } },
+      milestones: { known: true, unknown: true },
+    }
+    for (const revision of ['older', 'newer']) {
+      const text = JSON.stringify(incoming)
+      const f = fixture(text, undefined, revision)
+      expect(f.session.getState()).toMatchObject({ profile: { ...incoming, catalogRevision: revision }, persistence: 'saved', dirty: false, writable: true })
+      expect(f.storage.getItem).toHaveBeenCalledWith(PROFILE_STORAGE_KEY)
+      expect(f.storage.setItem).not.toHaveBeenCalled()
+      expect(f.stored()).toBe(text)
+    }
+  })
+
+  it('retains raw corrupt input without treating it as absent storage', () => {
+    const text = '{corrupt}'
+    const f = fixture(text)
+    expect(f.session.getState()).toMatchObject({ persistence: 'failed', writable: false, errorKind: 'invalid-json' })
+    expect(f.storage.setItem).not.toHaveBeenCalled()
+    expect(f.stored()).toBe(text)
+  })
+
+  it('refuses a migration that exceeds the portable limit without replacing saved input', () => {
+    const incoming = emptyProfile('a')
+    const bytes = () => Buffer.byteLength(JSON.stringify(incoming, null, 2))
+    for (let index = 0; index < 4_000; index++) incoming.milestones[`future-${index}-${'x'.repeat(1_000)}`] = true
+    let index = 0
+    while (MAX_PROFILE_BYTES - bytes() > 64) {
+      const prefix = `padding-${index++}-`
+      const length = Math.min(1_024, MAX_PROFILE_BYTES - bytes() - 32)
+      incoming.milestones[prefix + 'x'.repeat(length - prefix.length)] = true
+    }
+    const text = JSON.stringify(incoming)
+    expect(parseProfileBackup(text).ok).toBe(true)
+    const f = fixture(text, undefined, 'b'.repeat(512))
+    expect(f.session.getState()).toMatchObject({ persistence: 'failed', writable: false, errorKind: 'too-large' })
+    expect(f.stored()).toBe(text)
+    expect(f.storage.setItem).not.toHaveBeenCalled()
+  })
+
+  it('round trips a large accepted unknown-ID profile through the coordinated save boundary', async () => {
+    const incoming = emptyProfile('fixture')
+    for (let index = 0; index < 55_000; index++) incoming.purchases[`future-${index}`] = { epoch: 0, active: false }
+    const parsed = parseProfileBackup(JSON.stringify(incoming))
+    if (!parsed.ok) throw new Error('Expected an accepted backup')
+    const f = fixture()
+    expect(f.session.apply(parsed.profile)).toBe(true)
+    await settled()
+    const exported = exportProfileBackup(parsed.profile)
+    if (!exported.ok) throw new Error('Expected export success')
+    expect(f.stored()).toBe(exported.text)
+    expect(parseProfileBackup(f.stored()!)).toEqual(parsed)
+    expect(f.session.getState()).toMatchObject({ persistence: 'saved', dirty: false })
+    expect(f.coordination.request).toHaveBeenCalledWith(PROFILE_WRITE_LOCK, { mode: 'exclusive', ifAvailable: true }, expect.any(Function))
+  })
+
+  it('refuses malformed runtime progress at the supported save boundary', async () => {
+    const f = fixture(JSON.stringify(profile('saved')))
+    const malformed = { ...profile('local'), epoch: -1 }
+    f.session.apply(malformed)
+    await settled()
+    expect(f.session.getState()).toMatchObject({ profile: malformed, dirty: true, persistence: 'failed', errorKind: 'invalid-profile' })
+    expect(f.storage.setItem).not.toHaveBeenCalled()
+    expect(f.coordination.request).not.toHaveBeenCalled()
+    expect(f.stored()).toBe(JSON.stringify(profile('saved')))
+  })
+
   it('distinguishes checking, no saved profile, a loaded profile and unreadable progress', () => {
     const storage = { getItem: () => null, setItem: vi.fn() }
     const checking = createProfileSession({ revision: 'fixture', storage: () => storage, locks: () => undefined })

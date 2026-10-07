@@ -16,11 +16,10 @@ import struct
 from decimal import Decimal
 from pathlib import Path
 
+from private_paths import PRIVATE_ROOT, REPOSITORY, only_private_output
+
 import UnityPy
 from UnityPy.helpers.TypeTreeGenerator import TypeTreeGenerator
-
-REPOSITORY = Path(__file__).resolve().parents[2]
-PRIVATE_ROOT = (REPOSITORY / ".local-game").resolve()
 
 
 def sha256(path: Path) -> str:
@@ -44,13 +43,6 @@ def decimal_string(value: float) -> str:
     if not value >= 0 or not value < float("inf"):
         raise ValueError("Cost must be finite and non-negative")
     return format(Decimal(str(value)), "f").split(".")[0]
-
-
-def only_private_output(path: Path) -> Path:
-    resolved = path.resolve()
-    if not resolved.is_relative_to(PRIVATE_ROOT) or resolved == PRIVATE_ROOT:
-        raise ValueError("Extraction output must be a child of the repository .local-game directory")
-    return resolved
 
 
 def main() -> None:
