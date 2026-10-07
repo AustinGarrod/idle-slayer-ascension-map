@@ -481,6 +481,10 @@ dialog:has(.map-help) { overflow-wrap: anywhere; }
 .goals-panel .dialog-actions button { flex: 1 1 9rem; }
 dialog:has(.purchase-confirm-actions) { overflow-wrap: anywhere; }
 
+.upgrade-reference { margin: 16px 0; padding: 12px 0; border-top: 1px solid #574631; overflow-wrap: anywhere; font-size: .875rem; }
+.upgrade-reference h3 { color: var(--muted); font-size: .875rem; }
+.upgrade-reference button, .upgrade-reference a { display: block; max-width: 100%; min-height: 44px; margin: 8px 0; padding: 10px; font: inherit; overflow-wrap: anywhere; }
+.upgrade-reference textarea { width: 100%; min-height: 100px; font: inherit; background: var(--raised); color: inherit; }
 /* Large browser text leaves too little width for a sticky inspector action rail. */
 @media (max-width: 15rem) {
   .detail-actions { position: static; }

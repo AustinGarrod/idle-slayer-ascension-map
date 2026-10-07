@@ -214,6 +214,26 @@ test('successive suggestion confirmation stays readable at the actual 200% brows
 })
 
 
+test('public reference copying and manual selection reflow at the actual 200% browser font', async ({ page }) => {
+  const catalog = JSON.parse(readFileSync('public/catalog.json', 'utf8')) as Catalog
+  await page.addInitScript(() => Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async () => { throw new Error('Synthetic clipboard refusal') } } }))
+  await page.goto(`./#upgrade=${catalog.startId}&catalog=${catalog.revision}`)
+  await expect(page.locator('html')).toHaveCSS('font-size', '32px')
+  await expect(page.locator('.details h2')).toHaveText('Permanent Slayer')
+  await page.getByRole('button', { name: 'Show details', exact: true }).click()
+  const region = page.getByRole('region', { name: 'Share upgrade reference', exact: true })
+  const copy = region.getByRole('button', { name: 'Copy upgrade reference', exact: true })
+  await copy.scrollIntoViewIfNeeded()
+  expect(await copy.evaluate((element) => { const r = element.getBoundingClientRect(), range = document.createRange(); range.selectNodeContents(element); return r.width >= 44 && r.height >= 44 && [...range.getClientRects()].every((b) => b.left >= r.left - 1 && b.right <= r.right + 1) })).toBe(true)
+  await copy.click()
+  await region.getByRole('button', { name: 'Select reference link', exact: true }).click()
+  const input = region.getByRole('textbox', { name: 'Upgrade reference link', exact: true })
+  const link = await input.inputValue()
+  expect(new URL(link).hash).toBe(`#upgrade=${catalog.startId}&catalog=${catalog.revision}`)
+  expect(await input.evaluate((element: HTMLTextAreaElement) => [element.selectionStart, element.selectionEnd])).toEqual([0, link.length])
+  expect(await page.locator('.details').evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true)
+  expect(await page.evaluate(() => localStorage.getItem('idle-slayer-ascension-map.profile.v1'))).toBeNull()
+})
 test('prior ascension history keeps its input and actions inside a narrow large-text dialog', async ({ page }) => {
   await page.goto('./')
   await expect(page.locator('html')).toHaveCSS('font-size', '32px')

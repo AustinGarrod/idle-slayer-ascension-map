@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { KeyboardEvent } from 'react'
 import { Background, MarkerType, ReactFlow, ReactFlowProvider, useReactFlow } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
@@ -45,12 +45,14 @@ import { useCheckpointSession } from './useCheckpointSession'
 import { CheckpointPanel } from './CheckpointPanel'
 import { useComparisonSession } from './useComparisonSession'
 import { SavedComparisonPanel } from './SavedComparisonPanel'
+import { UpgradeReference } from './UpgradeReference'
+import { getUpgradeReference, subscribeUpgradeReference } from './upgrade-reference-receiver'
 import { GoalsPanel } from './GoalsPanel'
 import { useGoals } from './useGoals'
 
 type Preview = { operation: AnalyticsOperation | 'prior_ascensions'; title: string; text: string; profile: Profile; changes?: string[]; groups?: { label: string; ids: string[] }[]; replaceStorage?: boolean; upgradeId?: string; milestoneId?: string; sessionVersion?: number; resolution?: 'saved' | 'local'; comparison?: Omit<ProgressComparisonProps, 'catalog'> }
 type Menu = 'options' | 'progress' | 'milestones' | 'about' | 'recommendations' | 'game-import' | 'privacy' | 'keyboard-help' | null
-type SelectionSource = 'map' | 'search' | 'neighbor' | 'recommendation' | 'start' | 'keyboard'
+type SelectionSource = 'map' | 'search' | 'neighbor' | 'recommendation' | 'start' | 'keyboard' | 'reference'
 const menuTitles: Record<Exclude<Menu, null>, string> = { options: 'Map options', progress: 'Your progress', milestones: 'Milestones', about: 'About this map', recommendations: 'Suggested next upgrade', 'game-import': 'Import game progress', privacy: 'Privacy & tracking', 'keyboard-help': 'Map help' }
 const graphKeyboardHelp = 'Arrow Right or Down: next visible upgrade. Arrow Left or Up: previous. Home or End: first or last. Enter or Space: select. Escape: deselect. Tab: leave upgrades for camera controls. Shift+Tab: return to the map shortcut. Upgrades are browsed in catalog order; tree positions stay fixed. Directional pan controls close during keyboard exploration.'
 
@@ -366,7 +368,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     recenterOnMapResize.current = true
     // Docked details resize the canvas. Wait for its new dimensions before centering.
     window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
-      if (request !== cameraRequest.current) return
+      if (request !== cameraRequest.current || !visibility(catalog, profileSession.getState().profile).ids.has(id)) return
       const map = mapElement.current?.getBoundingClientRect()
       const camera = mapElement.current?.querySelector('.camera-controls')?.getBoundingClientRect()
       const attribution = mapElement.current?.querySelector('.react-flow__attribution')?.getBoundingClientRect()
@@ -409,10 +411,22 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     keyboardSearchDetails.current = focusDetails
     if (focusDetails) setDetailFocusRevision((revision) => revision + 1)
     if (!selected) setDetailExpanded(false)
-    if (reportSelection && lastSelection.current !== id) trackEvent('upgrade_selected', { upgrade_id: id, source })
+    if (reportSelection && source !== 'reference' && lastSelection.current !== id) trackEvent('upgrade_selected', { upgrade_id: id, source })
     lastSelection.current = id
     setGraphFocus(id); setSelected(id); setSearchOpen(false); moveCamera(id)
   }
+  const referenceDelivery = useSyncExternalStore(subscribeUpgradeReference, getUpgradeReference, () => null)
+  const handledReference = useRef(0)
+  useEffect(() => {
+    if (!loaded || !referenceDelivery || referenceDelivery.sequence === handledReference.current) return
+    if (profileSession.getState().version !== sessionState.version) return
+    handledReference.current = referenceDelivery.sequence
+    const reference = referenceDelivery.reference
+    if (reference.kind === 'invalid') { setMessage('This upgrade reference is invalid. Your progress and spoiler setting were kept.'); return }
+    if (!visible.ids.has(reference.id)) { setMessage('The referenced upgrade is unavailable under your current spoiler setting, or is missing from this catalog. Your progress was kept.'); return }
+    center(reference.id, 'reference', true)
+    setMessage(reference.revision === catalog.revision ? 'Upgrade reference opened using your own recorded progress.' : 'This reference uses a different catalog revision. Upgrade facts follow the current catalog; your progress was kept.')
+  }, [referenceDelivery, loaded, sessionState.version, catalog, visible.ids])
   function focusGraphUpgrade(id: string) {
     leaveOverview()
     const node = Array.from(mapElement.current?.querySelectorAll<HTMLElement>('.react-flow__node') ?? []).find((element) => element.dataset.id === id)
@@ -763,7 +777,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
         <div className="detail-actions">
         {profile.purchases[detail.id] ? <button className="danger full" disabled={saving} onClick={() => previewRemoval(detail.id)}>Remove purchase…</button> : <button className="primary full" disabled={saving} onClick={() => startPurchase(detail.id)}>Record purchase…</button>}
         {profile.purchases[detail.id] && detail.activation === 'after-ultra-ascension' && !profile.purchases[detail.id].active && <button className="full" disabled={saving} onClick={() => previewAstralActivation(detail.id)}>Already activated…</button>}
-        </div><div className="detail-secondary"><ExactCostDetails key={detail.id} value={detail.cost} upgradeId={detail.id} /><button onClick={() => openComparison(detail.id)}>Compare this upgrade…</button></div></aside>}
+        </div><div className="detail-secondary"><ExactCostDetails key={`cost:${detail.id}`} value={detail.cost} upgradeId={detail.id} /><button onClick={() => openComparison(detail.id)}>Compare this upgrade…</button><UpgradeReference key={`reference:${detail.id}`} catalog={catalog} upgrade={detail} /></div></aside>}
     </div>
     <footer><span>Unofficial companion · {progressStatus}</span>{historyControls}<button onClick={() => setMenu('keyboard-help')}>Map help…</button><button onClick={() => setMenu('about')}>About & sources</button><button onClick={() => setMenu('privacy')}>Privacy & tracking</button></footer>
     {!activeDialogTitle && <p className="sr-only" role="status" aria-label="Map action feedback">{message === storageError ? '' : message}</p>}{!activeDialogTitle && message !== storageError && message && toastVisible && <div className="toast" onClick={() => setMessage('')}>{message}<button aria-label="Dismiss status" onClick={() => setMessage('')}>×</button></div>}
