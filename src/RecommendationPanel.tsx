@@ -45,7 +45,6 @@ export function RecommendationPanel({ catalog, recommendations, onSelect, onPurc
   const alternatives = remaining.slice(0, 2)
   return <div className="recommendation-panel">
     <p className="recommendation-context">{recommendations.status === 'wiki' ? `Wiki guide ${wikiSource.gameVersion} priorities · ` : ''}Native costs and requirements: game {catalog.gameVersion}.</p>
-    {primary && <p className="recommendation-context">Compare any suggestion, then review its purchase. Apply and continue suggestions returns here after that single confirmation; each next purchase needs its own review.</p>}
     {primary ? <>
       <RecommendationCard suggestion={primary} primary onSelect={onSelect} onPurchase={onPurchase} />
       {alternatives.length > 0 && <section className="recommendation-alternatives" aria-labelledby={alternativesId}>
@@ -55,6 +54,7 @@ export function RecommendationPanel({ catalog, recommendations, onSelect, onPurc
     </> : <div className="recommendation-empty"><p>{recommendations.status === 'all-owned' ? 'Every visible upgrade is already recorded as owned. There are no visible purchase suggestions.' : 'No visible upgrade meets its native reveal and purchase requirements in your recorded progress.'}</p>{blockedUpgrade && <><button onClick={() => onReviewRequirements(blockedUpgrade.id)}>Review requirements for {blockedUpgrade.title}</button><small>This visible upgrade is a starting point for reviewing recorded requirements, not a purchase suggestion.</small></>}</div>}
     <details className="recommendation-method">
       <summary>How suggestions work</summary>
+      <p>Compare any suggestion, then review its purchase. Apply and continue suggestions returns here after that single confirmation; each next purchase needs its own review.</p>
       <p>Suggestions follow the reviewed wiki order among upgrades whose native reveal and purchase requirements are met in your recorded progress. If none of those upgrades appears in the guide, the fallback orders them by exact native cost. Showing a suggestion on the map does not change progress.</p>
       <p>{recommendations.caveat}</p>
       <p>Ordering adapted from Idle Slayer Wiki contributors ({wikiSource.license}); native effects, costs and requirements come from the game.</p>

@@ -436,3 +436,5 @@ dialog:has(.map-help) { overflow-wrap: anywhere; }
 .map-help-legend { display: block; }
 .map-help-legend dt { margin-top: .75rem; font-weight: 700; }
 .map-help-legend dd { margin: .25rem 0 0; }
+
+dialog:has(.purchase-confirm-actions) { overflow-wrap: anywhere; }

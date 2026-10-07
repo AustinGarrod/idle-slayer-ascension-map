@@ -213,14 +213,14 @@ function Atlas({ catalog }: { catalog: Catalog }) {
       reason: purchasePlan.requirement.kind === 'milestone' ? 'milestone' : purchasePlan.requirement.kind === 'active' ? 'pending' : 'reveal',
     })
   }, [purchasePlan, purchaseTarget])
-  function setMenu(next: Menu) {
+  function setMenu(next: Menu, recommendationStatus = recommendations.status) {
     if (next === menu) return
     if (menu === 'progress') restoreRequest.current++
     if (next) setMessage('')
     if (menu === 'privacy' && next !== 'privacy') trackingChangeRequest.current++
     if (menu) trackEvent('panel_closed', { panel: menu })
     if (next) trackEvent('panel_opened', { panel: next })
-    if (next === 'recommendations') trackEvent('recommendations_viewed', { reason: recommendations.status === 'fallback' ? 'catalog-fallback' : recommendations.status })
+    if (next === 'recommendations') trackEvent('recommendations_viewed', { reason: recommendationStatus === 'fallback' ? 'catalog-fallback' : recommendationStatus })
     setMenuState(next)
   }
   function setPreview(next: Preview | null) {
@@ -250,7 +250,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     trackEvent('purchase_applied', { upgrade_id: target, source })
     if (source === 'recommendation') trackEvent('recommendation_purchase_applied', { upgrade_id: target })
     setPurchaseTarget(null); setChoices({})
-    if (continueSuggestions) setMenu('recommendations')
+    if (continueSuggestions) setMenu('recommendations', recommendUpgrades(catalog, purchasePlan.profile, wikiPriorities).status)
   }
   function selectSuggestion(id: string, purchase = false) {
     const position = recommendations.suggestions.findIndex((suggestion) => suggestion.upgrade.id === id)
