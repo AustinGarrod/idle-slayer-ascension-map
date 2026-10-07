@@ -50,6 +50,15 @@ describe('independent comparison session', () => {
     expect(unreadable.session.getState().list.ids).toEqual(['two'])
     expect(await unreadable.session.save(true)).toBe(true)
   })
+  it('rechecking unchanged corrupt storage keeps explicit recovery available', async () => {
+    const f = fixture({ text: 'still corrupt' })
+    f.session.refreshExternal()
+    expect(f.session.getState()).toMatchObject({ conflict: true, canUseSaved: false, savedList: null })
+    expect(f.writes()).toBe(0)
+    f.session.edit(list(['local'])); await settle()
+    expect(await f.session.save(true)).toBe(true)
+    expect(f.text()).toBe(exportComparison(list(['local'])))
+  })
   it('checks exact stored baseline inside the lock before any write', async () => {
     const f = fixture()
     f.external(exportComparison(list(['external'])))

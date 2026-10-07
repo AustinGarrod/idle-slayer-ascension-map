@@ -76,7 +76,7 @@ export function SavedComparisonPanel({ catalog, profile, visible, session, state
     <div className="saved-comparison-tools">
       <button onClick={download}>Export comparison</button>
       <button disabled={disabled} onClick={() => { readGeneration.current++; setRestore(null); fileInput.current?.click() }}>Restore comparison…</button>
-      {!!state.error && !state.conflict && <button disabled={disabled} onClick={() => { void session.save() }}>Retry saving comparison</button>}
+      {(!!state.error || state.dirty) && !state.conflict && <button disabled={disabled} onClick={() => { void session.save() }}>Retry saving comparison</button>}
       {state.conflict && <><button disabled={disabled} onClick={() => session.refreshExternal()}>Refresh recovery</button>
         <button disabled={disabled || !state.canUseSaved} onClick={() => setRecovery({ version: state.version, action: 'saved' })}>Use saved comparison…</button>
         <button disabled={disabled} onClick={() => setRecovery({ version: state.version, action: 'local' })}>Replace saved comparison…</button></>}

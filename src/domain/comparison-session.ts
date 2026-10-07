@@ -88,7 +88,7 @@ export function createComparisonSession(dependencies: { storage: () => Storage; 
     },
     refreshExternal() {
       const snapshot = read()
-      if (snapshot && baseline && snapshot.text === baseline.text) {
+      if (snapshot?.list && baseline?.list && snapshot.text === baseline.text) {
         observed = snapshot
         if (state.conflict) publish({ conflict: false, canUseSaved: !!snapshot.list, error: '' })
         return

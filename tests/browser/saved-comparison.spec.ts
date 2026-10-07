@@ -199,6 +199,22 @@ test('clean cross-tab updates invalidate restore and adopt the latest comparison
   await other.close()
 })
 
+test('unchanged corrupt comparison storage stays recoverable and requires explicit replacement', async ({ page }) => {
+  await seed(page)
+  await page.addInitScript((key) => localStorage.setItem(key, 'SENTINEL-invalid-private-comparison'), COMPARISON_STORAGE_KEY)
+  await page.goto('./'); const dialog = await open(page), before = await progress(page)
+  await expect(dialog).not.toContainText('SENTINEL-invalid-private-comparison')
+  await dialog.getByRole('button', { name: 'Refresh recovery', exact: true }).click()
+  await expect(dialog.getByRole('button', { name: 'Replace saved comparison…', exact: true })).toBeVisible()
+  await dialog.locator(`.saved-comparison-results button[data-upgrade-id="${ordinary[0].id}"]`).click()
+  expect(await stored(page)).toBe('SENTINEL-invalid-private-comparison')
+  await dialog.getByRole('button', { name: 'Replace saved comparison…', exact: true }).click()
+  await expect(dialog.getByRole('region', { name: 'Review comparison recovery' })).toContainText('cannot be read as a supported reference list')
+  await dialog.getByRole('button', { name: 'Confirm comparison recovery', exact: true }).click()
+  await expect.poll(() => stored(page)).toBe(exportComparison(makeList([ordinary[0].id])))
+  expect(await progress(page)).toBe(before)
+})
+
 test('dirty external races keep memory and require fresh deliberate recovery', async ({ page, context }) => {
   await seed(page)
   await page.addInitScript((key) => {
