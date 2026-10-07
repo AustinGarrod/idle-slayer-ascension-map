@@ -435,6 +435,8 @@ footer .session-history-controls button small { min-height: 2.6em; }
 .session-history { margin-bottom: 18px; }
 .session-history h3 { color: var(--bright-gold); font-size: .9375rem; }
 .session-history p { font-size: .8125rem; line-height: 1.5; }
+/* Every suggestion still uses one explicit purchase confirmation. */
+.purchase-confirm-actions > button { flex: 1 1 140px; font-size: .875rem; overflow-wrap: anywhere; }
 
 /* Replacement details stay private, bounded and within the existing dialog. */
 dialog:has(.progress-comparison) { overflow-wrap: anywhere; }
@@ -463,3 +465,5 @@ dialog:has(.map-help) { overflow-wrap: anywhere; }
 .map-help-legend { display: block; }
 .map-help-legend dt { margin-top: .75rem; font-weight: 700; }
 .map-help-legend dd { margin: .25rem 0 0; }
+
+dialog:has(.purchase-confirm-actions) { overflow-wrap: anywhere; }
