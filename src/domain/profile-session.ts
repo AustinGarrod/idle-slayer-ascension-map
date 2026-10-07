@@ -10,6 +10,7 @@ export type StoredSnapshot =
   | { kind: 'valid'; text: string | null; profile: Profile }
   | { kind: 'invalid'; text: string; error: string; errorKind: ProfileErrorKind }
   | { kind: 'unavailable'; error: string; errorKind: 'storage-read' }
+export type ProfilePersistence = 'loading' | 'new' | 'saved' | 'saving' | 'unsaved' | 'failed' | 'conflict'
 export interface ProfileSessionState {
   profile: Profile
   history: Profile[]
@@ -17,6 +18,7 @@ export interface ProfileSessionState {
   externalVersion: number
   pending: boolean
   dirty: boolean
+  persistence: ProfilePersistence
   writable: boolean
   error: string
   errorKind?: ProfileErrorKind | 'unavailable' | 'stale'
@@ -27,11 +29,14 @@ export interface ProfileSessionState {
 export function createProfileSession(options: { revision: string; storage: () => Storage; locks: () => ProfileLocks | undefined }) {
   let baseline: string | null | undefined
   let persisted: Profile | undefined
+  let initialized = false
   let operation = 0
-  let state: ProfileSessionState = { profile: emptyProfile(options.revision), history: [], version: 0, externalVersion: 0, pending: false, dirty: false, writable: false, error: '', conflict: null }
+  let state: ProfileSessionState = { profile: emptyProfile(options.revision), history: [], version: 0, externalVersion: 0, pending: false, dirty: false, persistence: 'loading', writable: false, error: '', conflict: null }
   const listeners = new Set<(state: ProfileSessionState) => void>()
   function emit() {
-    state = { ...state, dirty: state.profile !== persisted || state.conflict !== null || state.pending }
+    const persistence = !initialized ? 'loading' : state.conflict ? 'conflict' : state.pending ? 'saving'
+      : state.profile === persisted ? baseline === null ? 'new' : 'saved' : state.error ? 'failed' : 'unsaved'
+    state = { ...state, dirty: state.profile !== persisted || state.conflict !== null || state.pending, persistence }
     listeners.forEach((listener) => listener(state))
   }
   function error(message: string, kind: ProfileSessionState['errorKind']) { state = { ...state, error: message, errorKind: kind }; emit() }
@@ -47,6 +52,7 @@ export function createProfileSession(options: { revision: string; storage: () =>
   }
   function initialize() {
     const snapshot = read()
+    initialized = true
     baseline = snapshot.kind === 'unavailable' ? undefined : snapshot.text
     if (snapshot.kind === 'valid') {
       persisted = snapshot.profile
