@@ -12,8 +12,9 @@ Open the failed Actions run, download its **browser-failure** artifact, and extr
 
 ```powershell
 $runId = 123456789 # Replace with the failed Actions run ID.
+$runAttempt = 1 # Use the attempt shown on that run, including any rerun.
 gh run view $runId --repo AustinGarrod/idle-slayer-ascension-map
-gh run download $runId --repo AustinGarrod/idle-slayer-ascension-map --dir .cache/browser-diagnostics/$runId
+gh run download $runId --repo AustinGarrod/idle-slayer-ascension-map --name "browser-failure-$runId-$runAttempt" --dir .cache/browser-diagnostics/$runId
 yarn playwright show-report .cache/browser-diagnostics/$runId/playwright-report
 ```
 
@@ -23,7 +24,7 @@ Choose the failed test in the report to read assertions and inspect its screensh
 yarn playwright show-trace .cache/browser-diagnostics/123456789/test-results/<failed-test>/trace.zip
 ```
 
-Replace both placeholders with the extracted paths. If several artifacts are downloaded, `gh` may create an artifact-name subdirectory; point the viewer to that directory's `playwright-report` or `test-results`.
+Replace both placeholders with the extracted paths. Selecting exactly one artifact by name puts its contents directly in the destination directory. Downloading without `--name` creates an artifact-name subdirectory, even when the run has only one artifact; in that case point the viewer to that directory's `playwright-report` or `test-results`. See the [GitHub CLI download reference](https://cli.github.com/manual/gh_run_download).
 
 ## Local failure
 
