@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
 
 test('sequential keyboard navigation skips backing file inputs while visible picker buttons work', async ({ page }) => {
   await page.goto('./')

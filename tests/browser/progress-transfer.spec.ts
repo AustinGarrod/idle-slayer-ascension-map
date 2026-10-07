@@ -1,5 +1,6 @@
-import { expect, test, type Page } from '@playwright/test'
-import { readFileSync } from 'node:fs'
+import type { Page } from '@playwright/test'
+import { expect, test } from './fixtures'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { gunzipSync, gzipSync } from 'node:zlib'
 import { emptyProfile, type Catalog } from '../../src/domain/types'
 import { encodeProgressTransfer, progressTransferLink } from '../../src/domain/progress-transfer'
@@ -36,13 +37,14 @@ test('desktop snapshot opens a mobile preview, cancels safely, then applies and 
   await page.addInitScript(({ key, layout, tracking, source }) => {
     localStorage.setItem(key, JSON.stringify(source)); localStorage.setItem(layout, 'web'); localStorage.setItem(tracking, 'disabled')
   }, { key: PROFILE_STORAGE_KEY, layout: LAYOUT_PREFERENCE_KEY, tracking: ANALYTICS_PREFERENCE_KEY, source })
-  await page.goto('./'); await openTransfer(page, 'send')
+  await page.goto('./'); await expect(page.locator('footer')).not.toContainText('Checking saved progress'); await openTransfer(page, 'send')
   await page.getByRole('button', { name: 'Create transfer snapshot', exact: true }).click()
   await expect(page.getByRole('img', { name: 'Progress transfer QR code', exact: true })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Transfer snapshot ready', exact: true })).toBeFocused()
   const link = await page.getByRole('textbox', { name: 'Private transfer link', exact: true }).inputValue()
   expect(link).toContain('#transfer=v1.')
-  await page.locator('.transfer-qr').screenshot({ path: `test-results/transfer-qr-${test.info().project.name}.png` })
+  await page.locator('.transfer-qr').screenshot({ path: test.info().outputPath('transfer-qr.png') })
+  writeFileSync(test.info().outputPath('transfer-link.txt'), link)
   const mobileContext = await browser.newContext({ viewport: { width: 320, height: 568 } })
   try {
     await mobileContext.addInitScript(({ key, layout, tracking, destination }) => {
@@ -72,6 +74,9 @@ test('desktop snapshot opens a mobile preview, cancels safely, then applies and 
     await openAction(mobile, 'Undo')
     await expect.poll(() => saved(mobile)).toEqual(destination)
     await expect(mobile.getByRole('button', { name: 'Game Layout', exact: true })).toHaveAttribute('aria-pressed', 'true')
+    await openAction(mobile, 'Redo')
+    await expect.poll(() => saved(mobile)).toEqual(source)
+    await expect(mobile.getByRole('button', { name: 'Detailed Layout', exact: true })).toHaveAttribute('aria-pressed', 'true')
     expect(requests.some((url) => url.includes('transfer=') || url.includes('v1.'))).toBe(false)
     expect(await saved(page)).toEqual(source)
   } finally { await mobileContext.close() }
@@ -82,7 +87,7 @@ test('non-string layouts fail before preview or replacement in both transfer enc
     if (localStorage.getItem(key) === null) localStorage.setItem(key, JSON.stringify(destination))
     localStorage.setItem(layoutKey, 'native')
   }, { key: PROFILE_STORAGE_KEY, layoutKey: LAYOUT_PREFERENCE_KEY, destination })
-  await page.goto('./'); await openTransfer(page, 'receive')
+  await page.goto('./'); await expect(page.locator('.map-summary')).toContainText('Ultra Ascensions 1'); await openTransfer(page, 'receive')
   for (const encoding of ['compact', 'profile']) {
     const encoded = await encodeProgressTransfer(encoding === 'compact' ? catalog : { ...catalog, revision: 'synthetic-other-dictionary' }, source, 'native')
     if (!encoded.ok) throw new Error(encoded.error)
@@ -105,7 +110,7 @@ test('non-string layouts fail before preview or replacement in both transfer enc
 
 test('malformed and unsupported links fail locally, while oversized snapshots keep an explicit backup fallback', async ({ page, baseURL }) => {
   await page.addInitScript(({ key, destination }) => { if (localStorage.getItem(key) === null) localStorage.setItem(key, JSON.stringify(destination)) }, { key: PROFILE_STORAGE_KEY, destination })
-  await page.goto('./'); await openTransfer(page, 'receive')
+  await page.goto('./'); await expect(page.locator('.map-summary')).toContainText('Ultra Ascensions 1'); await openTransfer(page, 'receive')
   await page.getByRole('textbox', { name: 'Transfer link or code', exact: true }).fill(new URL('#transfer=v2.unsupported', baseURL!).toString())
   await page.getByRole('button', { name: 'Review transfer', exact: true }).click()
   await expect(page.getByRole('dialog').locator('.dialog-feedback')).toContainText('incomplete, corrupt or unsupported')
@@ -114,7 +119,7 @@ test('malformed and unsupported links fail locally, while oversized snapshots ke
   await page.getByRole('button', { name: 'Cancel', exact: true }).click()
   const large = { ...destination, purchases: { ...destination.purchases, ...Object.fromEntries(Array.from({ length: 120 }, (_, index) => [`synthetic-unranked-${index}-${index.toString(36)}-${(index * 77761).toString(36)}`, { epoch: index % 2, active: index % 3 === 0 }])) } }
   await page.evaluate(({ key, large }) => localStorage.setItem(key, JSON.stringify(large)), { key: PROFILE_STORAGE_KEY, large })
-  await page.reload(); await openTransfer(page, 'send')
+  await page.reload(); await expect(page.locator('.map-summary')).toContainText('Ultra Ascensions 1'); await openTransfer(page, 'send')
   await page.getByRole('button', { name: 'Create transfer snapshot', exact: true }).click()
   await expect(page.getByRole('dialog')).toContainText('too large for a readable single QR')
   await expect(page.getByRole('button', { name: 'Export JSON backup', exact: true })).toBeVisible()
@@ -136,7 +141,7 @@ test('a cancelled pending decode cannot reopen or replace progress after it fini
       }
     } as unknown as typeof DecompressionStream
   }, { key: PROFILE_STORAGE_KEY, destination })
-  await page.goto('./'); await openTransfer(page, 'receive')
+  await page.goto('./'); await expect(page.locator('.map-summary')).toContainText('Ultra Ascensions 1'); await openTransfer(page, 'receive')
   await page.getByRole('textbox', { name: 'Transfer link or code', exact: true }).fill(await sourceLink(baseURL!))
   await page.getByRole('button', { name: 'Review transfer', exact: true }).click()
   await expect(page.getByRole('dialog')).toContainText('Reading transfer locally')
@@ -160,12 +165,12 @@ test('storage failures keep the transferred session and layout usable with recov
   await page.goto(await sourceLink(baseURL!))
   await page.getByRole('button', { name: 'Apply transfer', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Detailed Layout', exact: true })).toHaveAttribute('aria-pressed', 'true')
-  await expect(page.locator('.map-summary')).toContainText('Epoch 8')
+  await expect(page.locator('.map-summary')).toContainText('Ultra Ascensions 8')
   await expect(page.getByRole('alert')).toContainText('Progress could not be saved')
   expect(await saved(page)).toEqual(destination)
   expect(await page.evaluate((key) => localStorage.getItem(key), ANALYTICS_PREFERENCE_KEY)).toBe('disabled')
   await openAction(page, 'Undo')
-  await expect(page.locator('.map-summary')).toContainText('Epoch 1')
+  await expect(page.locator('.map-summary')).toContainText('Ultra Ascensions 1')
   await expect(page.getByRole('button', { name: 'Game Layout', exact: true })).toHaveAttribute('aria-pressed', 'true')
 })
 
@@ -186,7 +191,7 @@ test('an incoming transfer respects current spoiler preview boundaries and remov
 
 test('clipboard refusal selects a private manual-copy fallback without changing progress', async ({ page }) => {
   await page.addInitScript(() => Object.defineProperty(navigator, 'clipboard', { value: { writeText: async () => { throw new DOMException('Synthetic clipboard refusal', 'NotAllowedError') } } }))
-  await page.goto('./'); await openTransfer(page, 'send')
+  await page.goto('./'); await expect(page.locator('footer')).not.toContainText('Checking saved progress'); await openTransfer(page, 'send')
   await page.getByRole('button', { name: 'Create transfer snapshot', exact: true }).click()
   await page.getByRole('button', { name: 'Copy transfer link', exact: true }).click()
   const field = page.getByRole('textbox', { name: 'Private transfer link', exact: true })

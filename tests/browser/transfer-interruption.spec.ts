@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test'
+import type { Page } from '@playwright/test'
+import { expect, test } from './fixtures'
 import { readFileSync } from 'node:fs'
 import { emptyProfile, type Catalog } from '../../src/domain/types'
 import { encodeProgressTransfer, progressTransferLink } from '../../src/domain/progress-transfer'
@@ -8,6 +9,9 @@ import { LAYOUT_PREFERENCE_KEY } from '../../src/domain/layout-preference'
 import { ANALYTICS_PREFERENCE_KEY } from '../../src/analytics'
 import { planPurchase } from '../../src/domain/rules'
 import { encodeGameSaveFixture, nativeSaveFixture } from '../fixtures/game-save'
+import { CHECKPOINT_STORAGE_KEY, emptyCheckpoints } from '../../src/domain/checkpoints'
+import { COMPARISON_STORAGE_KEY, emptyComparison } from '../../src/domain/saved-comparison'
+import { GOALS_STORAGE_KEY } from '../../src/domain/goals'
 
 const catalog = JSON.parse(readFileSync('public/catalog.json', 'utf8')) as Catalog
 const initial = { ...emptyProfile(catalog.revision), epoch: 2, showSpoilers: true,
@@ -58,7 +62,7 @@ async function arrive(page: Page, transfer: string, valid: boolean) {
 async function selectUpgrade(page: Page, id: string) {
   const upgrade = catalog.upgrades.find((node) => node.id === id)!
   await page.getByRole('searchbox').fill(upgrade.title)
-  await page.locator('.search-result').filter({ has: page.getByText(`${BigInt(upgrade.cost).toLocaleString('en')} SP`, { exact: true }) }).first().click()
+  await page.locator(`.search-result[data-upgrade-id="${id}"]`).click()
   await page.getByRole('button', { name: 'Record purchase…', exact: true }).click()
 }
 async function prepareConfirmation(page: Page, state: string) {
@@ -90,9 +94,43 @@ async function prepareConfirmation(page: Page, state: string) {
   await expect(page.getByRole('dialog')).toHaveCount(1)
 }
 
+test('arrivals close current reference and planning dialogs while preserving separate saved documents', async ({ page, baseURL }) => {
+  await seed(page)
+  const documents = {
+    [CHECKPOINT_STORAGE_KEY]: JSON.stringify(emptyCheckpoints()),
+    [COMPARISON_STORAGE_KEY]: JSON.stringify({ ...emptyComparison(), ids: [catalog.startId] }),
+    [GOALS_STORAGE_KEY]: JSON.stringify({ version: 1, targets: [{ id: catalog.startId, mode: 'acquire' }] }),
+  }
+  await page.addInitScript((documents) => { for (const [key, value] of Object.entries(documents)) localStorage.setItem(key, value) }, documents)
+  await page.goto('./')
+  await expect(page.locator('.map-summary')).toContainText('Ultra Ascensions 2')
+  const transfer = await link(baseURL!)
+  for (const [action, title] of [
+    ['Progress checkpoints…', 'Progress checkpoints'], ['Saved upgrade comparison…', 'Saved upgrade comparison'],
+    ['Compare prerequisite routes…', 'Prerequisite routes'], ['Plan hypothetical UAs…', 'Hypothetical UA roadmap'],
+    ['Recent upgrades…', 'Recent upgrades'],
+  ]) {
+    if (title === 'Progress checkpoints') await openAction(page, 'Progress')
+    else {
+      const desktop = page.getByRole('button', { name: 'Map view…', exact: true })
+      await (await desktop.isVisible() ? desktop : page.getByRole('button', { name: 'Map options', exact: true })).click()
+    }
+    await page.getByRole('button', { name: action, exact: true }).click()
+    await expect(page.getByRole('dialog', { name: title, exact: true })).toBeVisible()
+    const receiver = await arrive(page, transfer, true)
+    expect(await saved(page)).toEqual(initial)
+    await receiver.getByRole('button', { name: 'Cancel', exact: true }).click()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+  }
+  const receiver = await arrive(page, transfer, true)
+  await receiver.getByRole('button', { name: 'Apply transfer', exact: true }).click()
+  await expect.poll(() => saved(page)).toEqual(incoming)
+  expect(await page.evaluate((keys) => Object.fromEntries(keys.map((key) => [key, localStorage.getItem(key)])), Object.keys(documents))).toEqual(documents)
+})
+
 for (const state of ['clear', 'purchase', 'OR path', 'history', 'restore', 'game import']) {
   test(`valid and malformed arrivals supersede ${state} confirmation without applying it`, async ({ page, baseURL }) => {
-    await seed(page); await page.goto('./')
+    await seed(page); await page.goto('./'); await expect(page.locator('.map-summary')).toContainText('Ultra Ascensions 2')
     const transfer = await link(baseURL!)
     for (const valid of [false, true]) {
       await prepareConfirmation(page, state)
@@ -139,7 +177,7 @@ for (const kind of ['backup', 'game save'] as const) {
           }
         }
       }, { kind, outcome })
-      await page.goto('./'); await openAction(page, 'Progress')
+      await page.goto('./'); await expect(page.locator('.map-summary')).toContainText('Ultra Ascensions 2'); await openAction(page, 'Progress')
       if (kind === 'backup') await page.getByLabel('Map progress JSON backup', { exact: true }).setInputFiles({ name: 'synthetic.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ ...initial, epoch: 4 })) })
       else {
         const chooser = page.waitForEvent('filechooser')
@@ -169,11 +207,11 @@ test('an arrival invalidates pending privacy saving before it can reload or chan
   await page.addInitScript((name) => {
     const win = window as DeferredWindow
     const native = navigator.locks.request.bind(navigator.locks)
-    navigator.locks.request = ((requested: string, options: LockOptions, callback: (lock: unknown) => unknown) => requested === name
+    Object.defineProperty(navigator, 'locks', { configurable: true, value: { request: (requested: string, options: LockOptions, callback: (lock: unknown) => unknown) => requested === name
       ? new Promise<unknown>((resolve) => { win.releaseWrite = () => { resolve(callback({})); win.writeFinished = true } })
-      : native(requested, options, callback)) as typeof native
+      : native(requested, options, callback) } })
   }, PROFILE_WRITE_LOCK)
-  await page.goto('./')
+  await page.goto('./'); await expect(page.locator('.map-summary')).toContainText('Ultra Ascensions 2')
   await expect(page.locator('.toolbar')).toBeVisible()
   const checkbox = page.getByRole('checkbox', { name: 'Show spoilers', exact: true })
   if (!await checkbox.isVisible()) await page.getByRole('button', { name: 'Map options', exact: true }).click()
@@ -186,6 +224,7 @@ test('an arrival invalidates pending privacy saving before it can reload or chan
   // A second privacy attempt starts its own pending save of the retained dirty session.
   await page.getByRole('button', { name: 'Cancel', exact: true }).click()
   await page.getByRole('button', { name: 'Disable tracking and reload', exact: true }).click()
+  await expect.poll(() => page.evaluate(() => typeof (window as DeferredWindow).releaseWrite)).toBe('function')
   await expect(page.locator('.atlas')).toHaveAttribute('aria-busy', 'true')
   const receiver = await arrive(page, await link(baseURL!), true)
   await page.evaluate(() => (window as DeferredWindow).releaseWrite?.())
@@ -196,12 +235,13 @@ test('an arrival invalidates pending privacy saving before it can reload or chan
   expect(await page.evaluate((key) => localStorage.getItem(key), ANALYTICS_PREFERENCE_KEY)).toBeNull()
   await receiver.getByRole('button', { name: 'Cancel', exact: true }).click()
   await expect(page.getByRole('dialog')).toHaveCount(0)
-  await expect(page.locator('.map-summary')).toContainText('Epoch 2')
+  await expect(page.locator('.map-summary')).toContainText('Ultra Ascensions 2')
   if (!await checkbox.isVisible()) await page.getByRole('button', { name: 'Map options', exact: true }).click()
   await expect(checkbox).not.toBeChecked()
   const reopenedOptions = page.getByRole('dialog', { name: 'Map options', exact: true })
   if (await reopenedOptions.isVisible()) await reopenedOptions.getByRole('button', { name: 'Close dialog', exact: true }).click()
   await openAction(page, 'Undo')
+  await expect.poll(() => page.evaluate(() => typeof (window as DeferredWindow).releaseWrite)).toBe('function')
   await expect(page.locator('.atlas')).toHaveAttribute('aria-busy', 'true')
   await page.evaluate(() => (window as DeferredWindow).releaseWrite?.())
   await expect(page.locator('.atlas')).toHaveAttribute('aria-busy', 'false')
@@ -215,7 +255,7 @@ for (const state of ['conflict', 'tracking reload'] as const) {
       const native = Storage.prototype.setItem
       Storage.prototype.setItem = function (name, value) { if (name === key) throw new DOMException('Synthetic write refusal', 'QuotaExceededError'); native.call(this, name, value) }
     }, PROFILE_STORAGE_KEY)
-    await page.goto('./')
+    await page.goto('./'); await expect(page.locator('.map-summary')).toContainText('Ultra Ascensions 2')
     await expect(page.locator('.toolbar')).toBeVisible()
     const spoilers = page.getByRole('checkbox', { name: 'Show spoilers', exact: true })
     if (!await spoilers.isVisible()) await page.getByRole('button', { name: 'Map options', exact: true }).click()
@@ -237,7 +277,7 @@ for (const state of ['conflict', 'tracking reload'] as const) {
     const receiver = await arrive(page, transfer, true)
     await receiver.getByRole('button', { name: 'Cancel', exact: true }).click()
     await expect(page.getByRole('dialog')).toHaveCount(0)
-    await expect(page.locator('.map-summary')).toContainText('Epoch 2')
+    await expect(page.locator('.map-summary')).toContainText('Ultra Ascensions 2')
     await openAction(page, 'Progress')
     const download = page.waitForEvent('download')
     await page.getByRole('button', { name: 'Export JSON backup', exact: true }).click()
@@ -247,7 +287,7 @@ for (const state of ['conflict', 'tracking reload'] as const) {
 }
 
 test('a game file selected after arrival cannot replace the receiver', async ({ page, baseURL }) => {
-  await seed(page); await page.goto('./'); await openAction(page, 'Progress')
+  await seed(page); await page.goto('./'); await expect(page.locator('.map-summary')).toContainText('Ultra Ascensions 2'); await openAction(page, 'Progress')
   const chooser = page.waitForEvent('filechooser')
   await page.getByRole('button', { name: 'Import game save…', exact: true }).click()
   const selection = await chooser
@@ -264,7 +304,7 @@ test('an arrival cancels a pending confirmed conflict write without reviving rec
     const native = Storage.prototype.setItem
     Storage.prototype.setItem = function (name, value) { if (name === key) throw new DOMException('Synthetic write refusal', 'QuotaExceededError'); native.call(this, name, value) }
   }, PROFILE_STORAGE_KEY)
-  await page.goto('./'); await expect(page.locator('.toolbar')).toBeVisible()
+  await page.goto('./'); await expect(page.locator('.map-summary')).toContainText('Ultra Ascensions 2'); await expect(page.locator('.toolbar')).toBeVisible()
   const checkbox = page.getByRole('checkbox', { name: 'Show spoilers', exact: true })
   if (!await checkbox.isVisible()) await page.getByRole('button', { name: 'Map options', exact: true }).click()
   await checkbox.uncheck()
@@ -279,11 +319,12 @@ test('an arrival cancels a pending confirmed conflict write without reviving rec
   await page.evaluate((name) => {
     const win = window as DeferredWindow
     const native = navigator.locks.request.bind(navigator.locks)
-    navigator.locks.request = ((requested: string, options: LockOptions, callback: (lock: unknown) => unknown) => requested === name
+    Object.defineProperty(navigator, 'locks', { configurable: true, value: { request: (requested: string, options: LockOptions, callback: (lock: unknown) => unknown) => requested === name
       ? new Promise<unknown>((resolve) => { win.releaseWrite = () => { resolve(callback({})); win.writeFinished = true } })
-      : native(requested, options, callback)) as typeof native
+      : native(requested, options, callback) } })
   }, PROFILE_WRITE_LOCK)
   await page.getByRole('button', { name: 'Apply changes', exact: true }).click()
+  await expect.poll(() => page.evaluate(() => typeof (window as DeferredWindow).releaseWrite)).toBe('function')
   await expect(page.locator('.atlas')).toHaveAttribute('aria-busy', 'true')
   const transfer = await link(baseURL!)
   await arrive(page, transfer, false)
@@ -302,7 +343,7 @@ test('an arrival cancels a pending confirmed conflict write without reviving rec
 
 test('navigation away cancels a received preview and a pending decode without applying stale progress', async ({ page, baseURL }) => {
   await seed(page)
-  await page.goto('./')
+  await page.goto('./'); await expect(page.locator('.map-summary')).toContainText('Ultra Ascensions 2')
   const transfer = await link(baseURL!)
   await arrive(page, transfer, true)
   await page.evaluate(() => { location.hash = '#elsewhere' })

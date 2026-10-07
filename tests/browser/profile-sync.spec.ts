@@ -1,4 +1,6 @@
-import { expect, test, type Page } from '@playwright/test'
+import { denyProfileWrites } from './helpers/profile'
+import { showSpoilers, openAction, purchaseStart } from './helpers/app'
+import { expect, test } from './fixtures'
 import { readFileSync } from 'node:fs'
 import type { Catalog } from '../../src/domain/types'
 import { PROFILE_WRITE_LOCK } from '../../src/domain/profile-session'
@@ -7,37 +9,6 @@ import { encodeGameSaveFixture, nativeSaveFixture } from '../fixtures/game-save'
 
 const catalog = JSON.parse(readFileSync('public/catalog.json', 'utf8')) as Catalog
 const key = 'idle-slayer-ascension-map.profile.v1'
-
-async function showSpoilers(page: Page, enabled = true) {
-  await expect(page.locator('.toolbar')).toBeVisible()
-  const checkbox = page.getByRole('checkbox', { name: 'Show spoilers', exact: true })
-  if (!await checkbox.isVisible()) await page.getByRole('button', { name: 'Map options', exact: true }).click()
-  await checkbox.setChecked(enabled)
-  const options = page.getByRole('dialog', { name: 'Map options', exact: true })
-  if (await options.isVisible()) await options.getByRole('button', { name: 'Close dialog', exact: true }).click()
-}
-async function openAction(page: Page, name: string) {
-  await expect(page.locator('.toolbar')).toBeVisible()
-  const button = page.getByRole('button', { name, exact: true })
-  if (!await button.isVisible()) await page.getByRole('button', { name: 'Map options', exact: true }).click()
-  await button.click()
-}
-async function purchaseStart(page: Page) {
-  await page.getByRole('button', { name: 'Return to start', exact: true }).click()
-  await page.getByRole('button', { name: 'Record purchase…', exact: true }).click()
-  await page.getByRole('button', { name: 'Apply purchases', exact: true }).click()
-}
-async function denyProfileWrites(page: Page) {
-  await page.addInitScript((key) => {
-    const win = window as Window & { failProfileWrites?: boolean }
-    win.failProfileWrites = true
-    const native = Storage.prototype.setItem
-    Storage.prototype.setItem = function (name, value) {
-      if (name === key && win.failProfileWrites) throw new DOMException('Synthetic quota failure', 'QuotaExceededError')
-      native.call(this, name, value)
-    }
-  }, key)
-}
 
 test('a stale tab cannot erase a purchase from another tab when toggling spoilers', async ({ page, context }) => {
   await page.goto('./')
@@ -73,7 +44,7 @@ test('clean external updates invalidate a removal preview and prior undo', async
 })
 
 test('dirty conflict recovery preserves export and supports reviewed saved/local choices', async ({ page, context }) => {
-  await denyProfileWrites(page)
+  await denyProfileWrites(page, 'failProfileWrites')
   await page.goto('./')
   const other = await context.newPage(); await other.goto(page.url())
   await purchaseStart(page)
@@ -105,7 +76,7 @@ test('dirty conflict recovery preserves export and supports reviewed saved/local
 })
 
 test('another external change cancels a conflict replacement confirmation', async ({ page, context }) => {
-  await denyProfileWrites(page); await page.goto('./')
+  await denyProfileWrites(page, 'failProfileWrites'); await page.goto('./')
   const other = await context.newPage(); await other.goto(page.url())
   await purchaseStart(page); await showSpoilers(other)
   await page.getByRole('button', { name: 'Review progress conflict', exact: true }).click()

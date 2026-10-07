@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test } from './fixtures'
+import type { Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import { emptyProfile, type Catalog } from '../../src/domain/types'
 import { MAX_PROFILE_BYTES, PROFILE_STORAGE_KEY } from '../../src/domain/storage'
@@ -187,4 +188,22 @@ test('global export success stays visible and announced beside a persistent stor
   await expect(page.locator('.toast')).toBeVisible()
   await expect(page.locator('.toast')).toContainText('Progress backup exported.')
   await expect(page.getByRole('alert')).toContainText('Progress could not be saved on this device.')
+})
+
+
+test('empty named dialog feedback preserves zero space until real feedback exists', async ({ page }) => {
+  await page.goto('./')
+  await openAction(page, 'Progress')
+  const feedback = page.getByRole('dialog').getByRole('status', { name: 'Map action feedback', exact: true })
+  await expect(feedback).toBeEmpty()
+  expect(await feedback.evaluate((element) => ({ height: element.getBoundingClientRect().height, margin: getComputedStyle(element).marginBottom, content: element.childElementCount }))).toEqual({ height: 0, margin: '0px', content: 0 })
+  const field = page.getByRole('spinbutton', { name: 'Previous Ultra Ascensions', exact: true })
+  await field.fill('')
+  await page.getByRole('button', { name: 'Review history…', exact: true }).click()
+  await expect(feedback).toContainText('Enter the number')
+  await expect(field).toHaveAccessibleDescription(/Enter the number/)
+  expect(await feedback.evaluate((element) => element.getBoundingClientRect().height)).toBeGreaterThan(0)
+  await field.fill('1')
+  await expect(feedback).toBeEmpty()
+  expect(await feedback.evaluate((element) => element.childElementCount)).toBe(0)
 })

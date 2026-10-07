@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
 import { readFileSync } from 'node:fs'
 import type { Catalog } from '../../src/domain/types'
 import { emptyProfile } from '../../src/domain/types'
@@ -11,7 +11,7 @@ const selected = keys[0]!
 const cost = (value: string) => BigInt(value).toLocaleString('en')
 const label = (id: string) => {
   const node = catalog.upgrades.find((node) => node.id === id)!
-  return `${node.title} · ${cost(node.cost)} SP`
+  return { id, cost: `${cost(node.cost)} Slayer Points` }
 }
 
 for (const operation of ['purchase', 'removal', 'reset'] as const) {
@@ -33,17 +33,17 @@ for (const operation of ['purchase', 'removal', 'reset'] as const) {
       await page.getByRole('button', { name: 'Progress', exact: true }).click()
       await page.getByRole('button', { name: 'Ultra Ascend…', exact: true }).click()
       const reset = planUltraAscension(catalog, profile)!
-      affected = [...reset.cleared, ...reset.activated, ...reset.granted].filter((id) => keys.some((node) => node.id === id))
+      affected = [...reset.cleared, ...reset.activated, ...reset.conditionallyRetained].filter((id) => keys.some((node) => node.id === id))
       expect(affected).toHaveLength(11)
     } else {
       await page.getByRole('searchbox').fill('Astral Key')
-      await page.locator('.search-result').filter({ has: page.getByText(`${cost(selected.cost)} SP`, { exact: true }) }).click()
+      await page.locator('.search-result').filter({ has: page.getByRole('math', { name: `${cost(selected.cost)} Slayer Points`, exact: true }) }).click()
       await page.getByRole('button', { name: operation === 'purchase' ? 'Record purchase…' : 'Remove purchase…', exact: true }).click()
       affected = operation === 'purchase' ? [selected.id] : planRemoval(catalog, profile, selected.id).removed.filter((id) => keys.some((node) => node.id === id))
     }
     const rows = page.getByRole('dialog').locator('li').filter({ hasText: 'Astral Key' })
     await expect(rows).toHaveCount(affected.length)
-    expect(await rows.allTextContents()).toEqual(affected.map(label))
+    expect(await rows.evaluateAll((elements) => elements.map((element) => ({ id: element.getAttribute('data-upgrade-id'), cost: element.querySelector('[role=math]')?.getAttribute('aria-label') })))).toEqual(affected.map(label))
     expect(new Set(await rows.allTextContents()).size).toBe(affected.length)
     for (const row of await rows.all()) expect(await row.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true)
     await page.getByRole('button', { name: 'Cancel', exact: true }).click()
