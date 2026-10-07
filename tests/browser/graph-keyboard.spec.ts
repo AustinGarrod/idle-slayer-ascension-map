@@ -1,0 +1,138 @@
+import { expect, test, type Page } from '@playwright/test'
+import { readFileSync } from 'node:fs'
+import { visibility } from '../../src/domain/rules'
+import { emptyProfile, type Catalog } from '../../src/domain/types'
+
+const catalog = JSON.parse(readFileSync('public/catalog.json', 'utf8')) as Catalog
+const key = 'idle-slayer-ascension-map.profile.v1'
+const hidden = catalog.upgrades.find((upgrade) => upgrade.title === 'Astral Slayer')!
+const node = (page: Page, id: string) => page.locator(`.react-flow__node[data-id="${id}"]`)
+async function focusedId(page: Page) {
+  return page.evaluate(() => (document.activeElement as HTMLElement)?.dataset.id)
+}
+async function openAction(page: Page, name: string) {
+  const action = page.getByRole('button', { name, exact: true })
+  if (!await action.isVisible()) await page.getByRole('button', { name: 'Map options', exact: true }).click()
+  await action.click()
+}
+async function showSpoilers(page: Page, enabled: boolean) {
+  const checkbox = page.getByRole('checkbox', { name: 'Show spoilers', exact: true })
+  if (!await checkbox.isVisible()) await page.getByRole('button', { name: 'Map options', exact: true }).click()
+  await checkbox.setChecked(enabled)
+  const options = page.getByRole('dialog', { name: 'Map options', exact: true })
+  if (await options.isVisible()) await options.getByRole('button', { name: 'Close dialog', exact: true }).click()
+}
+async function frameVisible(page: Page, id: string) {
+  await expect.poll(() => node(page, id).evaluate((element) => {
+    const box = element.getBoundingClientRect(), map = element.closest('.map')!.getBoundingClientRect()
+    const centerX = (box.left + box.right) / 2, centerY = (box.top + box.bottom) / 2
+    return box.left >= map.left - 1 && box.right <= map.right + 1 && box.top >= map.top - 1 && box.bottom <= map.bottom + 1
+      && Boolean(document.elementFromPoint(centerX, centerY)?.closest('.react-flow__node') === element)
+  })).toBe(true)
+}
+
+test.beforeEach(async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.addInitScript(() => localStorage.setItem('idle-slayer-ascension-map.analytics.v1', 'disabled'))
+})
+
+for (const layout of ['Game Layout', 'Detailed Layout'] as const) {
+  for (const viewport of [{ width: 1280, height: 800 }, { width: 320, height: 568 }, { width: 844, height: 390 }]) {
+    test(`${layout} enters, explores and leaves the graph efficiently at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+      await page.setViewportSize(viewport); await page.goto('./')
+      await page.getByRole('group', { name: 'Map layout' }).getByRole('button', { name: layout, exact: true }).click()
+      const nodes = page.locator('.react-flow__node')
+      await expect(nodes).toHaveCount(121)
+      await expect(page.locator('.react-flow__node[tabindex="0"]')).toHaveCount(1)
+      await page.locator('.toolbar button:visible').last().focus()
+      await page.keyboard.press('Tab')
+      const shortcut = page.getByRole('button', { name: 'Skip upgrades to camera controls', exact: true })
+      await expect(shortcut).toBeFocused(); await expect(shortcut).toBeInViewport()
+      await expect(shortcut).toHaveAccessibleDescription(/Tab: leave upgrades for camera controls/)
+      await page.keyboard.press('Enter')
+      await expect(page.getByRole('button', { name: 'Zoom out', exact: true })).toBeFocused()
+      await page.keyboard.press('Tab')
+      await expect(page.getByRole('button', { name: 'Zoom in', exact: true })).toBeFocused()
+      const zoomBefore = await page.locator('.react-flow__viewport').evaluate((element) => new DOMMatrix(getComputedStyle(element).transform).a)
+      await page.keyboard.press('Enter')
+      await expect.poll(() => page.locator('.react-flow__viewport').evaluate((element) => new DOMMatrix(getComputedStyle(element).transform).a)).toBeGreaterThan(zoomBefore)
+      await shortcut.focus(); await page.keyboard.press('Tab')
+      await expect(node(page, catalog.startId)).toBeFocused()
+      await expect(node(page, catalog.startId)).toHaveAccessibleName(/Permanent Slayer, available, .*Slayer Points/)
+      await expect(node(page, catalog.startId)).toHaveAccessibleDescription(/catalog order; tree positions stay fixed/)
+      await page.keyboard.press('End')
+      const last = visibility(catalog, emptyProfile(catalog.revision)).upgrades.at(-1)!
+      await expect(node(page, last.id)).toBeFocused(); await frameVisible(page, last.id)
+      await page.keyboard.press('Home'); await page.keyboard.press('ArrowRight')
+      const second = visibility(catalog, emptyProfile(catalog.revision)).upgrades[1]
+      await expect(node(page, second.id)).toBeFocused()
+      await page.keyboard.press('ArrowUp')
+      const first = visibility(catalog, emptyProfile(catalog.revision)).upgrades[0]
+      await expect(node(page, first.id)).toBeFocused()
+      await page.keyboard.press('Enter')
+      await expect(page.locator('.details h2')).toHaveText(first.title)
+      await expect(node(page, first.id)).toHaveAttribute('aria-current', 'true')
+      await expect(node(page, first.id)).toHaveClass(/selected/)
+      await frameVisible(page, first.id)
+      await page.keyboard.press('Escape')
+      await expect(page.locator('.details')).toHaveCount(0)
+      await expect(node(page, first.id)).toBeFocused()
+      await page.keyboard.press('Space')
+      await expect(page.locator('.details h2')).toHaveText(first.title)
+      await page.keyboard.press('Escape')
+      await expect(page.locator('.details')).toHaveCount(0)
+      await expect(node(page, first.id)).toBeFocused()
+      await page.keyboard.press('Shift+Tab'); await expect(shortcut).toBeFocused()
+      await page.keyboard.press('Shift+Tab')
+      expect(await page.evaluate(() => Boolean(document.activeElement?.closest('.toolbar')))).toBe(true)
+      await shortcut.focus(); await page.keyboard.press('Tab')
+      let tabs = 0
+      do { await page.keyboard.press('Tab'); tabs++ } while (tabs < 4 && !await page.getByRole('button', { name: 'Zoom out', exact: true }).evaluate((element) => element === document.activeElement))
+      await expect(page.getByRole('button', { name: 'Zoom out', exact: true })).toBeFocused()
+      expect(tabs).toBeLessThanOrEqual(2)
+      expect(await page.evaluate((key) => localStorage.getItem(key), key)).toBeNull()
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+    })
+  }
+
+  test(`${layout} makes every spoiler-visible upgrade keyboard reachable and restores the visible focus universe`, async ({ page }) => {
+    test.setTimeout(90_000)
+    await page.goto('./')
+    await page.getByRole('group', { name: 'Map layout' }).getByRole('button', { name: layout, exact: true }).click()
+    const shortcut = page.getByRole('button', { name: 'Skip upgrades to camera controls', exact: true })
+    for (const spoilers of [false, true]) {
+      if (spoilers) await showSpoilers(page, true)
+      const visible = visibility(catalog, { ...emptyProfile(catalog.revision), showSpoilers: spoilers })
+      await expect(page.locator('.react-flow__node')).toHaveCount(visible.upgrades.length)
+      await shortcut.focus(); await page.keyboard.press('Tab'); await page.keyboard.press('Home')
+      for (const upgrade of visible.upgrades) {
+        expect(await focusedId(page)).toBe(upgrade.id)
+        await expect(node(page, upgrade.id)).toHaveAttribute('tabindex', '0')
+        await page.keyboard.press('ArrowRight')
+      }
+      expect(await focusedId(page)).toBe(visible.upgrades[0].id)
+      await expect(page.locator('.react-flow__node[tabindex="0"]')).toHaveCount(1)
+    }
+    await node(page, hidden.id).focus()
+    await showSpoilers(page, false)
+    await expect(node(page, hidden.id)).toHaveCount(0)
+    await expect(page.locator('.react-flow__node[tabindex="0"]')).toHaveCount(1)
+    await shortcut.focus(); await page.keyboard.press('Tab')
+    expect(await focusedId(page)).toBe(visibility(catalog, emptyProfile(catalog.revision)).upgrades[0].id)
+    await expect(page.locator('.map')).not.toContainText(hidden.title)
+  })
+}
+
+test('keyboard help is discoverable in responsive menus and restores its trigger focus', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 568 }); await page.goto('./')
+  await openAction(page, 'Keyboard map controls…')
+  const help = page.getByRole('dialog', { name: 'Keyboard map controls', exact: true })
+  await expect(help).toContainText('one Tab stop')
+  await expect(help).toContainText('catalog order')
+  await expect(help).toContainText('interaction mode')
+  await page.keyboard.press('Escape')
+  await expect(help).toHaveCount(0)
+  await openAction(page, 'About & sources')
+  await page.getByRole('button', { name: 'Keyboard map controls…', exact: true }).click()
+  await expect(help).toBeVisible()
+})

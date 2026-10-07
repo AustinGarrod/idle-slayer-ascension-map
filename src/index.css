@@ -92,6 +92,10 @@ small { display: block; font-size: .8125rem; color: var(--muted); line-height: 1
 .workspace { flex: 1 1 0; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); overflow: hidden; }
 .workspace.has-details { grid-template-columns: minmax(0, 1fr) 320px; }
 .map { position: relative; min-width: 0; min-height: 0; overflow: hidden; background: var(--canvas); }
+.map-keyboard-entry { position: absolute; top: 8px; left: 8px; z-index: 10; width: min(340px, calc(100% - 16px)); padding: 8px; border: 1px solid var(--frame); border-radius: 6px; background: var(--surface); transform: translateY(calc(-100% - 16px)); }
+.map-keyboard-entry:focus-within { transform: none; }
+.map-keyboard-entry button { width: 100%; text-align: left; font-size: .875rem; }
+.map-keyboard-entry small { margin-top: 8px; }
 .atlas .react-flow { background: var(--canvas); }
 .atlas .react-flow__attribution { margin: 0 6px 6px 0; border: 1px solid #574631; border-radius: 3px; background: var(--surface); padding: 3px 5px; }
 .atlas .react-flow__attribution a { color: var(--muted); }
