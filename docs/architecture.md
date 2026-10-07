@@ -28,13 +28,15 @@ Purchase, removal and reset confirmation rows pair each visible upgrade title wi
 
 The guide's ascending tier and row order decides priority among eligible mapped IDs. Its earliest non-supplementary occurrence supplies each rank; exact native cost and stable ID break ties. Stage labels describe the source rather than imposing extra epoch/USP requirements. If there are no eligible ranked IDs, the result uses an explicitly labeled exact-cost fallback. It distinguishes every visible upgrade being owned from unowned upgrades blocked by recorded requirements, without counting or naming hidden content.
 
-When no visible purchase qualifies, the dialog offers a requirement-review route to the selected visible blocked upgrade, falling back to visible catalog order. It labels this as a review starting point rather than a suggestion; owned, granted, hidden and native-ready upgrades are excluded.
+When no visible purchase qualifies, the dialog offers a requirement-review route to the selected visible blocked upgrade, falling back to visible catalog order. It labels this as a review starting point rather than a suggestion; owned, hidden and native-ready upgrades are excluded.
 
 The dialog presents a main suggestion and up to two alternatives with native effect, cost, guide section and source links. Show on map centers the selected ID in the current layout without changing progress. Record purchase delegates to the existing atomic purchase preview and undo history. Recommendations recompute after purchases, removal, milestones, activation, restore, undo and Ultra Ascension; no recommendation state enters the version 1 profile or JSON backup.
 
 The source is wiki revision 7187, marked for game 7.0.0, reviewed against the complete native 7.2.0 catalog. It ranks 280 native IDs; eight remain explicitly unranked. Source identity, title aliases, duplicate-title costs/prerequisite witnesses and license evidence are recorded separately from game receipts. `docs/wiki-recommendations.md` describes deterministic refresh. Game costs and gates remain canonical, and no SP balance, total USP, equipment or personal-play-style optimization is inferred. The app fetches no wiki data at runtime.
 
 ## Ultra Ascension
+
+`conditionallyRetainedPurchases()` returns only existing purchases whose native retention source is active. `retainedPurchasesOnReset()` evaluates the same conditions after the reset activation phase; `planUltraAscension().conditionallyRetained` lists those existing targets preserved by the planned reset. Ownership comes only from `profile.purchases`, so visibility and recommendations need no separate granted state. The public catalog retains its legacy `grants` field name for compatibility; its four rules never award absent targets.
 
 Ownership, purchase epoch and activation remain independent. A reset activates eligible owned Astral locks, keeps Astrals, retains existing targets of active native retention sources, clears repeat purchases, keeps milestones and advances the epoch. Retention exceptions never award absent upgrades. Each later reset reevaluates the active source conditions. Native source/target pairs and ordering are documented in scripts/logic/README.md. Unknown IDs survive updates and resets because their future rules are unknown.
 

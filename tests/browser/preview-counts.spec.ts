@@ -43,7 +43,7 @@ for (const showSpoilers of [false, true]) {
         await progress.click()
         await page.getByRole('button', { name: 'Ultra Ascend…', exact: true }).click()
         const groups = [
-          ['Repeat purchases cleared', reset.cleared], ['Astral locks activated', reset.activated], ['Purchased grant targets retained', reset.granted],
+          ['Repeat purchases cleared', reset.cleared], ['Astral locks activated', reset.activated], ['Conditionally retained purchases', reset.conditionallyRetained],
         ] as const
         for (const [label, ids] of groups) {
           const section = page.getByRole('dialog').locator('section').filter({ has: page.getByRole('heading', { name: `${label} (${visibleIds(ids).length})`, exact: true }) })
