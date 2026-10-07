@@ -18,6 +18,14 @@ Keyboard exploration uses one graph Tab stop. Arrow Right/Down browses the next 
 
 The wiki snapshot ranks 280 of 288 native upgrades and declares game 7.0.0; the catalog remains authoritative for 7.2.0 costs and gates. When no eligible upgrade has a wiki rank, suggestions explicitly use a native-cost **Catalog fallback**. General guide order does not account for SP balance, total USP, gear or personal play style. [Recommendation provenance and refresh](wiki-recommendations.md) documents source revisions, identity mapping, eight unranked upgrades and licensing. The site bundles this data locally and makes no wiki requests.
 
+## Analyze one proposed event
+
+Expand an upgrade’s details and choose **Analyze forward impact…**, or open Milestones and choose **Analyze item receipt…** beside an unrecorded visible item. The purchase must already meet native purchase and reveal requirements; a blocked proposal reports the constraint rather than filling prerequisites. A milestone proposal assumes only the required item actually received/crafted/purchased, without inventing its acquisition path.
+
+The private dialog compares before/after purchase and reveal gates, lists newly eligible purchases, explains still-blocked alternatives and separates OR paths that were already eligible. Native rules supply the relationships even where there is no map edge. No further eligible upgrade is assumed purchased, and nothing changes progress, goals or visit-only Undo/Redo. Astral Lock purchases remain awaiting activation; this is not an activation forecast, history correction or Ultra Ascension roadmap.
+
+Default rows, counts and requirement explanations use the currently visible map. Only explicit **Show spoilers** allows hypothetical new reveal identities/counts; newly revealed does not always mean eligible to purchase. Results follow catalog order and make no affordability or optimal-choice claim. Analysis closes when recorded progress changes or another dialog/recovery action opens. Return to details or Milestones to continue ordinary inspection.
+
 ## Orient and return to your upgrade
 
 Open **Map view…** on desktop, or **Map options** on a phone, then choose **Overview visible map**. The inspector temporarily closes so you can see the currently visible tree shape. Your selected upgrade, progress and chosen layout stay unchanged. Overview tiles are small; use **Return to inspection** in the camera controls to bring the selected upgrade back at a readable size, with its details restored. With no selection, **Return to previous view** restores your earlier camera. **Refocus selected upgrade** in Map options also recovers a target after manual panning.

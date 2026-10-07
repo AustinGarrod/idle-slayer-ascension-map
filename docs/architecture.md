@@ -22,6 +22,14 @@ Milestones represent the actual item received/crafted or Upgrade bought. Checkli
 
 Purchase, removal and reset confirmation rows pair each visible upgrade title with its exact native SP cost. This distinguishes the eleven same-titled Astral Keys while stable native IDs remain the mutation identities; long costs wrap within narrow dialogs.
 
+## Single-event forward impact
+
+`forward-impact.ts` clones the recorded profile only after validating an explicit currently visible, unowned purchase against both native gates, or an unrecorded visible item milestone. It evaluates that one native purchase/receipt only. It never calls prerequisite filling, activates a lock, performs a reset, writes progress or goals, or adds history. A hypothetical Astral Lock purchase retains the current epoch and remains pending; future activation requires a full reviewed UA transition rather than a flag change or historical correction.
+
+The BEFORE `visibility()` universe governs affected rows, counts and requirement explanations. Affected upgrades reference the chosen stable ID in a purchase or reveal predicate, independent of map edges; owned targets are excluded. Before/after evaluation distinguishes newly eligible purchases, still-blocked alternatives and already eligible OR paths in catalog order. Explicit spoiler browsing additionally explains changed reveal gates and separates reveal-only changes from full eligibility. Default hypothetical reveals contribute no identities, counts or ranking. Read-only requirement projection preserves visible AND/OR grouping and omits hidden leaves and topology.
+
+The optional dialog enters from an auxiliary action AFTER Purchase in expanded details, or from visible unrecorded Milestones. It renders ten rows per group with explicit expansion. Hypothetical controls and results are replay-blocked, make no new analytics calls and have no persistent storage. Closing restores inspection or Milestones; opening generic menus (including null-menu recovery), another preview or purchase closes analysis. Starting analysis invalidates pending file reads. Every actual profile replacement/change or external storage change invalidates the captured analysis before rendering another result. Camera, selection, profile and intention contracts remain unchanged.
+
 ## Next-upgrade suggestions
 
 `recommendations.ts` computes a read-only result from the catalog, current profile and bundled `src/data/wiki-priorities.json`. Only unowned upgrades from the shared visibility result qualify, and their native reveal and purchase predicates must both be satisfied now. Explicit spoiler browsing does not bypass a native reveal gate. Pending owned Astral locks are excluded from repurchase; eligible new locks carry a delayed-activation note. The engine never fills prerequisites, selects an OR path, changes milestones or applies a reset.

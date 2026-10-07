@@ -669,6 +669,48 @@ test('catalog parsing errors show only fixed public wording in the actual record
   expect(capture.unexpected).toEqual([])
 })
 
+test('single-event hypothetical controls and results stay blocked in real replay and emit no purchase events', async ({ page, context, baseURL }) => {
+  const origin = new URL(baseURL!).origin
+  let releaseRecorder!: () => void
+  const recorderReady = new Promise<void>((resolve) => { releaseRecorder = resolve })
+  const capture = await installLocalRoutes(context, origin, { recorderReady })
+  await serveIsolatedApplication(context, origin)
+  await page.goto(`${origin}${appFixturePath}`)
+  await expect(page.locator('.toolbar')).toBeVisible()
+  await waitForActive(page)
+  await page.locator(`.react-flow__node[data-id="${catalog.startId}"]`).click()
+  const toggle = page.getByRole('button', { name: 'Show details', exact: true })
+  if (await toggle.isVisible()) await toggle.click()
+  const before = await page.evaluate((key) => localStorage.getItem(key), profileKey)
+  await page.getByRole('button', { name: 'Analyze forward impact…', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Forward impact', exact: true })
+  await expect(dialog.locator('.forward-impact')).toBeVisible()
+  const privateSnapshot = 'PRIVATE_FORWARD_EVENT_SNAPSHOT'
+  const privateMutation = 'PRIVATE_FORWARD_EVENT_MUTATION'
+  const publicSnapshot = 'PUBLIC_FORWARD_SNAPSHOT'
+  const publicMutation = 'PUBLIC_FORWARD_MUTATION'
+  await page.evaluate(({ privateSnapshot, publicSnapshot }) => {
+    const privateNode = document.createElement('p'); privateNode.id = 'forward-private-proof'; privateNode.textContent = privateSnapshot
+    document.querySelector('.forward-impact')!.appendChild(privateNode)
+    const publicNode = document.createElement('p'); publicNode.id = 'forward-public-proof'; publicNode.textContent = publicSnapshot
+    document.querySelector('dialog[open]')!.appendChild(publicNode)
+  }, { privateSnapshot, publicSnapshot })
+  releaseRecorder()
+  const snapshot = await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 2 && JSON.stringify(event).includes(publicSnapshot)))
+  expect(blockedReplayNodes(snapshot).some((entry) => entry.attributes.class.includes('forward-impact') && !entry.childNodes?.length)).toBe(true)
+  await dialog.locator('summary').first().click()
+  await page.locator('#forward-private-proof').evaluate((node, text) => { node.textContent = text }, privateMutation)
+  await page.locator('#forward-public-proof').evaluate((node, text) => { node.textContent = text }, publicMutation)
+  await page.locator('#forward-public-proof').click()
+  const events = await waitForReplayEvents(capture, (items) => items.some((event) => event.type === 3 && JSON.stringify(event).includes(publicMutation)))
+  const proof = JSON.stringify({ submissions: capture.submissions, replay: events })
+  for (const marker of [privateSnapshot, privateMutation]) expect(proof).not.toContain(marker)
+  for (const name of ['purchase_started', 'purchase_previewed', 'purchase_applied', 'milestone_changed', 'progress_undo']) expect(capture.submissions.filter((item) => item.payload.name === name)).toHaveLength(0)
+  expect(capture.submissions.some((item) => item.payload.name === 'panel_opened' && (item.payload.data as Record<string, unknown>)?.panel === 'forward-impact')).toBe(false)
+  expect(await page.evaluate((key) => localStorage.getItem(key), profileKey)).toBe(before)
+  expect(capture.unexpected).toEqual([])
+})
+
 test('active dialog feedback remains private in actual recorder snapshots and mutations', async ({ page, context, baseURL }) => {
   const origin = new URL(baseURL!).origin
   let releaseRecorder!: () => void

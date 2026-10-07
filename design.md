@@ -147,6 +147,10 @@ Keep motion brief and purposeful, such as centering a selected node. Respect red
 - A spoiler-hidden screen exposes only content allowed by the shared visibility rules.
 - Added fonts, icons and wiki text have recorded provenance and attribution.
 
+## Optional forward impact
+
+A private single-event analysis stays in the existing independently scrolling dialog. Entry lives after the main Purchase actions in expanded details, or beside an unrecorded visible item in Milestones. Compact details hide the auxiliary action until expanded, retaining the ordinary Purchase keyboard path and useful map space. Native before/after gate states, stable IDs and exact costs distinguish affected upgrades; optional requirement explanations preserve visible AND/OR grouping. Rows expand in batches and text wraps at enlarged browser defaults. Opening or closing analysis changes no progress, selection or camera, and another menu, preview or external progress change invalidates it.
+
 ## Optional player intentions
 
 Goals stay in the existing scrollable Progress dialog, with entry from expanded upgrade details. No permanent rail competes with the map or selected inspector. A compact completion selector distinguishes acquisition, activation and a repeat-purchase rebuild; full explanatory wording stays alongside it. Current visible rows pair stable ID/exact cost with status and native requirement inspection, explicit ordering and retirement controls. Goal panels, choices and recovery feedback are excluded from replay. Intentions never become actual progress or a recommended optimal build.
