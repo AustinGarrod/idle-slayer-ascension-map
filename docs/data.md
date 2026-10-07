@@ -106,6 +106,8 @@ No wiki data or wiki images were needed for this build.
 
 ## Reproduce and refresh on Windows
 
+Start with the [ordered catalog-refresh runbook](catalog-refresh.md). It distinguishes unchanged-build reproduction from new-build investigation and coordinates native, sprite, recommendation, save-format and release evidence before promotion. The commands below remain the detailed catalog/receipt promotion reference.
+
 Follow [`scripts/extract/README.md`](../scripts/extract/README.md) for the exact
 Python environment, asset extraction, normalization and sprite review commands.
 Run the [IL2CPP pipeline](../scripts/logic/README.md) first to generate private
