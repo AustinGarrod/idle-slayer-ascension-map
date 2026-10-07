@@ -161,3 +161,76 @@ test('unsaved intentions survive external goal changes until deliberate recovery
   await expect(page.locator('.goal-list li')).toHaveAttribute('data-goal-id', node('Minions').id)
   expect(await saved(page)).toBeNull()
 })
+
+
+for (const failure of ['unavailable', 'corrupt'] as const) {
+  test(`failed ${failure} saved-goal recovery preserves usable visit intentions`, async ({ page }) => {
+    await page.addInitScript((key) => {
+      const win = window as Window & { refuseGoalWrites?: boolean; refuseGoalReads?: boolean }
+      win.refuseGoalWrites = true
+      const set = Storage.prototype.setItem, get = Storage.prototype.getItem
+      Storage.prototype.setItem = function (name, value) {
+        if (name === key && win.refuseGoalWrites) throw new Error('Synthetic goal write refusal')
+        set.call(this, name, value)
+      }
+      Storage.prototype.getItem = function (name) {
+        if (name === key && win.refuseGoalReads) throw new Error('Synthetic goal read refusal')
+        return get.call(this, name)
+      }
+    }, GOALS_STORAGE_KEY)
+    await page.goto('./'); await choose(page, 'Permanent Slayer', 'rebuild')
+    await page.getByRole('button', { name: 'Review saved goals', exact: true }).click()
+    await page.evaluate(({ key, failure }) => {
+      const win = window as Window & { refuseGoalWrites?: boolean; refuseGoalReads?: boolean }
+      if (failure === 'unavailable') win.refuseGoalReads = true
+      else { win.refuseGoalWrites = false; localStorage.setItem(key, '{private-corrupt-goal-fixture'); win.refuseGoalWrites = true }
+    }, { key: GOALS_STORAGE_KEY, failure })
+    await page.getByRole('button', { name: 'Confirm goal recovery', exact: true }).click()
+    await expect(page.locator('.goal-list li')).toHaveCount(1)
+    await expect(page.locator('.goal-list li')).toHaveAttribute('data-goal-id', catalog.startId)
+    await expect(page.locator('.goal-list')).toContainText('Recurring rebuild')
+    await expect(page.locator('.goals-panel')).toContainText('Saved goals could not be read')
+    await expect(page.locator('.goals-panel')).not.toContainText('private-corrupt-goal-fixture')
+    expect(await saved(page)).toBeNull()
+    await page.getByRole('button', { name: 'Close dialog', exact: true }).click()
+    await progress(page)
+    await expect(page.locator('.goal-list li')).toHaveAttribute('data-goal-id', catalog.startId)
+    await page.evaluate(() => {
+      const win = window as Window & { refuseGoalWrites?: boolean; refuseGoalReads?: boolean }
+      win.refuseGoalReads = false; win.refuseGoalWrites = false
+    })
+    await page.getByRole('button', { name: "Save this visit's goals…", exact: true }).click()
+    await page.getByRole('button', { name: 'Confirm goal recovery', exact: true }).click()
+    expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), GOALS_STORAGE_KEY)).toEqual({ version: 1, targets: [{ id: catalog.startId, mode: 'rebuild' }] })
+  })
+
+  test(`clean goals survive an external ${failure} read until valid confirmed replacement`, async ({ page, context }) => {
+    await page.addInitScript((key) => {
+      const get = Storage.prototype.getItem
+      Storage.prototype.getItem = function (name) {
+        if (name === key && (window as Window & { refuseGoalReads?: boolean }).refuseGoalReads) throw new Error('Synthetic goal read refusal')
+        return get.call(this, name)
+      }
+    }, GOALS_STORAGE_KEY)
+    await page.goto('./'); await choose(page, 'Permanent Slayer')
+    const incoming = { version: 1, targets: [{ id: node('Minions').id, mode: 'activate' }] }
+    const other = await context.newPage(); await other.goto(page.url())
+    if (failure === 'unavailable') await page.evaluate(() => { (window as Window & { refuseGoalReads?: boolean }).refuseGoalReads = true })
+    await other.evaluate(({ key, failure, incoming }) => localStorage.setItem(key, failure === 'corrupt' ? '{private-corrupt-goal-fixture' : JSON.stringify(incoming)), { key: GOALS_STORAGE_KEY, failure, incoming })
+    await expect(page.locator('.goals-panel')).toContainText('Saved goals could not be read')
+    await expect(page.locator('.goal-list li')).toHaveCount(1)
+    await expect(page.locator('.goal-list li')).toHaveAttribute('data-goal-id', catalog.startId)
+    await expect(page.locator('.goals-panel')).not.toContainText('private-corrupt-goal-fixture')
+    expect(await saved(page)).toBeNull()
+    await page.evaluate(() => { (window as Window & { refuseGoalReads?: boolean }).refuseGoalReads = false })
+    await other.evaluate(({ key, incoming }) => localStorage.setItem(key, JSON.stringify(incoming)), { key: GOALS_STORAGE_KEY, incoming })
+    await expect(page.locator('.goal-list li')).toHaveAttribute('data-goal-id', catalog.startId)
+    await page.getByRole('button', { name: 'Review saved goals', exact: true }).click()
+    await page.getByRole('button', { name: 'Cancel goal recovery', exact: true }).click()
+    await expect(page.locator('.goal-list li')).toHaveAttribute('data-goal-id', catalog.startId)
+    await page.getByRole('button', { name: 'Review saved goals', exact: true }).click()
+    await page.getByRole('button', { name: 'Confirm goal recovery', exact: true }).click()
+    await expect(page.locator('.goal-list li')).toHaveAttribute('data-goal-id', node('Minions').id)
+    expect(await saved(page)).toBeNull()
+  })
+}

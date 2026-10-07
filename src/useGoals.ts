@@ -27,14 +27,18 @@ export function useGoals() {
       publish({ goals, raw, readable: true, dirty: false, error: '' })
     } catch { publish({ ...next, error: 'Goals could not be saved. Your intentions remain usable for this visit. Retry saving before closing this page.' }) }
   }
-  function useSaved() { publish(read()) }
+  function useSaved() {
+    const incoming = read()
+    if (incoming.readable) publish(incoming)
+    else publish({ ...current.current, readable: false, dirty: true, error: incoming.error })
+  }
   useEffect(() => {
     const changed = (event: StorageEvent) => {
       let storage: Storage
       try { storage = window.localStorage } catch { return }
       if (event.storageArea !== storage || (event.key !== null && event.key !== GOALS_STORAGE_KEY)) return
       if (current.current.dirty) publish({ ...current.current, error: 'Saved goals changed in another tab. This visit keeps its intentions; choose which goals to retain.' })
-      else publish(read())
+      else useSaved()
     }
     window.addEventListener('storage', changed)
     return () => window.removeEventListener('storage', changed)
