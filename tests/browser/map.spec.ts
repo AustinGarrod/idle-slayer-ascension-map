@@ -125,7 +125,7 @@ test('backup restore is previewed and malformed input leaves current progress in
   await page.goto('./')
   await openProgress(page)
   await page.getByLabel('Map progress JSON backup', { exact: true }).setInputFiles({ name: 'invalid.json', mimeType: 'application/json', buffer: Buffer.from('{broken') })
-  await expect(page.getByRole('status')).toContainText('not valid JSON')
+  await expect(page.getByRole('status', { name: 'Map action feedback', exact: true })).toContainText('not valid JSON')
   const profile = { ...initial, purchases: { [start.id]: { epoch: 0, active: true }, 'unknown-future-id': { epoch: 0, active: true } } }
   await page.getByLabel('Map progress JSON backup', { exact: true }).setInputFiles({ name: 'backup.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(profile)) })
   await expect(page.getByRole('dialog')).toContainText('Restore progress?')
@@ -206,7 +206,7 @@ test('manual Astral activation requires previous Ultra Ascension history', async
   await page.goto('./')
   await selectUpgrade(page, astral.title)
   await page.getByRole('button', { name: 'Already activated…', exact: true }).click()
-  await expect(page.getByRole('status')).toContainText('Record at least one previous Ultra Ascension')
+  await expect(page.getByRole('status', { name: 'Map action feedback', exact: true })).toContainText('Record at least one previous Ultra Ascension')
   await expect(page.getByRole('dialog')).toHaveCount(0)
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('idle-slayer-ascension-map.profile.v1')!))).toEqual(profile)
 })
