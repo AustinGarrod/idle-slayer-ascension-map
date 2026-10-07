@@ -24,6 +24,7 @@ export function SavedComparisonPanel({ catalog, profile, visible, session, state
   const retained = retainedPurchasesOnReset(catalog, profile)
   const [query, setQuery] = useState('')
   const [replace, setReplace] = useState<string | undefined>()
+  const activeReplace = replace !== undefined && list.ids.includes(replace) ? replace : undefined
   const [feedback, setFeedback] = useState('')
   const [restore, setRestore] = useState<{ list: SavedComparison; version: number; visibleKey: string } | null>(null)
   const [recovery, setRecovery] = useState<{ version: number; action: 'saved' | 'local' } | null>(null)
@@ -44,7 +45,7 @@ export function SavedComparisonPanel({ catalog, profile, visible, session, state
     if (session.edit(next, state.version)) { setReplace(undefined); setFeedback('Comparison updated. Progress is unchanged.') }
   }
   function add(id: string) {
-    const next = editComparison(state.list, id, visible.ids, catalog, replace)
+    const next = editComparison(state.list, id, visible.ids, catalog, activeReplace)
     if (next) edit(next)
   }
   function download() {
@@ -102,15 +103,15 @@ export function SavedComparisonPanel({ catalog, profile, visible, session, state
             <dt>Activation</dt><dd>{node.activation === 'after-ultra-ascension' ? 'Astral lock · activates after Ultra Ascension; ownership alone is not activation.' : 'Immediate when purchased.'}</dd>
             <dt>Ultra Ascension retention</dt><dd>{node.retention === 'repeat' ? retained.has(node.id) ? 'Existing purchase retained by Astral progress on the next reset.' : record ? 'Repeat purchase · clears on reset.' : 'Repeat purchase · not currently owned.' : node.retention === 'astral' ? 'Astral · ownership retained on reset.' : 'Permanent · ownership retained on reset.'}</dd></dl>
           <details><summary>Sources</summary>{node.sources.map((source, i) => <p key={i}>{source.url ? <a href={source.url} target="_blank" rel="noreferrer">{source.label}</a> : source.label}{source.evidence && <small>{source.evidence}</small>}</p>)}</details></> : <><h3>Unavailable catalog entry</h3><p>This saved ID is absent from the current catalog. Its identity, benefit, cost and rules cannot be established. Remove it or replace it explicitly.</p></>}
-        <div className="saved-comparison-tools">{node && <button onClick={() => onInspect(id)}>Show on map</button>}<button disabled={disabled} aria-pressed={replace === id} onClick={() => { setReplace(id); setQuery('') }}>Replace entry {position + 1}…</button><button disabled={disabled} onClick={() => edit({ ...list, ids: list.ids.filter((entry) => entry !== id) })}>Remove entry {position + 1}</button></div>
+        <div className="saved-comparison-tools">{node && <button onClick={() => onInspect(id)}>Show on map</button>}<button disabled={disabled} aria-pressed={activeReplace === id} onClick={() => { setReplace(id); setQuery('') }}>Replace entry {position + 1}…</button><button disabled={disabled} onClick={() => edit({ ...list, ids: list.ids.filter((entry) => entry !== id) })}>Remove entry {position + 1}</button></div>
       </article>
     })}</div>
-    <details className="saved-comparison-picker" open={replace !== undefined || !!initialId || !list.ids.length}>
-      <summary>{replace === undefined ? 'Choose a visible upgrade' : `Choose replacement for entry ${list.ids.indexOf(replace) + 1}`}</summary>
-      {replace !== undefined && <button onClick={() => setReplace(undefined)}>Cancel replacement</button>}
+    <details className="saved-comparison-picker" open={activeReplace !== undefined || !!initialId || !list.ids.length}>
+      <summary>{activeReplace === undefined ? 'Choose a visible upgrade' : `Choose replacement for entry ${list.ids.indexOf(activeReplace) + 1}`}</summary>
+      {activeReplace !== undefined && <button onClick={() => setReplace(undefined)}>Cancel replacement</button>}
       <label>Find a visible upgrade<input type="search" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
-      {list.ids.length === MAX_COMPARISON_ENTRIES && replace === undefined && <p>Select Replace on an entry, or remove it, before adding another.</p>}
-      <div className="saved-comparison-results" role="region" aria-label="Visible comparison choices">{results.map(({ node, state: status }) => <button key={node.id} data-upgrade-id={node.id} disabled={disabled || list.ids.includes(node.id) || (replace === undefined && list.ids.length >= MAX_COMPARISON_ENTRIES)} onClick={() => add(node.id)}><b>{node.title}</b><span>{cost(node.cost)}</span><small>{choiceStateLabels[status]} · Native ID: {node.id}{list.ids.includes(node.id) ? ' · Already compared' : ''}</small></button>)}</div>
+      {list.ids.length === MAX_COMPARISON_ENTRIES && activeReplace === undefined && <p>Select Replace on an entry, or remove it, before adding another.</p>}
+      <div className="saved-comparison-results" role="region" aria-label="Visible comparison choices">{results.map(({ node, state: status }) => <button key={node.id} data-upgrade-id={node.id} disabled={disabled || list.ids.includes(node.id) || (activeReplace === undefined && list.ids.length >= MAX_COMPARISON_ENTRIES)} onClick={() => add(node.id)}><b>{node.title}</b><span>{cost(node.cost)}</span><small>{choiceStateLabels[status]} · Native ID: {node.id}{list.ids.includes(node.id) ? ' · Already compared' : ''}</small></button>)}</div>
       {!results.length && <p>No visible matches.</p>}
     </details>
     {!!list.ids.length && <button disabled={disabled} onClick={() => edit(emptyComparison())}>Remove all compared entries</button>}

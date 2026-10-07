@@ -145,11 +145,24 @@ test('current visibility hides identities, counts, picker options and exported I
   if (await expand.isVisible()) await expand.click()
   await page.getByRole('button', { name: 'Compare this upgrade…', exact: true }).click()
   const dialog = page.getByRole('dialog', { name: 'Saved upgrade comparison', exact: true })
+  await dialog.getByRole('button', { name: 'Replace entry 2…', exact: true }).click()
+  await page.evaluate(() => {
+    const labels: string[] = []
+    Object.assign(window, { comparisonLabelMutations: labels })
+    new MutationObserver((records) => {
+      for (const record of records) {
+        const parent = record.target instanceof Element ? record.target : record.target.parentElement
+        if (parent?.closest('.saved-comparison-picker summary')) labels.push(record.oldValue ?? '', record.target.textContent ?? '')
+      }
+    }).observe(document.querySelector('.saved-comparison')!, { subtree: true, characterData: true, characterDataOldValue: true })
+  })
   const other = await context.newPage(); await other.goto('./')
   await other.evaluate(({ key, profile }) => localStorage.setItem(key, JSON.stringify(profile)), { key: PROFILE_STORAGE_KEY, profile: initial })
   await expect(dialog.locator('.saved-comparison-card')).toHaveCount(1)
   await expect(dialog).toContainText('Compared entries · 1 / 4')
   await expect(dialog.getByRole('searchbox', { name: 'Find a visible upgrade', exact: true })).toHaveValue('')
+  await expect(dialog.locator('.saved-comparison-picker summary')).toHaveText('Choose a visible upgrade')
+  expect(await page.evaluate(() => (window as unknown as { comparisonLabelMutations: string[] }).comparisonLabelMutations.some((label) => label.includes('entry 0')))).toBe(false)
   for (const id of secret) { await expect(dialog).not.toContainText(id); await expect(dialog).not.toContainText(catalog.upgrades.find((node) => node.id === id)!.title) }
   const event = page.waitForEvent('download'); await dialog.getByRole('button', { name: 'Export comparison', exact: true }).click()
   const download = await event
