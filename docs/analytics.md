@@ -10,6 +10,8 @@ Disabling tracking or clearing browser storage in another tab also suspends this
 
 Recordings can include ordinary visible map progress: purchased/available/pending states, milestones and displayed summaries. Hidden nodes stay absent under the shared visibility rules. Selected saves and JSON backups are never uploaded. Search text, file inputs, UA-counter inputs, save-import comparison/warnings, JSON-restore content and unknown IDs, and raw error details are excluded from replay contents. After applying an import or restore, its ordinary visible map result can appear in recording. Iframe recording is disabled.
 
+Catalog startup failures display fixed public wording with a retry action. Parser excerpts and catalog-validation details are never stored in React state or displayed; `catalog_error` retains only its bounded `network` or `validation` category. The fixed loading/error screen can appear in recordings.
+
 Standard collection also includes page visits, sanitized referral/campaign information, browser/device information, approximate location when available and bounded performance measurements. These service/session dimensions are separate from the application's allowlisted custom event properties below.
 
 Replay exclusions block DOM contents, not every interaction measurement. Umami still records coarse click and scroll coordinates for heatmaps, including over excluded elements. Moderate masking is not a promise that ordinary rendered progress is private. Do not weaken the explicit exclusions when adjusting replay fidelity.
