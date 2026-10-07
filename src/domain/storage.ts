@@ -1,4 +1,4 @@
-import { emptyProfile, MAX_PROFILE_EPOCH, type Profile } from './types'
+import { MAX_PROFILE_EPOCH, type Profile } from './types'
 
 export const PROFILE_STORAGE_KEY = 'idle-slayer-ascension-map.profile.v1'
 export const MAX_PROFILE_BYTES = 4 * 1024 * 1024
@@ -22,19 +22,6 @@ interface Failure {
 
 export type ParseProfileResult = { ok: true; profile: Profile } | Failure
 export type ExportProfileResult = { ok: true; text: string } | Failure
-export type SaveProfileResult = { ok: true } | Failure
-export type LoadProfileResult =
-  | { ok: true; profile: Profile; source: 'new' | 'stored'; migrated: boolean }
-  | Failure
-
-export interface ProfileStorageReader {
-  getItem(key: string): string | null
-}
-
-export interface ProfileStorageWriter {
-  setItem(key: string, value: string): void
-}
-
 const forbiddenKeys = new Set(['__proto__', 'constructor', 'prototype'])
 const profileKeys = ['version', 'catalogRevision', 'epoch', 'purchases', 'milestones', 'showSpoilers']
 
@@ -156,39 +143,5 @@ export function migrateProfile(profile: Profile, catalogRevision: string): Profi
     catalogRevision,
     purchases: Object.fromEntries(Object.entries(profile.purchases).map(([id, purchase]) => [id, { ...purchase }])),
     milestones: { ...profile.milestones },
-  }
-}
-
-/** Corrupt or inaccessible storage is a failure, never an instruction to clear saved progress. */
-export function loadProfile(storage: ProfileStorageReader, catalogRevision: string): LoadProfileResult {
-  let text: string | null
-  try {
-    text = storage.getItem(PROFILE_STORAGE_KEY)
-  } catch {
-    return failure('storage-read', 'Saved progress could not be read. Current progress remains available in this session.')
-  }
-  if (text === null) return { ok: true, profile: emptyProfile(catalogRevision), source: 'new', migrated: false }
-  const parsed = parseProfileBackup(text)
-  if (!parsed.ok) return parsed
-  const profile = migrateProfile(parsed.profile, catalogRevision)
-  const portable = exportProfileBackup(profile)
-  if (!portable.ok) return portable
-  return {
-    ok: true,
-    profile,
-    source: 'stored',
-    migrated: parsed.profile.catalogRevision !== catalogRevision,
-  }
-}
-
-/** Failure is reported to the caller; this function never mutates the current session. */
-export function saveProfile(storage: ProfileStorageWriter, profile: Profile): SaveProfileResult {
-  const backup = exportProfileBackup(profile)
-  if (!backup.ok) return backup
-  try {
-    storage.setItem(PROFILE_STORAGE_KEY, backup.text)
-    return { ok: true }
-  } catch {
-    return failure('storage-write', 'Progress could not be saved on this device. Current progress remains available in this session; export a backup to keep it.')
   }
 }

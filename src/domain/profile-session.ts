@@ -1,8 +1,11 @@
 import { emptyProfile, type Profile } from './types'
-import { exportProfileBackup, parseProfileBackup, PROFILE_STORAGE_KEY, type ProfileErrorKind, type ProfileStorageReader, type ProfileStorageWriter } from './storage'
+import { exportProfileBackup, parseProfileBackup, PROFILE_STORAGE_KEY, type ProfileErrorKind } from './storage'
 
 export const PROFILE_WRITE_LOCK = `${PROFILE_STORAGE_KEY}.write`
-type Storage = ProfileStorageReader & ProfileStorageWriter
+interface Storage {
+  getItem(key: string): string | null
+  setItem(key: string, value: string): void
+}
 export interface ProfileLocks {
   request<T>(name: string, options: { mode: 'exclusive'; ifAvailable: true }, callback: (lock: unknown | null) => T): Promise<T>
 }
@@ -25,7 +28,7 @@ export interface ProfileSessionState {
   conflict: StoredSnapshot | null
 }
 
-/** Coordinates a single map profile without changing its portable version 1 format. */
+/** Supported device-persistence boundary: coordinates all profile reads and writes without changing portable v1. */
 export function createProfileSession(options: { revision: string; storage: () => Storage; locks: () => ProfileLocks | undefined }) {
   let baseline: string | null | undefined
   let persisted: Profile | undefined
