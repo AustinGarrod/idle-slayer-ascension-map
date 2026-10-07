@@ -266,14 +266,14 @@ for (const layout of ['Game Layout', 'Detailed Layout'] as const) {
 
 test('keyboard help is discoverable in responsive menus and restores its trigger focus', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 568 }); await page.goto('./')
-  await openAction(page, 'Keyboard map controls…')
-  const help = page.getByRole('dialog', { name: 'Keyboard map controls', exact: true })
+  await openAction(page, 'Map help…')
+  const help = page.getByRole('dialog', { name: 'Map help', exact: true })
   await expect(help).toContainText('one Tab stop')
   await expect(help).toContainText('catalog order')
   await expect(help).toContainText('interaction mode')
   await page.keyboard.press('Escape')
   await expect(help).toHaveCount(0)
   await openAction(page, 'About & sources')
-  await page.getByRole('button', { name: 'Keyboard map controls…', exact: true }).click()
+  await page.getByRole('button', { name: 'Map help…', exact: true }).click()
   await expect(help).toBeVisible()
 })
