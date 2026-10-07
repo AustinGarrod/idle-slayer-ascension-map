@@ -66,6 +66,13 @@ Analytics is an optional external service: script, network and API failures must
 
 ## Rendering and verification
 
+Recorded progress can reflow Detailed Layout. When the same visible selected ID
+receives new coordinates, the camera recenters using its current zoom and the
+shared canvas-fit safeguards. Unchanged selected coordinates and unselected
+views keep their viewport; Game Layout adds no progress-following camera move.
+View-only spoiler changes preserve the existing exact pan/zoom behavior.
+Automatic recentering does not emit a user selection or camera event.
+
 Toolbar and workspace border-box heights are observed so inspector limits, search results and compact status placement follow actual available space, including notices and rotation. Phone views retain a 230px map reservation normally and use 80px when the workspace is shorter than 400px. Short landscape windows at 480–639px place the inspector beside the map while retaining both toolbar rows. Inspector content scrolls within its bounds; selection fits the real canvas and can use the gap beside camera controls when there is insufficient room above them. Catalog coordinates, card sizes and ordinary camera scales are unchanged.
 
 Toolbar rows can grow with browser text, and compact breakpoints and layout columns use font-relative units. A narrow relative breakpoint places the brand/menu, layout choices, and search/recommendation controls in separate rows. It permits vertical page scrolling to preserve map space with enlarged text while preventing horizontal overflow. Selection can fit above enlarged camera controls when the side gap is too small. Browser tests launch isolated Chromium profiles with the real default font preference set to 32px, assert that computed size, and check readable labels, nonoverlapping controls, navigation and selected-node reachability with scrollbars present. Ordinary-size responsive regressions remain separate.

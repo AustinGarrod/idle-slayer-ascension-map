@@ -106,6 +106,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
   const cameraStart = useRef<{ x: number; y: number; zoom: number } | null>(null)
   const cameraRequest = useRef(0)
   const recenterOnMapResize = useRef(true)
+  const previousSelectionPosition = useRef<{ id: string; mode: 'native' | 'web'; x: number; y: number; progress: string } | null>(null)
   const appReadyReported = useRef(false)
   const storageLoadReported = useRef(false)
   const [choices, setChoices] = useState<Record<string, number>>({})
@@ -138,6 +139,12 @@ function Atlas({ catalog }: { catalog: Catalog }) {
   const visible = useMemo(() => visibility(catalog, profile), [catalog, profile])
   const index = useMemo(() => new Map(catalog.upgrades.map((node) => [node.id, node])), [catalog])
   const detail = selected && visible.ids.has(selected) ? index.get(selected) : undefined
+  // View-only changes must never turn an intentional spoiler toggle into camera navigation.
+  const layoutProgress = useMemo(() => JSON.stringify([
+    profile.epoch,
+    Object.keys(profile.purchases).sort().map((id) => [id, profile.purchases[id].epoch, profile.purchases[id].active]),
+    Object.keys(profile.milestones).sort(),
+  ]), [profile])
   useLayoutEffect(() => {
     if (detailsElement.current) detailsElement.current.scrollTop = 0
   }, [detail?.id])
@@ -360,6 +367,19 @@ function Atlas({ catalog }: { catalog: Catalog }) {
   const resizeMapCamera = useEffectEvent(() => {
     if (recenterOnMapResize.current) recenterCamera()
   })
+  const followProgressSelection = useEffectEvent(() => {
+    if (detail) moveCamera(detail.id, flow.getViewport().zoom)
+  })
+  useEffect(() => {
+    const position = detail ? layout.centers.get(detail.id) : undefined
+    const previous = previousSelectionPosition.current
+    previousSelectionPosition.current = detail && position ? {
+      id: detail.id, mode: layoutMode, x: position.x, y: position.y, progress: layoutProgress,
+    } : null
+    if (layoutMode !== 'web' || !detail || !position || !previous || previous.id !== detail.id || previous.mode !== layoutMode
+      || previous.progress === layoutProgress || (previous.x === position.x && previous.y === position.y)) return
+    followProgressSelection()
+  }, [detail?.id, layoutMode, layout, layoutProgress])
   useEffect(() => {
     recenterCamera()
   }, [layoutMode, loaded, detailExpanded])
