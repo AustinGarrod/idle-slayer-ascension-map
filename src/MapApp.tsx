@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { ReactNode } from 'react'
+import type { KeyboardEvent, ReactNode } from 'react'
 import { Background, Handle, MarkerType, Position, ReactFlow, ReactFlowProvider, useReactFlow } from '@xyflow/react'
 import type { Node, NodeProps } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
@@ -30,9 +30,10 @@ import { PrivacyPanel, trackingDisclosure } from './PrivacyPanel'
 
 type UpgradeNode = Node<{ upgrade: Upgrade; state: string }, 'upgrade'>
 type Preview = { operation: AnalyticsOperation | 'prior_ascensions'; title: string; text: string; profile: Profile; changes?: string[]; groups?: { label: string; ids: string[] }[]; replaceStorage?: boolean; upgradeId?: string; milestoneId?: string; sessionVersion?: number; resolution?: 'saved' | 'local' }
-type Menu = 'options' | 'progress' | 'milestones' | 'about' | 'recommendations' | 'game-import' | 'privacy' | null
+type Menu = 'options' | 'progress' | 'milestones' | 'about' | 'recommendations' | 'game-import' | 'privacy' | 'keyboard-help' | null
 type SelectionSource = 'map' | 'search' | 'neighbor' | 'recommendation' | 'start' | 'keyboard'
-const menuTitles: Record<Exclude<Menu, null>, string> = { options: 'Map options', progress: 'Your progress', milestones: 'Milestones', about: 'About this map', recommendations: 'Suggested next upgrade', 'game-import': 'Import game progress', privacy: 'Privacy & tracking' }
+const menuTitles: Record<Exclude<Menu, null>, string> = { options: 'Map options', progress: 'Your progress', milestones: 'Milestones', about: 'About this map', recommendations: 'Suggested next upgrade', 'game-import': 'Import game progress', privacy: 'Privacy & tracking', 'keyboard-help': 'Keyboard map controls' }
+const graphKeyboardHelp = 'Arrow Right or Down: next visible upgrade. Arrow Left or Up: previous. Home or End: first or last. Enter or Space: select. Escape: deselect. Tab: leave upgrades for camera controls. Shift+Tab: return to the map shortcut. Upgrades are browsed in catalog order; tree positions stay fixed. Directional pan controls close during keyboard exploration.'
 const DialogFeedbackContext = createContext<{ title: string | null; announcement: string; sequence: number; content: ReactNode; clear: () => void }>({ title: null, announcement: '', sequence: 0, content: null, clear: () => {} })
 
 function Icon({ node }: { node: Upgrade }) {
@@ -96,6 +97,8 @@ function Atlas({ catalog }: { catalog: Catalog }) {
   const [conflict, setConflict] = useState<StoredSnapshot | null>(null)
   const [conflictReview, setConflictReview] = useState<{ version: number; snapshot: StoredSnapshot } | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
+  const [graphFocus, setGraphFocus] = useState(catalog.startId)
+  const graphHasFocus = useRef(false)
   const [detailFocusRevision, setDetailFocusRevision] = useState(0)
   const [query, setQuery] = useState('')
   const [queryRevision, setQueryRevision] = useState(0)
@@ -136,6 +139,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
   const detailHeading = useRef<HTMLHeadingElement>(null)
   const keyboardSearchDetails = useRef(false)
   const mapElement = useRef<HTMLElement>(null)
+  const cameraEntry = useRef<HTMLButtonElement>(null)
   const detailsElement = useRef<HTMLElement>(null)
   const atlasElement = useRef<HTMLElement>(null)
   const toolbarElement = useRef<HTMLElement>(null)
@@ -148,6 +152,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
       atlas.style.setProperty('--toolbar-height', `${toolbar.getBoundingClientRect().height}px`)
       atlas.style.setProperty('--workspace-height', `${available}px`)
       atlas.style.setProperty('--map-reserve', available < 400 ? '80px' : '230px')
+      atlas.style.setProperty('--map-navigation-reserve', available < 400 ? '130px' : '230px')
     }
     measure()
     const observer = new ResizeObserver(measure)
@@ -164,6 +169,12 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     return () => motionPreference.removeEventListener('change', update)
   }, [motionPreference])
   const visible = useMemo(() => visibility(catalog, profile), [catalog, profile])
+  const graphTabStop = visible.ids.has(graphFocus) ? graphFocus : visible.upgrades[0]?.id
+  useLayoutEffect(() => {
+    if (!graphTabStop || graphFocus === graphTabStop) return
+    setGraphFocus(graphTabStop)
+    if (graphHasFocus.current) focusGraphUpgrade(graphTabStop)
+  }, [graphFocus, graphTabStop])
   const retainedOnReset = useMemo(() => retainedPurchasesOnReset(catalog, profile), [catalog, profile])
   const index = useMemo(() => new Map(catalog.upgrades.map((node) => [node.id, node])), [catalog])
   const detail = selected && visible.ids.has(selected) ? index.get(selected) : undefined
@@ -360,14 +371,15 @@ function Atlas({ catalog }: { catalog: Catalog }) {
         if (camera.top - map.top - 12 >= nodeHeight * zoom + 8) {
           const safeCenter = Math.min(map.height / 2, camera.top - map.top - nodeHeight * zoom / 2 - 12)
           inset = (map.height / 2 - safeCenter) / zoom
-        } else if (map.right - camera.right >= nodeWidth * zoom + 20) {
+        } else if (map.right - camera.right >= nodeWidth * Math.max(44 / nodeWidth, 44 / nodeHeight) + 12) {
           // Short portrait canvases have room beside, rather than above, controls.
+          zoom = Math.min(zoom, (map.right - camera.right - 12) / nodeWidth)
           const heightAboveCredit = attribution ? attribution.top - map.top - 8 : 0
           if (heightAboveCredit >= 44) {
             zoom = Math.min(zoom, heightAboveCredit / nodeHeight)
             inset = (map.height / 2 - nodeHeight * zoom / 2 - 4) / zoom
           }
-          rightOffset = camera.right - map.left + 12 + nodeWidth * zoom / 2 - map.width / 2
+          rightOffset = camera.right - map.left + 8 + nodeWidth * zoom / 2 - map.width / 2
         } else if (camera.top - map.top - 20 >= 44) {
           // Fit above controls when their enlarged text leaves no room beside them.
           zoom = Math.min(zoom, (camera.top - map.top - 20) / nodeHeight)
@@ -392,7 +404,33 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     if (!selected) setDetailExpanded(false)
     if (lastSelection.current !== id) trackEvent('upgrade_selected', { upgrade_id: id, source })
     lastSelection.current = id
-    setSelected(id); setSearchOpen(false); moveCamera(id)
+    setGraphFocus(id); setSelected(id); setSearchOpen(false); moveCamera(id)
+  }
+  function focusGraphUpgrade(id: string) {
+    const node = Array.from(mapElement.current?.querySelectorAll<HTMLElement>('.react-flow__node') ?? []).find((element) => element.dataset.id === id)
+    setNavigationOpen(false)
+    node?.focus({ preventScroll: true })
+    if (node === document.activeElement) moveCamera(id)
+  }
+  function navigateGraph(event: KeyboardEvent<HTMLElement>) {
+    const element = event.target instanceof HTMLElement ? event.target.closest<HTMLElement>('.react-flow__node') : null
+    const id = element?.dataset.id
+    keyboardSelection.current = Boolean(id) && (event.key === 'Enter' || event.key === ' ')
+    if (!id || event.altKey || event.ctrlKey || event.metaKey) return
+    if (event.key === 'Escape') {
+      // React Flow blurs on Escape. Keep the graph's keyboard exit predictable.
+      event.preventDefault(); event.stopPropagation(); clearSelection(); focusGraphUpgrade(id)
+      return
+    }
+    if (event.key === 'Enter' || event.key === ' ') event.preventDefault()
+    const ids = visible.upgrades.map((upgrade) => upgrade.id)
+    const position = ids.indexOf(id)
+    const next = event.key === 'Home' ? ids[0] : event.key === 'End' ? ids.at(-1)
+      : event.key === 'ArrowRight' || event.key === 'ArrowDown' ? ids[(position + 1) % ids.length]
+        : event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? ids[(position - 1 + ids.length) % ids.length] : undefined
+    if (!next) return
+    event.preventDefault(); event.stopPropagation()
+    setGraphFocus(next); focusGraphUpgrade(next)
   }
   function clearSelection() {
     lastSelection.current = null; setSelected(null)
@@ -415,6 +453,10 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     setLayoutMode(mode)
     if (!saveLayoutPreference(mode, () => window.localStorage)) setMessage('Layout selected for this visit. Your browser could not save the layout preference.')
   }
+  function beginCameraControl() {
+    cameraRequest.current += 1
+    recenterOnMapResize.current = false
+  }
   function undo() {
     if (profileSession.undo()) { setMessage('Progress change undone.'); trackEvent('progress_undo') }
   }
@@ -434,7 +476,8 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     else { setMenu(null); setTrackingReload(enabled) }
   }
   const recenterCamera = useEffectEvent(() => {
-    if (loaded) moveCamera(detail?.id ?? catalog.startId, detail ? selectionZoom : startZoom)
+    const focused = graphHasFocus.current && visible.ids.has(graphFocus) ? graphFocus : null
+    if (loaded) moveCamera(focused ?? detail?.id ?? catalog.startId, focused || detail ? selectionZoom : startZoom)
   })
   const resizeMapCamera = useEffectEvent(() => {
     if (recenterOnMapResize.current) recenterCamera()
@@ -476,6 +519,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     data: { upgrade: node, state: state(node) }, selected: selected === node.id,
     className: detail && node.id !== detail.id ? related.has(node.id) ? 'node-related' : 'node-muted' : '',
     ariaLabel: `${node.title}, ${state(node)}, ${cost(node.cost)} Slayer Points`, width: nodeWidth, height: nodeHeight,
+    domAttributes: { tabIndex: node.id === graphTabStop ? 0 : -1, 'aria-current': selected === node.id ? 'true' : undefined },
     ...(gameLayout ? { zIndex: 2 } : {}) }))
   const edges = visible.connections.map((edge) => {
     const from = layout.centers.get(edge.from)!, to = layout.centers.get(edge.to)!
@@ -625,12 +669,22 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     </header>
     {storageError && !activeDialogTitle && <div className="notice telemetry-private rr-block" role="alert">{storageError} {recoveryControls}</div>}
     {!verified && <div className="notice">Local preview · Catalog verification is incomplete. Publication is gated.</div>}
-    <div ref={workspaceElement} className={`workspace ${detail ? 'has-details' : ''} ${detailExpanded ? 'details-expanded' : ''}`}>
-      <section ref={mapElement} className={`map ${gameLayout ? 'map-game' : ''}`} aria-label="Ascension tree" onKeyDownCapture={(event) => { keyboardSelection.current = (event.key === 'Enter' || event.key === ' ') && event.target instanceof HTMLElement && Boolean(event.target.closest('.react-flow__node')) }}>
-        {loaded && <ReactFlow<UpgradeNode> nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} elevateEdgesOnSelect={!gameLayout} nodeOrigin={[0.5, 0.5]} nodesDraggable={false} nodesConnectable={false} edgesReconnectable={false} deleteKeyCode={null} selectionKeyCode={null} multiSelectionKeyCode={null} minZoom={0.15} maxZoom={2.5} defaultViewport={{ x: 0, y: 0, zoom: 0.7 }} onInit={(instance) => { const start = layout.centers.get(catalog.startId); if (start) void instance.setCenter(start.x, start.y, { zoom: startZoom }) }} onNodesChange={(changes) => { const selection = changes.find((entry) => entry.type === 'select' && entry.selected); if (selection?.type === 'select') { if (keyboardSelection.current && selection.id !== selected) center(selection.id, 'keyboard'); keyboardSelection.current = false } else if (changes.some((entry) => entry.type === 'select' && !entry.selected && entry.id === selected)) clearSelection() }} onNodeClick={(_, node) => { keyboardSelection.current = false; center(node.id) }} onMoveStart={(event, viewport) => { if (event) cameraStart.current = viewport }} onMoveEnd={(event, viewport) => { const start = cameraStart.current; cameraStart.current = null; if (event && start) { const pan = start.x !== viewport.x || start.y !== viewport.y; const zoom = start.zoom !== viewport.zoom; if (pan || zoom) trackEvent('map_camera_used', { action: pan && zoom ? 'pan_zoom' : zoom ? 'zoom' : 'pan', source: 'pointer' }) } }} onPaneClick={() => setSearchOpen(false)} ariaLabelConfig={{ 'node.a11yDescription.default': 'Press Enter to select an upgrade. The tree positions are fixed.' }}><Background color="#514432" gap={32} size={1} /></ReactFlow>}
+    <div ref={workspaceElement} className={`workspace ${detail ? 'has-details' : ''} ${detailExpanded ? 'details-expanded' : ''} ${navigationOpen ? 'navigation-open' : ''}`}>
+      <section ref={mapElement} className={`map ${gameLayout ? 'map-game' : ''}`} aria-label="Ascension tree" onKeyDownCapture={navigateGraph}
+        onFocusCapture={(event) => {
+          const node = event.target instanceof HTMLElement ? event.target.closest<HTMLElement>('.react-flow__node') : null
+          const id = node?.dataset.id
+          if (!id || !visible.ids.has(id)) return
+          graphHasFocus.current = true; keyboardSearchDetails.current = false; setGraphFocus(id); setSearchOpen(false)
+          if (node.matches(':focus-visible')) { setNavigationOpen(false); moveCamera(id) }
+        }} onBlurCapture={(event) => {
+          if (!(event.relatedTarget instanceof HTMLElement) || !event.relatedTarget.closest('.react-flow__node')) graphHasFocus.current = false
+        }}>
+        <div className="map-keyboard-entry"><button aria-describedby="map-keyboard-help" onClick={() => cameraEntry.current?.focus({ preventScroll: true })}>Skip upgrades to camera controls</button><small id="map-keyboard-help">{graphKeyboardHelp}</small></div>
+        {loaded && <ReactFlow<UpgradeNode> nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} elevateEdgesOnSelect={!gameLayout} nodeOrigin={[0.5, 0.5]} autoPanOnNodeFocus={false} nodesDraggable={false} nodesConnectable={false} edgesReconnectable={false} deleteKeyCode={null} selectionKeyCode={null} multiSelectionKeyCode={null} minZoom={0.15} maxZoom={2.5} defaultViewport={{ x: 0, y: 0, zoom: 0.7 }} onInit={(instance) => { const start = layout.centers.get(catalog.startId); if (start) void instance.setCenter(start.x, start.y, { zoom: startZoom }) }} onNodesChange={(changes) => { const selection = changes.find((entry) => entry.type === 'select' && entry.selected); if (selection?.type === 'select') { if (keyboardSelection.current && selection.id !== selected) center(selection.id, 'keyboard'); keyboardSelection.current = false } else if (changes.some((entry) => entry.type === 'select' && !entry.selected && entry.id === selected)) clearSelection() }} onNodeClick={(_, node) => { keyboardSelection.current = false; center(node.id) }} onMoveStart={(event, viewport) => { if (event) cameraStart.current = viewport }} onMoveEnd={(event, viewport) => { const start = cameraStart.current; cameraStart.current = null; if (event && start) { const pan = start.x !== viewport.x || start.y !== viewport.y; const zoom = start.zoom !== viewport.zoom; if (pan || zoom) trackEvent('map_camera_used', { action: pan && zoom ? 'pan_zoom' : zoom ? 'zoom' : 'pan', source: 'pointer' }) } }} onPaneClick={() => setSearchOpen(false)} ariaLabelConfig={{ 'node.a11yDescription.default': graphKeyboardHelp, 'node.a11yDescription.keyboardDisabled': graphKeyboardHelp }}><Background color="#514432" gap={32} size={1} /></ReactFlow>}
         <div className="map-summary"><span><b>{visible.owned}</b> / {visible.total} visible upgrades owned</span><span>Epoch {profile.epoch} · {profile.showSpoilers ? 'Spoilers shown' : 'Spoilers hidden'}</span><span className="connection-hint">{detail ? 'Dashed: connected from · Solid: leads to' : layoutMode === 'web' ? 'Prerequisite → upgrade · Select to trace connections' : 'Grey: unowned prerequisite · Magenta: owned · Select to trace'}</span></div>
-        <div className="camera-controls"><button aria-label="Zoom out" onClick={() => { trackEvent('map_camera_used', { action: 'zoom_out', source: 'controls' }); void flow.zoomOut({ duration: reducedMotion ? 0 : 150 }) }}>−</button><button aria-label="Zoom in" onClick={() => { trackEvent('map_camera_used', { action: 'zoom_in', source: 'controls' }); void flow.zoomIn({ duration: reducedMotion ? 0 : 150 }) }}>+</button><button onClick={() => { trackEvent('map_camera_used', { action: 'return_start', source: 'controls' }); center(catalog.startId, 'start') }}>Return to start</button><button aria-label="Map navigation" aria-expanded={navigationOpen} aria-controls="pan-controls" onClick={() => { trackEvent('map_camera_used', { action: 'navigation_toggle', expanded: !navigationOpen }); setNavigationOpen(!navigationOpen) }}>↔</button></div>
-        {navigationOpen && <div className="pan-controls" id="pan-controls" aria-label="Map navigation controls"><button aria-label="Pan map left" onClick={() => { trackEvent('map_camera_used', { action: 'pan', source: 'controls', direction: 'left' }); const v = flow.getViewport(); void flow.setViewport({ ...v, x: v.x + 180 }) }}>←</button><button aria-label="Pan map right" onClick={() => { trackEvent('map_camera_used', { action: 'pan', source: 'controls', direction: 'right' }); const v = flow.getViewport(); void flow.setViewport({ ...v, x: v.x - 180 }) }}>→</button><button aria-label="Pan map up" onClick={() => { trackEvent('map_camera_used', { action: 'pan', source: 'controls', direction: 'up' }); const v = flow.getViewport(); void flow.setViewport({ ...v, y: v.y + 180 }) }}>↑</button><button aria-label="Pan map down" onClick={() => { trackEvent('map_camera_used', { action: 'pan', source: 'controls', direction: 'down' }); const v = flow.getViewport(); void flow.setViewport({ ...v, y: v.y - 180 }) }}>↓</button></div>}
+        <div className="camera-controls" role="group" aria-label="Map camera controls"><button ref={cameraEntry} aria-label="Zoom out" onClick={() => { beginCameraControl(); trackEvent('map_camera_used', { action: 'zoom_out', source: 'controls' }); void flow.zoomOut({ duration: reducedMotion ? 0 : 150 }) }}>−</button><button aria-label="Zoom in" onClick={() => { beginCameraControl(); trackEvent('map_camera_used', { action: 'zoom_in', source: 'controls' }); void flow.zoomIn({ duration: reducedMotion ? 0 : 150 }) }}>+</button><button onClick={() => { trackEvent('map_camera_used', { action: 'return_start', source: 'controls' }); center(catalog.startId, 'start') }}>Return to start</button><button aria-label="Map navigation" aria-expanded={navigationOpen} aria-controls="pan-controls" onClick={() => { trackEvent('map_camera_used', { action: 'navigation_toggle', expanded: !navigationOpen }); setNavigationOpen(!navigationOpen) }}>↔</button></div>
+        {navigationOpen && <div className="pan-controls" id="pan-controls" aria-label="Map navigation controls"><button aria-label="Pan map left" onClick={() => { beginCameraControl(); trackEvent('map_camera_used', { action: 'pan', source: 'controls', direction: 'left' }); const v = flow.getViewport(); void flow.setViewport({ ...v, x: v.x + 180 }) }}>←</button><button aria-label="Pan map right" onClick={() => { beginCameraControl(); trackEvent('map_camera_used', { action: 'pan', source: 'controls', direction: 'right' }); const v = flow.getViewport(); void flow.setViewport({ ...v, x: v.x - 180 }) }}>→</button><button aria-label="Pan map up" onClick={() => { beginCameraControl(); trackEvent('map_camera_used', { action: 'pan', source: 'controls', direction: 'up' }); const v = flow.getViewport(); void flow.setViewport({ ...v, y: v.y + 180 }) }}>↑</button><button aria-label="Pan map down" onClick={() => { beginCameraControl(); trackEvent('map_camera_used', { action: 'pan', source: 'controls', direction: 'down' }); const v = flow.getViewport(); void flow.setViewport({ ...v, y: v.y - 180 }) }}>↓</button></div>}
       </section>
       {detail && <aside ref={detailsElement} className={`details ${detailExpanded ? 'expanded' : ''}`} aria-label="Upgrade details"><div className="detail-heading"><div className="detail-identity"><Icon node={detail} /><div><h2 ref={detailHeading} tabIndex={-1}>{detail.title}</h2><small className="detail-cost">{cost(detail.cost)} SP</small></div></div><div className="detail-tools"><button className="detail-toggle" aria-expanded={detailExpanded} aria-controls="detail-content" onClick={() => { trackEvent('details_toggled', { expanded: !detailExpanded }); setDetailExpanded(!detailExpanded) }}>{detailExpanded ? 'Hide details' : 'Show details'}</button><button aria-label="Close upgrade details" onClick={clearSelection}>×</button></div></div><p className={`state-label ${state(detail)}`}>{state(detail) === 'pending' ? '◷ Owned · awaiting activation' : state(detail) === 'purchased' ? '✓ Purchased and active' : state(detail) === 'locked' ? '◇ Locked' : '+ Available'}</p><div className="detail-content" id="detail-content"><p className="detail-description">{detail.description}</p><dl><dt>Purchase requirements</dt><dd>{label(detail.purchase)}</dd><dt>Reveal requirements</dt><dd>{label(detail.reveal)}</dd><dt>Ultra Ascension</dt><dd>{detail.retention === 'repeat' ? retainedOnReset.has(detail.id) ? 'Existing purchase · retained by Astral progress on reset' : profile.purchases[detail.id] ? 'Repeat purchase · clears on reset' : 'Repeat purchase · not currently owned' : 'Ownership retained'}{detail.activation === 'after-ultra-ascension' ? ' · Astral lock' : ''}</dd></dl>
         <div className="connection-list"><section aria-label="Connected from"><h3>Connected from</h3>{incoming.length ? incoming.map((node) => <button key={node.id} onClick={() => center(node.id, 'neighbor')}><Icon node={node} /><span>{node.title}</span><span aria-hidden="true">←</span></button>) : <p>No visible incoming connections.</p>}</section><section aria-label="Leads to"><h3>Leads to</h3>{outgoing.length ? outgoing.map((node) => <button key={node.id} onClick={() => center(node.id, 'neighbor')}><Icon node={node} /><span>{node.title}</span><span aria-hidden="true">→</span></button>) : <p>No visible outgoing connections.</p>}</section><small>Connections show paths. Purchase requirements above specify AND / OR and activation gates.</small></div>
@@ -640,13 +694,13 @@ function Atlas({ catalog }: { catalog: Catalog }) {
         {profile.purchases[detail.id] && detail.activation === 'after-ultra-ascension' && !profile.purchases[detail.id].active && <button className="full" disabled={saving} onClick={() => previewAstralActivation(detail.id)}>Already activated…</button>}
         </div></aside>}
     </div>
-    <footer><span>Unofficial companion · {progressStatus}</span><button disabled={saving || !history.length} onClick={undo}>Undo</button><button onClick={() => setMenu('about')}>About & sources</button><button onClick={() => setMenu('privacy')}>Privacy & tracking</button></footer>
+    <footer><span>Unofficial companion · {progressStatus}</span><button disabled={saving || !history.length} onClick={undo}>Undo</button><button onClick={() => setMenu('keyboard-help')}>Keyboard map controls…</button><button onClick={() => setMenu('about')}>About & sources</button><button onClick={() => setMenu('privacy')}>Privacy & tracking</button></footer>
     {!activeDialogTitle && <p className="sr-only" role="status">{message === storageError ? '' : message}</p>}{!activeDialogTitle && message !== storageError && message && toastVisible && <div className="toast" onClick={() => setMessage('')}>{message}<button aria-label="Dismiss status" onClick={() => setMessage('')}>×</button></div>}
     <input className="sr-only telemetry-private rr-block" tabIndex={-1} aria-label="Map progress JSON backup" ref={fileInput} type="file" accept="application/json,.json" onChange={(event) => { const file = event.target.files?.[0]; if (file) void restore(file); else restoreRequest.current++; event.target.value = '' }} />
     <input className="sr-only telemetry-private rr-block" tabIndex={-1} aria-label="Idle Slayer game save" ref={gameFileInput} type="file" accept=".sav" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void readGameSave(file) }} />
     {menu === 'game-import' && <Dialog title="Import game progress" close={closeGameImport}>{gameImport ? <GameSaveImportPanel catalog={catalog} currentProfile={gameImport.original} preview={gameImport.result} onApply={applyGameImport} onCancel={closeGameImport} /> : <div className="game-save-picker">{gameImportLoading ? <p role="status">Reading game save…</p> : <><p className="telemetry-private rr-block" role="alert">{gameImportError}</p><p>Choose <b>savedata.sav</b> or <b>backup.sav</b> from Idle Slayer 7.2.0 on Steam. The selected file is read locally in your browser.</p><p className="game-save-path">%USERPROFILE%\AppData\LocalLow\Pablo Leban\Idle Slayer\</p></>}<div className="dialog-actions">{!gameImportLoading && <button className="primary" onClick={chooseGameSave}>Choose game save…</button>}<button onClick={closeGameImport}>Cancel</button></div></div>}</Dialog>}
     {menu === 'recommendations' && <Dialog title="Suggested next upgrade" close={() => setMenu(null)}><RecommendationPanel catalog={catalog} recommendations={recommendations} onSelect={(id) => selectSuggestion(id)} onPurchase={(id) => selectSuggestion(id, true)} /></Dialog>}
-    {menu === 'options' && <Dialog title="Map options" close={() => setMenu(null)}><div className="map-options"><p><b>{visible.owned} / {visible.total}</b> visible upgrades owned · Epoch {profile.epoch}<br />{profile.showSpoilers ? 'Spoilers shown' : 'Spoilers hidden'}</p><label className="spoiler-control"><input type="checkbox" disabled={saving} checked={profile.showSpoilers} onChange={(event) => toggleSpoilers(event.target.checked)} />Show spoilers</label><button onClick={() => setMenu('milestones')}>Milestones</button><button onClick={() => setMenu('progress')}>Progress</button><button disabled={saving || !history.length} onClick={() => { undo(); setMenu(null) }}>Undo</button><button onClick={() => setMenu('about')}>About & sources</button><button onClick={() => setMenu('privacy')}>Privacy & tracking</button><small>Unofficial companion · {progressStatus}</small></div></Dialog>}
+    {menu === 'options' && <Dialog title="Map options" close={() => setMenu(null)}><div className="map-options"><p><b>{visible.owned} / {visible.total}</b> visible upgrades owned · Epoch {profile.epoch}<br />{profile.showSpoilers ? 'Spoilers shown' : 'Spoilers hidden'}</p><label className="spoiler-control"><input type="checkbox" disabled={saving} checked={profile.showSpoilers} onChange={(event) => toggleSpoilers(event.target.checked)} />Show spoilers</label><button onClick={() => setMenu('milestones')}>Milestones</button><button onClick={() => setMenu('progress')}>Progress</button><button disabled={saving || !history.length} onClick={() => { undo(); setMenu(null) }}>Undo</button><button onClick={() => setMenu('keyboard-help')}>Keyboard map controls…</button><button onClick={() => setMenu('about')}>About & sources</button><button onClick={() => setMenu('privacy')}>Privacy & tracking</button><small>Unofficial companion · {progressStatus}</small></div></Dialog>}
     {menu === 'milestones' && <Dialog title="Milestones" close={() => setMenu(null)}><p>Record the required item received or purchased in the game.</p>{visible.milestones.map((item) => <label className="milestone" key={item.id}><input type="checkbox" disabled={saving} checked={profile.milestones[item.id] === true} onChange={(event) => { if (event.target.checked) { if (change({ ...profile, milestones: { ...profile.milestones, [item.id]: true } }, 'Milestone recorded.')) trackEvent('milestone_changed', { milestone_id: item.id, recorded: true }) } else { setMenu(null); previewRemoval(item.id, true) } }} /><span>{item.title}<small>{item.description}</small></span></label>)}{!visible.milestones.length && <p>No milestone controls are currently revealed.</p>}</Dialog>}
     {menu === 'progress' && <Dialog title="Your progress" close={() => setMenu(null)}>
       <p>One local profile. Keep a backup when changing browsers or devices.</p>
@@ -661,7 +715,8 @@ function Atlas({ catalog }: { catalog: Catalog }) {
         <button className="danger" onClick={() => { setMenu(null); setPreview({ operation: 'clear', title: 'Clear all progress?', text: 'Clear every purchase, milestone and unknown ID, and return to epoch 0 with spoilers hidden. You can undo this change in this session.', profile: emptyProfile(catalog.revision), replaceStorage: true }) }}>Clear all progress…</button>
       </div>
     </Dialog>}
-    {menu === 'about' && <Dialog title="About this map" close={() => setMenu(null)}><p>Unofficial Idle Slayer companion. Game assets belong to their respective rights holders. Application code and asset attribution are documented separately.</p><p>Game {catalog.gameVersion} · Steam build {catalog.steamBuild}<br />Catalog {catalog.revision}</p><p>All map data and icons are bundled locally. No account or application backend is required.</p><p className="progress-save-status">{progressStatus}</p><p>{trackingDisclosure}</p><button onClick={() => setMenu('privacy')}>Privacy & tracking</button><a onClick={() => trackEvent('source_link_opened', { source: 'about', action: 'github' })} href="https://github.com/AustinGarrod/idle-slayer-ascension-map">Source and extraction documentation</a><a className="software-license-link" target="_blank" rel="noreferrer" onClick={() => trackEvent('source_link_opened', { source: 'about', action: 'license' })} href={`${import.meta.env.BASE_URL}licenses/index.html`}>Bundled software licenses</a></Dialog>}
+    {menu === 'about' && <Dialog title="About this map" close={() => setMenu(null)}><p>Unofficial Idle Slayer companion. Game assets belong to their respective rights holders. Application code and asset attribution are documented separately.</p><p>Game {catalog.gameVersion} · Steam build {catalog.steamBuild}<br />Catalog {catalog.revision}</p><p>All map data and icons are bundled locally. No account or application backend is required.</p><p className="progress-save-status">{progressStatus}</p><p>{trackingDisclosure}</p><button onClick={() => setMenu('keyboard-help')}>Keyboard map controls…</button><button onClick={() => setMenu('privacy')}>Privacy & tracking</button><a onClick={() => trackEvent('source_link_opened', { source: 'about', action: 'github' })} href="https://github.com/AustinGarrod/idle-slayer-ascension-map">Source and extraction documentation</a><a className="software-license-link" target="_blank" rel="noreferrer" onClick={() => trackEvent('source_link_opened', { source: 'about', action: 'license' })} href={`${import.meta.env.BASE_URL}licenses/index.html`}>Bundled software licenses</a></Dialog>}
+    {menu === 'keyboard-help' && <Dialog title="Keyboard map controls" close={() => setMenu(null)}><p>The map has one Tab stop for its visible upgrades. All visible upgrades remain available by keyboard.</p><ul><li>From the toolbar, Tab reaches the map shortcut. Press Enter to skip directly to camera controls, or Tab again to explore upgrades.</li><li>Arrow Right / Down browses the next upgrade; Left / Up browses the previous. Home / End jumps to the first / last visible upgrade. Browsing follows catalog order and wraps at its ends.</li><li>Enter / Space selects the focused upgrade and opens its details. Escape deselects it. Focus browsing preserves recorded progress and fixed positions.</li><li>Tab leaves upgrades for camera controls; Shift+Tab returns to the map shortcut and toolbar. Camera controls provide zoom, return to start and directional panning. Entering keyboard exploration closes the directional pan controls so upgrades remain unobscured. Use Map navigation to reopen them.</li><li>Search selection by keyboard goes directly to details. Closing those details returns to search.</li></ul><p>Screen-reader users may need their reader's interaction mode to send arrow keys to the focused upgrade. The focused upgrade announces its title, state, cost and keyboard instructions.</p></Dialog>}
     {menu === 'privacy' && <Dialog title="Privacy & tracking" close={() => setMenu(null)}><PrivacyPanel status={getTrackingStatus()} onChange={requestTrackingChange} progressStatus={progressStatus} /></Dialog>}
     {trackingReload !== null && <Dialog title="Reload with unsaved progress?" close={() => { setTrackingReload(null); setMenu('privacy') }}>
       <p>Current progress could not be saved. Reloading may lose these changes and clears session-only undo. Export a backup first to keep this progress.</p>
