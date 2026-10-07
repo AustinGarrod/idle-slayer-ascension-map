@@ -18,6 +18,12 @@ Keyboard exploration uses one graph Tab stop. Arrow Right/Down browses the next 
 
 The wiki snapshot ranks 280 of 288 native upgrades and declares game 7.0.0; the catalog remains authoritative for 7.2.0 costs and gates. When no eligible upgrade has a wiki rank, suggestions explicitly use a native-cost **Catalog fallback**. General guide order does not account for SP balance, total USP, gear or personal play style. [Recommendation provenance and refresh](wiki-recommendations.md) documents source revisions, identity mapping, eight unranked upgrades and licensing. The site bundles this data locally and makes no wiki requests.
 
+## Orient and return to your upgrade
+
+Open **Map view…** on desktop, or **Map options** on a phone, then choose **Overview visible map**. The inspector temporarily closes so you can see the currently visible tree shape. Your selected upgrade, progress and chosen layout stay unchanged. Overview tiles are small; use **Return to inspection** in the camera controls to bring the selected upgrade back at a readable size, with its details restored. With no selection, **Return to previous view** restores your earlier camera. **Refocus selected upgrade** in Map options also recovers a target after manual panning.
+
+Overview uses only currently visible upgrades and supports both layouts. Showing or hiding spoilers preserves your camera; request Overview again to fit the newly visible graph. Rotation, layout changes and recorded progress can update the overview fit. Ordinary inspection still offers **Return to start**. Overview and its previous camera are only remembered during the current visit.
+
 ## Import Steam progress
 
 Open **Progress → Import game save…** (on phones, **Map options → Progress**). Choose `savedata.sav` or `backup.sav` from:
