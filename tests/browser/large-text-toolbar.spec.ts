@@ -1,6 +1,11 @@
 import { chromium, expect, test as base, type BrowserContext } from '@playwright/test'
 import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
+import { readFileSync } from 'node:fs'
+import type { Catalog } from '../../src/domain/types'
+import { emptyProfile } from '../../src/domain/types'
+import { visibility } from '../../src/domain/rules'
+import { tabThroughDiscovery } from './helpers/discovery-focus'
 
 const test = base.extend({
   page: async ({ baseURL }, use, info) => {
@@ -39,6 +44,36 @@ test('optional map help remains readable and actionable at the actual 200% font'
   await expect(options.getByRole('checkbox', { name: 'Show spoilers', exact: true })).not.toBeChecked()
   await options.getByRole('button', { name: 'Close dialog', exact: true }).click()
   await expect(page.getByRole('dialog')).toHaveCount(0)
+})
+
+test('complete discovery remains reachable with the actual browser default font at 200%', async ({ page }) => {
+  const catalog = JSON.parse(readFileSync('public/catalog.json', 'utf8')) as Catalog
+  const upgrades = visibility(catalog, emptyProfile(catalog.revision)).upgrades
+  await page.goto('./')
+  await expect(page.locator('html')).toHaveCSS('font-size', '32px')
+  await page.getByRole('searchbox').focus()
+  await expect(page.getByRole('combobox', { name: 'Progress state' })).toBeVisible()
+  await expect(page.locator('.search-result')).toHaveCount(upgrades.length)
+  const final = upgrades.at(-1)!
+  const lastResult = page.locator(`.search-result[data-upgrade-id="${final.id}"]`)
+  await lastResult.scrollIntoViewIfNeeded()
+  await expect(lastResult).toBeInViewport()
+  await page.screenshot({ path: test.info().outputPath('discovery-200-percent.png') })
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true)
+  await lastResult.click()
+  await expect(page.locator('.details h2')).toHaveText(final.title)
+})
+
+test('native Tab keeps every focused discovery title clear at the actual 200% browser font', async ({ page }) => {
+  const catalog = JSON.parse(readFileSync('public/catalog.json', 'utf8')) as Catalog
+  const upgrades = visibility(catalog, emptyProfile(catalog.revision)).upgrades
+  await page.goto('./')
+  await expect(page.locator('html')).toHaveCSS('font-size', '32px')
+  await tabThroughDiscovery(page, upgrades.map((node) => node.id))
+  await page.screenshot({ path: test.info().outputPath('discovery-tab-200-percent.png') })
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('searchbox')).toBeFocused()
+  await expect(page.getByRole('region', { name: 'Visible upgrade results' })).toHaveCount(0)
 })
 
 for (const layout of ['Game Layout', 'Detailed Layout']) test(`${layout} toolbar reflows with the actual browser default font at 200%`, async ({ page }) => {
