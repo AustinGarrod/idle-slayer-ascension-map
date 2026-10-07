@@ -258,6 +258,153 @@ test('isolated loader loads each official script once and strips URL secrets bef
   expect(capture.unexpected).toEqual([])
 })
 
+for (const navigation of ['fragment', 'pushState', 'replaceState', 'history-traversal'] as const) {
+  test(`session URL privacy covers ${navigation} with the real recorder and heatmaps`, async ({ page, context, baseURL }) => {
+    const origin = new URL(baseURL!).origin
+    const capture = await installLocalRoutes(context, origin)
+    const marker = 'SESSION_URL_SECRET'
+    await page.goto(`${origin}${fixturePath}`)
+    if (navigation === 'history-traversal') await page.evaluate(({ marker, path }) => {
+      history.replaceState({ visit: 'previous' }, '', `${path}?private=${marker}#${marker}`)
+      history.pushState({ visit: 'current' }, '', path)
+    }, { marker, path: fixturePath })
+    await injectHarness(page)
+    await initializeHarness(page)
+    await waitForActive(page)
+    await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 2))
+    await page.evaluate(async ({ navigation, marker, path }) => {
+      if (navigation === 'fragment') location.hash = marker
+      else if (navigation === 'history-traversal') {
+        const traverse = (move: () => void) => new Promise<void>((resolve) => {
+          addEventListener('popstate', () => resolve(), { once: true })
+          move()
+        })
+        await traverse(() => history.back())
+        if (history.state.visit !== 'previous') throw new Error('Back navigation lost history state')
+        await traverse(() => history.forward())
+        if (history.state.visit !== 'current') throw new Error('Forward navigation lost history state')
+      } else history[navigation]({ preserve: navigation }, '', `${path}?private=${marker}#${marker}`)
+    }, { navigation, marker, path: fixturePath })
+    await page.locator('#public-action').click()
+    const exposedLiveURL = navigation === 'fragment' || navigation === 'history-traversal'
+    if (exposedLiveURL) await page.waitForTimeout(6000)
+    const events = await waitForReplayEvents(capture, (events) => exposedLiveURL
+      ? events.some((event) => event.type === 2)
+      : events.some((event) => event.type === 3 && event.data?.source === 2)
+        && capture.submissions.some((item) => item.type === 'heatmap' && Array.isArray(item.payload.events)
+          && item.payload.events.some((event: { type: string }) => event.type === 'click')))
+    expect(JSON.stringify({ submissions: capture.submissions, replay: events }).includes(marker), 'A same-document URL marker leaked into telemetry').toBe(false)
+    expect(page.url()).toBe(`${origin}${fixturePath}`)
+    if (navigation === 'pushState' || navigation === 'replaceState') expect(await page.evaluate(() => history.state)).toEqual({ preserve: navigation })
+    expect(await page.evaluate(() => (window as unknown as { analyticsHarness: { getTrackingStatus: () => { active: boolean } } }).analyticsHarness.getTrackingStatus().active)).toBe(!exposedLiveURL)
+    expect(capture.unexpected).toEqual([])
+  })
+}
+
+test('dirty fragment changes during a trusted click never upload or resume their buffered recording', async ({ page, context, baseURL }) => {
+  const origin = new URL(baseURL!).origin
+  const capture = await installLocalRoutes(context, origin)
+  const marker = 'SYNCHRONOUS_URL_SECRET'
+  await page.goto(`${origin}${fixturePath}`)
+  await page.evaluate((marker) => {
+    document.addEventListener('click', () => {
+      location.hash = marker
+      const win = window as Window & { umami?: { getSession?: () => { cache?: string } }; synchronousURLProof?: { cacheAvailable: boolean; dirtyAddress: boolean } }
+      win.synchronousURLProof = { cacheAvailable: Boolean(win.umami?.getSession?.().cache), dirtyAddress: location.href.includes(marker) }
+    }, { capture: true, once: true })
+  }, marker)
+  await injectHarness(page)
+  await initializeHarness(page)
+  await waitForActive(page)
+  await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 2))
+  await page.locator('#public-action').click()
+  expect(await page.evaluate(() => (window as Window & { synchronousURLProof?: { cacheAvailable: boolean; dirtyAddress: boolean } }).synchronousURLProof)).toEqual({ cacheAvailable: false, dirtyAddress: false })
+  await page.waitForTimeout(6000)
+  expect(JSON.stringify({ submissions: capture.submissions, replay: replayEvents(capture) }).includes(marker), 'A synchronous click URL leaked from the recorder buffer').toBe(false)
+  const stoppedAt = capture.submissions.length
+  await page.evaluate(async () => {
+    const traverse = (move: () => void) => new Promise<void>((resolve) => {
+      addEventListener('popstate', () => resolve(), { once: true })
+      move()
+    })
+    await traverse(() => history.back())
+    await traverse(() => history.forward())
+  })
+  await page.locator('#public-action').click()
+  await page.waitForTimeout(6000)
+  expect(capture.submissions).toHaveLength(stoppedAt)
+  expect(await page.evaluate(() => (window as unknown as { analyticsHarness: { getTrackingStatus: () => { active: boolean; reason: string } } }).analyticsHarness.getTrackingStatus())).toMatchObject({ active: false, reason: 'reload-required' })
+  expect(page.url()).toBe(`${origin}${fixturePath}`)
+  await page.reload()
+  await injectHarness(page)
+  await initializeHarness(page)
+  await waitForActive(page)
+  await waitForReplayEvents(capture, (events) => capture.submissions.length > stoppedAt && events.some((event) => event.type === 2))
+  expect(JSON.stringify({ submissions: capture.submissions, replay: replayEvents(capture) }).includes(marker)).toBe(false)
+  expect(capture.unexpected).toEqual([])
+})
+
+test('a later same-click history replacement cannot hide a dirty buffered URL', async ({ page, context, baseURL }) => {
+  const origin = new URL(baseURL!).origin
+  const capture = await installLocalRoutes(context, origin)
+  const marker = 'BUFFERED_CLICK_URL_SECRET'
+  await page.goto(`${origin}${fixturePath}`)
+  await page.evaluate(({ marker, path }) => {
+    // The recorder's document capture listener runs between these handlers.
+    // The bubble handler deliberately never calls getSession to intervene.
+    document.addEventListener('click', () => { location.hash = marker }, { capture: true, once: true })
+    document.addEventListener('click', () => { history.replaceState({ cleaned: true }, '', path) }, { once: true })
+  }, { marker, path: fixturePath })
+  await injectHarness(page)
+  await initializeHarness(page)
+  await waitForActive(page)
+  await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 2))
+  await page.locator('#public-action').click()
+  await page.waitForTimeout(6000)
+  const events = await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 2))
+  expect(JSON.stringify({ submissions: capture.submissions, replay: events }).includes(marker), 'A dirty URL hidden by a same-click history replacement leaked').toBe(false)
+  expect(await page.evaluate(() => (window as unknown as { analyticsHarness: { getTrackingStatus: () => { active: boolean; reason: string } } }).analyticsHarness.getTrackingStatus())).toMatchObject({ active: false, reason: 'reload-required' })
+  expect(page.url()).toBe(`${origin}${fixturePath}`)
+  expect(await page.evaluate(() => history.state)).toEqual({ cleaned: true })
+  expect(capture.unexpected).toEqual([])
+})
+
+test('session URL guards preserve native history failures, state and a later opt-out marker', async ({ page, context, baseURL }) => {
+  const origin = new URL(baseURL!).origin
+  const capture = await installLocalRoutes(context, origin)
+  await page.goto(`${origin}${fixturePath}`)
+  await page.evaluate(() => history.replaceState({ preserved: 'initial' }, '', location.href))
+  const nativeMalformedURL = await page.evaluate(() => {
+    try { history.pushState({}, '', 'http://['); return 'none' } catch (error) { return (error as Error).name }
+  })
+  expect(nativeMalformedURL).toBe('SecurityError')
+  await injectHarness(page)
+  await initializeHarness(page)
+  await waitForActive(page)
+  const nativeFailures = await page.evaluate(() => {
+    const length = history.length
+    const failures = [
+      () => history.pushState({}, '', 'https://other.invalid/private'),
+      () => history.replaceState({ invalid: () => undefined }, '', location.href),
+      () => Reflect.apply(history.pushState, history, []),
+      () => history.pushState({}, '', 'http://['),
+    ].map((operation) => {
+      try { operation(); return 'none' } catch (error) { return (error as Error).name }
+    })
+    return { failures, lengthPreserved: history.length === length, state: history.state }
+  })
+  expect(nativeFailures).toEqual({ failures: ['SecurityError', 'DataCloneError', 'TypeError', nativeMalformedURL], lengthPreserved: true, state: { preserved: 'initial' } })
+  await page.evaluate(() => { location.hash = 'analytics=off' })
+  await expect.poll(() => page.evaluate(() => (window as unknown as { analyticsHarness: { getTrackingStatus: () => { active: boolean; reason: string } } }).analyticsHarness.getTrackingStatus())).toMatchObject({ active: false, reason: 'opt-out' })
+  expect(page.url()).toBe(`${origin}${fixturePath}#analytics=off`)
+  // Native fragment navigation creates a fresh history entry without state.
+  expect(await page.evaluate(() => history.state)).toBeNull()
+  await page.evaluate((path) => history.replaceState({ preserved: 'later' }, '', path), fixturePath)
+  expect(await page.evaluate(() => (window as unknown as { analyticsHarness: { getTrackingStatus: () => { enabled: boolean; active: boolean; reason: string } } }).analyticsHarness.getTrackingStatus())).toMatchObject({ enabled: false, active: false, reason: 'reload-required' })
+  expect(await page.evaluate(() => history.state)).toEqual({ preserved: 'later' })
+  expect(capture.unexpected).toEqual([])
+})
+
 test('initial opt-out, privacy signals, unreadable preference, and origin gates load no scripts', async ({ browser, baseURL }) => {
   const origin = new URL(baseURL!).origin
   for (const scenario of ['stored-off', 'url-off', 'storage-unavailable', 'dnt', 'gpc', 'development', 'wrong-host', 'wrong-path']) {

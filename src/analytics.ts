@@ -95,6 +95,7 @@ export function createAnalyticsController(environment: AnalyticsEnvironment) {
   let expiryTimer: number | undefined
   let pollTimer: number | undefined
   let trackerWaitStarted = 0
+  let guardLiveURL = () => {}
   let runtimeErrorsReported = 0
   const runtimeErrorTimes = new Map<string, number>()
   const campaigns = new URLSearchParams()
@@ -167,6 +168,7 @@ export function createAnalyticsController(environment: AnalyticsEnvironment) {
     } catch { return '' }
   }
   function sanitizePayload(type: string, payload: Payload): Payload | null {
+    guardLiveURL()
     if (disabledReason() || !payload || !['event', 'identify', 'performance'].includes(type)) return null
     const safe: Payload = {
       website: environment.websiteId, hostname: environment.hostname, url: trackerURL(),
@@ -200,6 +202,62 @@ export function createAnalyticsController(environment: AnalyticsEnvironment) {
     if (pollTimer !== undefined) win.clearTimeout(pollTimer)
     expiryTimer = pollTimer = undefined
   }
+  function suspendSession() {
+    sessionSuspended = true
+    trackerReady = false
+    discardQueue()
+  }
+  function installURLGuards() {
+    // Keep the native methods beneath the tracker/recorder's later wrappers.
+    // Calling these directly also cleans popstate before their listeners run.
+    const nativeReplaceState = win.history.replaceState
+    const nativePushState = win.history.pushState
+    function cleanHistoryURL(value: string | URL | null | undefined) {
+      let requested: URL
+      try { requested = new URL(value ?? win.location.href, win.location.href) } catch {
+        // Native History reports invalid destinations with its own exception.
+        return value
+      }
+      // Let the browser retain its native cross-origin rejection semantics.
+      if (requested.origin !== origin) return value
+      const clean = new URL(appURL)
+      if (requested.hash === '#analytics=off') {
+        suspendSession()
+        clean.hash = 'analytics=off'
+      }
+      return clean.toString()
+    }
+    function guard(method: History['pushState']): History['pushState'] {
+      return function (this: History, data: unknown, unused: string, url?: string | URL | null) {
+        // Clearing a dirty address must not hide metadata already buffered
+        // before the queued navigation event or recorder cache check.
+        guardLiveURL()
+        if (arguments.length < 2) return Reflect.apply(method, this, arguments)
+        return method.call(this, data, unused, cleanHistoryURL(url))
+      }
+    }
+    win.history.pushState = guard(nativePushState)
+    win.history.replaceState = guard(nativeReplaceState)
+    const cleanNavigation = () => {
+      try {
+        const url = cleanHistoryURL(win.location.href)
+        if (url !== win.location.href) {
+          // A dirty live URL may already be buffered before its queued
+          // navigation event arrives. Never resume this recorder afterward.
+          suspendSession()
+          nativeReplaceState.call(win.history, win.history.state, '', url)
+        }
+      } catch {
+        // The recorder uses the live address outside beforeSend. A failed
+        // cleanup must deny cache access for the rest of this document.
+        scriptFailed = true
+        suspendSession()
+      }
+    }
+    guardLiveURL = cleanNavigation
+    win.addEventListener('popstate', cleanNavigation)
+    win.addEventListener('hashchange', cleanNavigation)
+  }
   function ignoreFailure(action: () => unknown) {
     try { void Promise.resolve(action()).catch(() => undefined) } catch { /* Optional telemetry cannot break an action. */ }
   }
@@ -231,9 +289,10 @@ export function createAnalyticsController(environment: AnalyticsEnvironment) {
         // Umami 3.4 rereads this public accessor before every recorder flush.
         // Guard even a tracker that finishes loading after opt-out. Once this
         // document is suspended, its buffered replay can never resume sending.
-        win.umami.getSession = () => disabledReason()
-          ? { cache: undefined, website: environment.websiteId }
-          : originalGetSession()
+        win.umami.getSession = () => {
+          guardLiveURL()
+          return disabledReason() ? { cache: undefined, website: environment.websiteId } : originalGetSession()
+        }
       }
       if (disabledReason() || scriptFailed) { discardQueue(); return }
       trackerReady = true
@@ -259,6 +318,11 @@ export function createAnalyticsController(environment: AnalyticsEnvironment) {
     try { win.history.replaceState(win.history.state, '', appURL.toString()) } catch {
       // Without a clean address, recorder URLs cannot satisfy the privacy contract.
       scriptFailed = true
+      return
+    }
+    try { installURLGuards() } catch {
+      scriptFailed = true
+      suspendSession()
       return
     }
     win.ascensionMapBeforeSend = beforeSend
@@ -306,11 +370,7 @@ export function createAnalyticsController(environment: AnalyticsEnvironment) {
           || (event.key === ANALYTICS_PREFERENCE_KEY && event.newValue !== null && event.newValue !== 'enabled')
           || (event.key === 'umami.disabled' && Boolean(event.newValue))
         storagePreference()
-        if (disabledByEvent || disabledReason()) {
-          sessionSuspended = true
-          trackerReady = false
-          discardQueue()
-        }
+        if (disabledByEvent || disabledReason()) suspendSession()
       }
     })
   }
