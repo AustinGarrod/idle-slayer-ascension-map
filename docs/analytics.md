@@ -56,6 +56,8 @@ Search events follow deliberate input edits after 500 ms of idle input. Rapid ed
 | Backups | `backup_download_requested`, `backup_error` | Fixed `reason`/`source` categories as applicable. Requested means the browser download was initiated; it does not prove the visitor saved the file. |
 | Game-save import | `game_import_started`, `game_import_previewed`, `game_import_applied`, `game_import_cancelled`, `game_import_error` | Fixed `reason`/`source` categories as applicable. No imported ownership, counter or file metadata. Cancelled/stale reads cannot emit applied. |
 
+Prior Ultra Ascension drafts, validation feedback and count confirmation remain replay-blocked. `prior_ascensions_recorded` fires only after **Record history** applies the confirmed change. Editing, reviewing and cancelling emit no history application event; the existing bounded event contract is unchanged.
+
 An applied event means the current in-memory map session changed after confirmation. Local storage can still fail; track that separately with `storage_error`, keep the usable session and existing recovery/export controls. Do not equate conversion counts with durable local saves. Do not emit synthetic traffic to populate reports.
 
 Cross-tab recovery uses the same bounded recovery events and storage error categories. Conflict summaries and replacement previews are replay-blocked like import/restore previews; stored text, unknown IDs and full profiles never enter their DOM or event properties. A pending profile write can be cancelled before a privacy reload, and a held write lock promptly exposes the existing export/reload/cancel choices rather than blocking opt-out.

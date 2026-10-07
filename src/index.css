@@ -197,8 +197,11 @@ dialog > button { margin: 6px 8px 0 0; }
 .dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 20px; }
 .progress-actions, .map-options { display: flex; flex-direction: column; gap: 10px; }
 .progress-actions > button, .map-options > button { text-align: left; }
-.progress-actions > label { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; font-size: .875rem; }
-.progress-actions > label input { width: 108px; flex: 0 0 108px; }
+.prior-ascensions { display: flex; flex-direction: column; gap: 10px; padding: 12px 0; border-top: 1px solid #574631; border-bottom: 1px solid #574631; }
+.prior-ascensions label { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: .875rem; }
+.prior-ascensions input { width: 108px; flex: 0 0 108px; }
+.prior-ascensions input[aria-invalid="true"] { border-color: var(--bright-gold); outline: 1px solid var(--bright-gold); }
+.prior-ascensions button { text-align: left; }
 .map-options p { margin-bottom: 2px; font-size: .875rem; }
 .map-options .spoiler-control { white-space: normal; }
 .milestone { display: flex; align-items: flex-start; gap: 12px; min-height: 44px; padding: 14px 0; border-top: 1px solid #574631; cursor: pointer; }
