@@ -215,6 +215,40 @@ test('a queued removed-stage picker cannot edit the new stage at the same positi
   }, catalog.startId)
   expect(connected).toBe(true); await expect(dialog.locator('[data-roadmap-stage]')).toHaveCount(2); await expect(stage(dialog, 2).locator('[data-roadmap-target]')).toHaveCount(0); expect(await stored(page)).toBeNull()
 })
+test('captured old plan name and stage callbacks cannot edit their former plan after a switch', async ({ page }) => {
+  await page.goto('./'); const dialog = await open(page); await dialog.getByRole('textbox', { name: 'Plan name', exact: true }).fill('First protected plan')
+  await dialog.getByRole('button', { name: 'Add comparison sequence', exact: true }).click(); await dialog.getByRole('textbox', { name: 'Plan name', exact: true }).fill('Second protected plan')
+  await dialog.getByRole('group', { name: 'Choose sequence', exact: true }).getByRole('button', { name: 'First protected plan', exact: true }).click()
+  await dialog.evaluate((element) => {
+    const props = (node: HTMLElement) => {
+      const key = Object.keys(node).find((key) => key.startsWith('__reactProps$'))
+      if (!key) throw new Error('Expected live React native-control callbacks')
+      return (node as unknown as Record<string, Record<string, unknown>>)[key]
+    }
+    const input = element.querySelector<HTMLInputElement>('input[aria-label="Plan name"]')!, buttons = [...element.querySelectorAll<HTMLButtonElement>('button')]
+    const oldName = props(input).onChange as (event: { target: { value: string } }) => void
+    const oldAdd = props(buttons.find((button) => button.textContent === 'Add purchase stage')!).onClick as () => void
+    buttons.find((button) => button.textContent === 'Second protected plan')!.click()
+    oldName({ target: { value: 'STALE NAME MUST NOT REPLACE FIRST' } }); oldAdd()
+  })
+  await expect(dialog.getByRole('textbox', { name: 'Plan name', exact: true })).toHaveValue('Second protected plan'); await expect(dialog.locator('[data-roadmap-stage]')).toHaveCount(1)
+  await dialog.getByRole('group', { name: 'Choose sequence', exact: true }).getByRole('button', { name: 'First protected plan', exact: true }).click()
+  await expect(dialog.getByRole('textbox', { name: 'Plan name', exact: true })).toHaveValue('First protected plan'); await expect(dialog.locator('[data-roadmap-stage]')).toHaveCount(1); expect(await stored(page)).toBeNull()
+})
+test('a captured old boundary callback cannot reset the replacement stage at the same position', async ({ page }) => {
+  await page.goto('./'); const dialog = await open(page); await dialog.getByRole('textbox', { name: 'Plan name', exact: true }).fill('Protected replacement boundary'); await dialog.getByRole('button', { name: 'Add purchase stage', exact: true }).click()
+  await dialog.evaluate((element) => {
+    const boundary = element.querySelector<HTMLInputElement>('[aria-label="Full Ultra Ascension after stage 2"]')!, key = Object.keys(boundary).find((key) => key.startsWith('__reactProps$'))
+    if (!key) throw new Error('Expected live React boundary callback')
+    const oldChange = (boundary as unknown as Record<string, { onChange: (event: { target: { checked: boolean } }) => void }>)[key].onChange
+    const buttons = [...element.querySelectorAll<HTMLButtonElement>('button')]
+    buttons.find((button) => button.textContent === 'Remove last stage')!.click(); buttons.find((button) => button.textContent === 'Add purchase stage')!.click()
+    oldChange({ target: { checked: true } })
+  })
+  await expect(dialog.locator('[data-roadmap-stage]')).toHaveCount(2)
+  await expect(stage(dialog, 2).getByRole('checkbox', { name: 'Full Ultra Ascension after stage 2', exact: true })).not.toBeChecked()
+  await expect(stage(dialog, 2).locator('.roadmap-reset')).toHaveCount(0); expect(await stored(page)).toBeNull()
+})
 test('roadmap choices, boundaries and comparison remain reachable with real 32px text and native Tab', async ({ baseURL }, info) => {
   const directory = info.outputPath('roadmap-font-profile'); await mkdir(join(directory, 'Default'), { recursive: true }); await writeFile(join(directory, 'Default', 'Preferences'), JSON.stringify({ webkit: { webprefs: { default_font_size: 32 } } }))
   const context = await chromium.launchPersistentContext(directory, { channel: 'chromium', headless: true, ignoreDefaultArgs: ['--hide-scrollbars'], baseURL, viewport: { width: 320, height: 568 }, ...(info.project.name === 'mobile' ? { isMobile: true, hasTouch: true } : {}) })
