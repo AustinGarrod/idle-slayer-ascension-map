@@ -48,7 +48,7 @@ yarn test:e2e
 yarn check:release
 ```
 
-Browser checks use a local production preview on port 4173 by default; `yarn preview` opens one manually. Keep all automated checks on local or isolated CI builds. Production confirmation is deliberate manual inspection only. Catalog checks compare every native ID, coordinate, cost, predicate and icon hash with reviewed evidence; unit tests cover rules/storage and browser tests cover interactions, spoilers and responsiveness. There is no lint script.
+Browser checks use a local production preview on port 4173 by default; `yarn preview` opens one manually. For a fresh build on a free port, follow the [Windows local browser-check recipe](docs/local-browser-checks.md), including a scoped `PLAYWRIGHT_BASE_URL` and cleanup. Keep all automated checks on local or isolated CI builds. Production confirmation is deliberate manual inspection only. Catalog checks compare every native ID, coordinate, cost, predicate and icon hash with reviewed evidence; unit tests cover rules/storage and browser tests cover interactions, spoilers and responsiveness. There is no lint script.
 
 Failed local/CI browser tests retain a trace, screenshot and HTML report. CI uploads only synthetic failure diagnostics for five days. See [browser diagnostics](docs/browser-diagnostics.md) for Windows retrieval and local viewer commands.
 
