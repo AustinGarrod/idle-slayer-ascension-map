@@ -8,6 +8,8 @@
 
 Recent-dialog guidance, identity text and its bounded Clear button wrap within the available content width, including enlarged browser text and differing system-font metrics. The list keeps the native dialog's vertical scrolling and ordinary keyboard controls.
 
+Opening recovery, another panel or an action preview closes the Recent dialog while retaining its inspection list. Recovery controls shared with other dialogs must leave one correctly named native dialog active, including when unsaved local progress conflicts with another tab.
+
 ## Rules and spoilers
 
 Purchase and reveal explanations preserve nested AND/OR grouping with parentheses whenever the operator changes. The pure formatter retains caller-supplied visible/hidden leaf labels and activation notes without changing rule evaluation.

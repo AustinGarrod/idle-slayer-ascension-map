@@ -239,6 +239,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     })
   }, [purchasePlan, purchaseTarget])
   function setMenu(next: Menu, recommendationStatus = recommendations.status) {
+    setRecentOpen(false)
     if (next === menu) return
     if (menu === 'progress') restoreRequest.current++
     if (next) setMessage('')
@@ -250,6 +251,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
   }
   function setPreview(next: Preview | null) {
     if (next && profileSession.getState().profile !== profile) { setMessage('Progress changed. Create a fresh preview from the current session.'); return }
+    if (next) setRecentOpen(false)
     if (next && next.operation !== 'prior_ascensions') trackEvent(`${next.operation}_previewed`, { upgrade_id: next.upgradeId, milestone_id: next.milestoneId })
     else if (!next && preview && preview.operation !== 'prior_ascensions') trackEvent(`${preview.operation}_cancelled`, { upgrade_id: preview.upgradeId, milestone_id: preview.milestoneId })
     setMessage('')

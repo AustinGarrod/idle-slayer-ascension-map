@@ -4,6 +4,8 @@ import { readFileSync } from 'node:fs'
 import { emptyProfile, type Catalog, type Profile, type Upgrade } from '../../src/domain/types'
 import { visibility } from '../../src/domain/rules'
 import { PROFILE_STORAGE_KEY } from '../../src/domain/storage'
+import { denyProfileWrites } from './helpers/profile'
+import { showSpoilers } from './helpers/app'
 
 const catalog = JSON.parse(readFileSync('public/catalog.json', 'utf8')) as Catalog
 const initial = emptyProfile(catalog.revision)
@@ -181,4 +183,39 @@ test('clearing navigation keeps purchase Undo available and opening from details
   await expect(redo).toBeEnabled(); await redo.click()
   await expect.poll(async () => JSON.parse((await stored(page))!).purchases[start.id]?.active).toBe(true)
   await recent(page); expect(await ids(page)).toEqual([])
+})
+
+test('conflict review replaces Recent with one correctly named dialog and retains its inspection trail', async ({ page, context }, info) => {
+  await denyProfileWrites(page, 'failProfileWrites')
+  await page.goto('./')
+  await select(page, neighbor)
+  await select(page, start)
+  await page.getByRole('button', { name: 'Record purchase…', exact: true }).click()
+  await page.getByRole('button', { name: 'Apply purchases', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('could not be saved')
+  const other = await context.newPage()
+  await other.goto(page.url())
+  await showSpoilers(other)
+  await expect(page.getByRole('button', { name: 'Review progress conflict', exact: true })).toBeVisible()
+  const saved = await stored(page)
+  const reopened = await recent(page)
+  expect(await ids(page)).toEqual([start.id, neighbor.id])
+  await reopened.getByRole('button', { name: 'Review progress conflict', exact: true }).click()
+  await expect(page.locator('dialog[open]')).toHaveCount(1)
+  const review = page.getByRole('dialog', { name: 'Review progress conflict', exact: true })
+  await expect(review).toBeVisible()
+  await expect(page.getByRole('dialog', { name: 'Recent upgrades', exact: true })).toHaveCount(0)
+  expect(await stored(page)).toBe(saved)
+  await page.screenshot({ path: info.outputPath('recent-conflict-review.png') })
+  await review.getByRole('button', { name: 'Use saved progress…', exact: true }).click()
+  await expect(page.locator('dialog[open]')).toHaveCount(1)
+  const replace = page.getByRole('dialog', { name: 'Use saved progress?', exact: true })
+  await expect(replace).toBeVisible()
+  await replace.getByRole('button', { name: 'Cancel', exact: true }).click()
+  await recent(page)
+  expect(await ids(page)).toEqual([start.id, neighbor.id])
+  expect(await stored(page)).toBe(saved)
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.map-summary')).toContainText('1 /')
+  await other.close()
 })
