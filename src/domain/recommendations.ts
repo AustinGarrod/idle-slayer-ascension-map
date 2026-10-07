@@ -65,7 +65,7 @@ function compareCost(left: Upgrade, right: Upgrade): number {
 export function recommendUpgrades(catalog: Catalog, profile: Profile, priorities: WikiPriorityData, { limit = 3 }: { limit?: number } = {}): UpgradeRecommendations {
   if (!Number.isInteger(limit) || limit < 1) throw new RangeError('Recommendation limit must be a positive integer')
   const visible = visibility(catalog, profile)
-  const remaining = visible.upgrades.filter((upgrade) => !Object.hasOwn(profile.purchases, upgrade.id) && !visible.grants.has(upgrade.id))
+  const remaining = visible.upgrades.filter((upgrade) => !Object.hasOwn(profile.purchases, upgrade.id))
   const ready = remaining.filter((upgrade) => satisfies(upgrade.reveal, profile) && satisfies(upgrade.purchase, profile))
   const rows = new Map<string, WikiPriorityRow>()
   for (const row of priorities.rows) {

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { emptyProfile, MAX_PROFILE_EPOCH } from './types'
 import { exportProfileBackup, parseProfileBackup } from './storage'
 import type { Catalog, Requirement, Upgrade } from './types'
-import { permanentGrants, planAstralActivation, planPurchase, planRemoval, planUltraAscension, searchVisible, visibility } from './rules'
+import { conditionallyRetainedPurchases, planAstralActivation, planPurchase, planRemoval, planUltraAscension, searchVisible, visibility } from './rules'
 
 // Deliberately synthetic fixtures exercise the engine; never shipped as game data.
 const always: Requirement = { kind: 'always' }
@@ -18,10 +18,10 @@ const catalog: Catalog = {
   upgrades: [upgrade('a'), upgrade('b'), upgrade('or', any), upgrade('child', owned('or')),
     upgrade('story', { kind: 'milestone', id: 'item' }, { title: 'Hero’s Gift', reveal: { kind: 'milestone', id: 'item' } }),
     upgrade('astral', owned('a'), { retention: 'astral', activation: 'after-ultra-ascension' }),
-    upgrade('permanent', active('astral'), { retention: 'permanent' }), upgrade('grant')],
+    upgrade('permanent', active('astral'), { retention: 'permanent' }), upgrade('retained-target')],
   milestones: [{ id: 'item', title: 'Item received', description: '', reveal: owned('a'), sources: [] }],
   connections: [{ from: 'a', to: 'story' }],
-  grants: [{ when: active('astral'), ids: ['grant'] }], ultraAscension: always,
+  grants: [{ when: active('astral'), ids: ['retained-target'] }], ultraAscension: always,
   verification: { coverage: false, purchaseRules: false, revealRules: false, resetRules: false, assets: false, evidence: [] },
 }
 
@@ -93,7 +93,7 @@ describe('manual Astral activation', () => {
   it('records only the selected lock as earlier retained ownership without changing other history', () => {
     const profile = emptyProfile('fixture')
     profile.epoch = 3
-    profile.purchases = { a: { epoch: 3, active: true }, astral: { epoch: 3, active: false }, grant: { epoch: 3, active: true }, unknown: { epoch: 1, active: false } }
+    profile.purchases = { a: { epoch: 3, active: true }, astral: { epoch: 3, active: false }, 'retained-target': { epoch: 3, active: true }, unknown: { epoch: 1, active: false } }
     profile.milestones.item = true
     const before = structuredClone(profile)
     const result = planAstralActivation(catalog, profile, 'astral')
@@ -113,7 +113,7 @@ describe('manual Astral activation', () => {
     expect(result.kind).toBe('ready')
     if (result.kind !== 'ready') throw new Error('Expected activation')
     expect(result.profile.purchases.astral).toEqual({ epoch: 1, active: true })
-    expect(result.profile.purchases.grant).toBeUndefined()
+    expect(result.profile.purchases['retained-target']).toBeUndefined()
   })
 
   it('requires recorded Ultra Ascension history instead of creating activation at epoch zero', () => {
@@ -143,7 +143,7 @@ describe('manual Astral activation', () => {
 describe('Ultra Ascension', () => {
   it('refuses the maximum accepted epoch before activating, clearing or changing progress', () => {
     const profile = { ...emptyProfile('fixture'), epoch: MAX_PROFILE_EPOCH, purchases: {
-      a: { epoch: MAX_PROFILE_EPOCH, active: true }, astral: { epoch: MAX_PROFILE_EPOCH, active: false }, grant: { epoch: 1, active: true }, unknown: { epoch: 0, active: false },
+      a: { epoch: MAX_PROFILE_EPOCH, active: true }, astral: { epoch: MAX_PROFILE_EPOCH, active: false }, 'retained-target': { epoch: 1, active: true }, unknown: { epoch: 0, active: false },
     }, milestones: { item: true as const } }
     const before = structuredClone(profile)
     const backup = exportProfileBackup(profile)
@@ -157,7 +157,7 @@ describe('Ultra Ascension', () => {
 
   it('allows the final safe increment and produces a valid exportable profile', () => {
     const profile = { ...emptyProfile('fixture'), epoch: MAX_PROFILE_EPOCH - 1, purchases: {
-      a: { epoch: MAX_PROFILE_EPOCH - 1, active: true }, astral: { epoch: MAX_PROFILE_EPOCH - 1, active: false }, grant: { epoch: 1, active: true }, unknown: { epoch: 0, active: false },
+      a: { epoch: MAX_PROFILE_EPOCH - 1, active: true }, astral: { epoch: MAX_PROFILE_EPOCH - 1, active: false }, 'retained-target': { epoch: 1, active: true }, unknown: { epoch: 0, active: false },
     }, milestones: { item: true as const } }
     const reset = planUltraAscension(catalog, profile)!
     expect(reset.profile.epoch).toBe(MAX_PROFILE_EPOCH)
@@ -172,28 +172,28 @@ describe('Ultra Ascension', () => {
     expect(planUltraAscension(catalog, reset.profile)).toBeNull()
   })
 
-  it('separates ownership, epoch and activation through repeated resets and grants', () => {
+  it('separates ownership, epoch and activation through repeated resets and conditional retention', () => {
     const result = planPurchase(catalog, emptyProfile('fixture'), 'astral')
     if (result.kind !== 'ready') throw new Error('fixture')
     expect(result.profile.purchases.astral.active).toBe(false)
-    expect(permanentGrants(catalog, result.profile).has('grant')).toBe(false)
+    expect(conditionallyRetainedPurchases(catalog, result.profile).has('retained-target')).toBe(false)
     const first = planUltraAscension(catalog, result.profile)!
     expect(first.cleared).toEqual(['a'])
     expect(first.activated).toEqual(['astral'])
     expect(first.profile.purchases.astral).toEqual({ epoch: 0, active: true })
-    expect(first.granted).toEqual([]) // Never grant an unpurchased target.
+    expect(first.conditionallyRetained).toEqual([]) // Never retain an unpurchased target.
     const second = planUltraAscension(catalog, first.profile)!
     expect(second.profile.epoch).toBe(2)
     expect(second.activated).toEqual([])
     expect(planRemoval(catalog, second.profile, 'a').profile.purchases.astral).toBeDefined()
     expect(second.profile.milestones).toEqual(first.profile.milestones)
   })
-  it('preserves purchased grant targets after activating their source', () => {
+  it('preserves existing purchases through conditional retention after activating their source', () => {
     const result = planPurchase(catalog, emptyProfile('fixture'), 'astral')
     if (result.kind !== 'ready') throw new Error('fixture')
-    result.profile.purchases.grant = { epoch: 0, active: true }
+    result.profile.purchases['retained-target'] = { epoch: 0, active: true }
     const reset = planUltraAscension(catalog, result.profile)!
-    expect(reset.granted).toEqual(['grant'])
-    expect(reset.profile.purchases.grant).toEqual({ epoch: 0, active: true })
+    expect(reset.conditionallyRetained).toEqual(['retained-target'])
+    expect(reset.profile.purchases['retained-target']).toEqual({ epoch: 0, active: true })
   })
 })

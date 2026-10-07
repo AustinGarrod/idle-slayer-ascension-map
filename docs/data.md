@@ -88,6 +88,8 @@ exposes its item control. **Show spoilers** is the explicit first-entry route
 for those milestones. This conservative policy avoids inventing an earlier
 story event or an Ultra Ascension gate absent from the native reveal logic.
 
+The catalog retains the legacy `grants` field name for these four conditional-retention rules. It represents preservation of existing purchases, never a separate ownership state or an award of an absent target.
+
 ## English descriptions and sprites
 
 Titles and text originate in the game's `en-US` localization TextAsset.

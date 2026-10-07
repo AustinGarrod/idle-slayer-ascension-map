@@ -13,8 +13,8 @@ export function satisfies(requirement: Requirement, profile: Profile): boolean {
   }
 }
 
-/** Native grants preserve previously purchased targets; they do not award ownership. */
-export function permanentGrants(catalog: Catalog, profile: Profile): Set<string> {
+/** Native conditional retention includes only existing purchases with an active source. */
+export function conditionallyRetainedPurchases(catalog: Catalog, profile: Profile): Set<string> {
   const result = new Set<string>()
   for (const rule of catalog.grants) {
     if (!satisfies(rule.when, profile)) continue
@@ -26,13 +26,12 @@ export function permanentGrants(catalog: Catalog, profile: Profile): Set<string>
 }
 
 export function visibility(catalog: Catalog, profile: Profile) {
-  const grants = permanentGrants(catalog, profile)
   const upgrades = catalog.upgrades.filter((node) => profile.showSpoilers || satisfies(node.reveal, profile))
   const ids = new Set(upgrades.map((node) => node.id))
   const milestones = catalog.milestones.filter((item) => profile.showSpoilers || satisfies(item.reveal, profile))
   const connections = catalog.connections.filter((edge) => ids.has(edge.from) && ids.has(edge.to))
   const owned = upgrades.filter((node) => satisfies({ kind: 'owned', id: node.id }, profile)).length
-  return { upgrades, ids, milestones, connections, grants, owned, total: upgrades.length }
+  return { upgrades, ids, milestones, connections, owned, total: upgrades.length }
 }
 
 export function normalizeTitle(title: string): string {
@@ -164,7 +163,7 @@ function activateAstralLocks(catalog: Catalog, profile: Profile): string[] {
 export function retainedPurchasesOnReset(catalog: Catalog, original: Profile): Set<string> {
   const profile = structuredClone(original)
   activateAstralLocks(catalog, profile)
-  return permanentGrants(catalog, profile)
+  return conditionallyRetainedPurchases(catalog, profile)
 }
 
 export function planUltraAscension(catalog: Catalog, original: Profile) {
@@ -172,12 +171,12 @@ export function planUltraAscension(catalog: Catalog, original: Profile) {
   const profile = structuredClone(original)
   const cleared: string[] = []
   const activated = activateAstralLocks(catalog, profile)
-  const retained = permanentGrants(catalog, profile)
+  const retained = conditionallyRetainedPurchases(catalog, profile)
   for (const node of catalog.upgrades) {
     if (profile.purchases[node.id] && node.retention === 'repeat' && !retained.has(node.id)) {
       delete profile.purchases[node.id]; cleared.push(node.id)
     }
   }
   profile.epoch += 1
-  return { profile, cleared, activated, granted: [...permanentGrants(catalog, profile)] }
+  return { profile, cleared, activated, conditionallyRetained: [...conditionallyRetainedPurchases(catalog, profile)] }
 }
