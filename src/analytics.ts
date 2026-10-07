@@ -86,6 +86,7 @@ export function createAnalyticsController(environment: AnalyticsEnvironment) {
   let initialized = false
   let preference: TrackingStatus['preference'] = 'unavailable'
   let preferenceDisabled = false
+  let sessionSuspended = false
   let trackerReady = false
   let scriptFailed = false
   let context: AnalyticsContext | undefined
@@ -123,6 +124,7 @@ export function createAnalyticsController(environment: AnalyticsEnvironment) {
       preferenceDisabled = true
       return 'storage-unavailable'
     }
+    if (sessionSuspended) return 'reload-required'
     return undefined
   }
   function getTrackingStatus(): TrackingStatus {
@@ -223,21 +225,23 @@ export function createAnalyticsController(environment: AnalyticsEnvironment) {
     }
   }
   function waitForTracker() {
-    if (disabledReason() || scriptFailed) { discardQueue(); return }
     if (win.umami) {
-      trackerReady = true
       const originalGetSession = win.umami.getSession?.bind(win.umami)
       if (originalGetSession) {
         // Umami 3.4 rereads this public accessor before every recorder flush.
-        // Opt-out stops new recorder sends; a reload releases its DOM listeners.
+        // Guard even a tracker that finishes loading after opt-out. Once this
+        // document is suspended, its buffered replay can never resume sending.
         win.umami.getSession = () => disabledReason()
           ? { cache: undefined, website: environment.websiteId }
           : originalGetSession()
       }
+      if (disabledReason() || scriptFailed) { discardQueue(); return }
+      trackerReady = true
       identifyContext()
       flushQueue()
       return
     }
+    if (disabledReason() || scriptFailed) { discardQueue(); return }
     if (Date.now() - trackerWaitStarted >= QUEUE_TTL) { scriptFailed = true; discardQueue(); return }
     pollTimer = win.setTimeout(waitForTracker, 100)
   }
@@ -295,9 +299,18 @@ export function createAnalyticsController(environment: AnalyticsEnvironment) {
     win.addEventListener('unhandledrejection', () => reportError('unhandled-rejection'))
     win.addEventListener('resize', identifyContext)
     win.addEventListener('storage', (event) => {
-      if (event.key === ANALYTICS_PREFERENCE_KEY || event.key === 'umami.disabled') {
+      if (event.key === null || event.key === ANALYTICS_PREFERENCE_KEY || event.key === 'umami.disabled') {
+        // Read the event as well as current storage: another tab can disable
+        // and enable before this document receives the queued disabling event.
+        const disabledByEvent = event.key === null
+          || (event.key === ANALYTICS_PREFERENCE_KEY && event.newValue !== null && event.newValue !== 'enabled')
+          || (event.key === 'umami.disabled' && Boolean(event.newValue))
         storagePreference()
-        if (disabledReason()) discardQueue()
+        if (disabledByEvent || disabledReason()) {
+          sessionSuspended = true
+          trackerReady = false
+          discardQueue()
+        }
       }
     })
   }
@@ -326,6 +339,7 @@ export function createAnalyticsController(environment: AnalyticsEnvironment) {
       persisted = true
     } catch { preference = 'unavailable' }
     // Enabling takes effect only after a clean reload, never mid-session.
+    sessionSuspended = true
     preferenceDisabled = true
     trackerReady = false
     const url = new URL(win.location.href)

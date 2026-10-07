@@ -122,6 +122,71 @@ describe('analytics activation and preference', () => {
     expect(analytics.getTrackingStatus().enabled).toBe(false)
   })
 
+  it.each([
+    ['app opt-out', ANALYTICS_PREFERENCE_KEY, 'disabled', false],
+    ['invalid preference', ANALYTICS_PREFERENCE_KEY, 'invalid', false],
+    ['native opt-out', 'umami.disabled', '1', false],
+    ['cleared storage', null, null, false],
+    ['unreadable preference', ANALYTICS_PREFERENCE_KEY, 'disabled', true],
+  ])('requires a clean reload after another tab causes %s', (_scenario, key, value, readFailure) => {
+    const { analytics, stored, storage, listeners, tracker, ready } = setup()
+    analytics.initializeAnalytics()
+    ready()
+    if (key && value) stored.set(key, value)
+    else stored.clear()
+    if (readFailure) storage.getItem.mockImplementationOnce(() => { throw new Error('Synthetic inaccessible preference') })
+    listeners.get('storage')?.forEach((handler) => handler({ key, newValue: value }))
+    expect(tracker.getSession().cache).toBeUndefined()
+    stored.delete('umami.disabled')
+    stored.set(ANALYTICS_PREFERENCE_KEY, 'enabled')
+    listeners.get('storage')?.forEach((handler) => handler({ key: ANALYTICS_PREFERENCE_KEY, newValue: 'enabled' }))
+    tracker.track.mockClear()
+    analytics.trackEvent('app_ready')
+    expect(analytics.getTrackingStatus()).toMatchObject({ enabled: false, active: false, reason: 'reload-required', preference: 'enabled' })
+    expect(tracker.getSession().cache).toBeUndefined()
+    expect(tracker.track).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    [ANALYTICS_PREFERENCE_KEY, 'disabled'],
+    ['umami.disabled', '1'],
+  ])('honors queued disabling storage events for %s even after another tab restores eligibility', (key, value) => {
+    const { analytics, stored, listeners, tracker, ready } = setup()
+    analytics.initializeAnalytics()
+    ready()
+    // Storage already reflects a later enable; the earlier queued event still
+    // establishes a disabled interval whose recorder buffer cannot be reused.
+    stored.set(ANALYTICS_PREFERENCE_KEY, 'enabled')
+    listeners.get('storage')?.forEach((handler) => handler({ key, newValue: value }))
+    expect(analytics.getTrackingStatus()).toMatchObject({ enabled: false, active: false, reason: 'reload-required' })
+    expect(tracker.getSession().cache).toBeUndefined()
+  })
+
+  it('does not resume a local tracking change when another tab enables tracking', () => {
+    const { analytics, stored, listeners, tracker, ready } = setup()
+    analytics.initializeAnalytics()
+    ready()
+    analytics.setTrackingPreference(false)
+    stored.set(ANALYTICS_PREFERENCE_KEY, 'enabled')
+    listeners.get('storage')?.forEach((handler) => handler({ key: ANALYTICS_PREFERENCE_KEY, newValue: 'enabled' }))
+    expect(analytics.getTrackingStatus()).toMatchObject({ enabled: false, active: false, reason: 'reload-required' })
+    expect(tracker.getSession().cache).toBeUndefined()
+  })
+
+  it('guards a tracker that finishes loading after another tab disables tracking', () => {
+    const { analytics, stored, listeners, tracker, ready } = setup()
+    analytics.initializeAnalytics()
+    analytics.trackEvent('app_ready')
+    stored.set(ANALYTICS_PREFERENCE_KEY, 'disabled')
+    listeners.get('storage')?.forEach((handler) => handler({ key: ANALYTICS_PREFERENCE_KEY, newValue: 'disabled' }))
+    ready()
+    stored.set(ANALYTICS_PREFERENCE_KEY, 'enabled')
+    listeners.get('storage')?.forEach((handler) => handler({ key: ANALYTICS_PREFERENCE_KEY, newValue: 'enabled' }))
+    expect(analytics.getTrackingStatus()).toMatchObject({ active: false, reason: 'reload-required' })
+    expect(tracker.getSession().cache).toBeUndefined()
+    expect(tracker.track).not.toHaveBeenCalled()
+  })
+
   it('keeps the application usable when cleaning the recorder URL is prohibited', () => {
     const { analytics, win, scripts } = setup()
     vi.mocked(win.history.replaceState).mockImplementation(() => { throw new Error('PRIVATE') })
