@@ -425,8 +425,8 @@ dialog:has(.game-save-import-panel) .dialog-heading { position: sticky; top: -20
 dialog:has(.privacy-panel) { scroll-padding-top: 76px; }
 dialog:has(.privacy-panel) .dialog-heading { position: sticky; top: -20px; z-index: 1; margin-left: -20px; margin-right: -20px; padding-left: 20px; padding-right: 20px; background: var(--surface); box-shadow: 0 12px var(--surface); }
 
-.session-history-controls { display: flex; gap: 8px; min-width: 0; }
-.session-history-controls > div { flex: 1; min-width: 0; }
+.session-history-controls { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.session-history-controls > div { flex: 1 1 8rem; min-width: 0; }
 .session-history-controls button { width: 100%; height: 100%; }
 footer .session-history-controls { max-width: 340px; }
 .session-history-controls button small { display: block; margin-top: 3px; font-size: .6875rem; line-height: 1.3; overflow-wrap: anywhere; }
