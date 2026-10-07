@@ -410,3 +410,22 @@ dialog:has(.game-save-import-panel) .dialog-heading { position: sticky; top: -20
 .tracking-status { padding: 10px 12px; border: 1px solid #79603b; border-radius: 4px; background: var(--raised); }
 dialog:has(.privacy-panel) { scroll-padding-top: 76px; }
 dialog:has(.privacy-panel) .dialog-heading { position: sticky; top: -20px; z-index: 1; margin-left: -20px; margin-right: -20px; padding-left: 20px; padding-right: 20px; background: var(--surface); box-shadow: 0 12px var(--surface); }
+
+/* Replacement details stay private, bounded and within the existing dialog. */
+dialog:has(.progress-comparison) { overflow-wrap: anywhere; }
+.progress-comparison { min-width: 0; margin: 16px 0; font-size: .875rem; line-height: 1.6; overflow-wrap: anywhere; }
+.progress-comparison h3 { margin: 0 0 12px; color: var(--bright-gold); }
+.progress-comparison p { margin: 12px 0; }
+.progress-comparison button { max-width: 100%; font-size: .875rem; overflow-wrap: anywhere; }
+.comparison-context { color: var(--muted); }
+.comparison-changes { margin: 12px 0; padding: 0; list-style: none; }
+.comparison-changes li { display: grid; gap: 4px; padding: 10px 0; border-top: 1px solid #574631; }
+.comparison-changes small { color: var(--muted); font-size: .8125rem; }
+.comparison-settings { margin: 12px 0; }
+.comparison-settings > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 16px; padding: 12px 0; border-top: 1px solid #574631; }
+.comparison-settings dt { grid-column: 1 / -1; font-weight: 600; }
+.comparison-settings dd { display: grid; gap: 4px; margin: 0; font-variant-numeric: tabular-nums; }
+.comparison-settings dd > span { color: var(--muted); font-size: .8125rem; }
+@media (max-width: 420px) {
+  .comparison-settings > div { grid-template-columns: minmax(0, 1fr); }
+}
