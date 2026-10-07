@@ -119,7 +119,9 @@ for (const spoilers of [false, true]) test(`Astral Keys reveals retain eleven st
     await expect(dialog.locator('[data-impact-id]')).toHaveCount(10)
     await dialog.getByRole('button', { name: 'Show more affected upgrades', exact: true }).click()
     expect(await dialog.locator('[data-impact-id]').evaluateAll((rows) => rows.map((row) => (row as HTMLElement).dataset.impactId))).toEqual(targets.map((upgrade) => upgrade.id))
-    await expect(dialog.locator(`[data-impact-id="${targets.at(-1)!.id}"]`)).toContainText(targets.at(-1)!.cost.replace(/\B(?=(\d{3})+(?!\d))/g, ','))
+    const last = dialog.locator(`[data-impact-id="${targets.at(-1)!.id}"]`)
+    await expect(last.locator('.sp-cost')).toHaveAttribute('data-exact-cost', targets.at(-1)!.cost)
+    await expect(last.getByRole('math', { name: `${BigInt(targets.at(-1)!.cost).toLocaleString('en')} Slayer Points`, exact: true })).toHaveCount(1)
   } else {
     await expect(dialog.locator('[data-impact-reveals]')).toHaveCount(0)
     await expect(dialog.locator('[data-impact-id]')).toHaveCount(0)

@@ -14,7 +14,15 @@ The chosen design uses directed paths with arrowheads, gold dashed incoming conn
 
 The search overlay also browses all visible upgrades with an empty query and a Progress state filter. Its scrollable list has no result cap; the existing count/close header stays reachable while scrolling. Native Tab focus keeps each result title clear of that measured sticky header, including tall rows at enlarged browser text sizes. Rows pair state text and symbols with exact costs and short native effect excerpts, with stable IDs for duplicate visible titles. Available means the native purchase and reveal gates are recorded; no SP balance is inferred. Controls stay inside the on-demand overlay so the ordinary toolbar and map retain their space. Filters and search affect discovery only, and hidden upgrades never contribute rows, counts or duplicate-title hints.
 
+The exploration trail stays in an on-demand **Recent upgrades** dialog, reached through Map view/options or expanded connection details. Its newest-first list remembers at most 20 distinct inspected IDs during this visit. Visible duplicate titles include their native cost and stable ID. Selection returns through the existing inspector/camera behavior; no permanent phone control row is added. Shared visibility immediately removes hidden entries, and progress Undo remains separate.
+
+## Named progress checkpoints
+
+Named progress checkpoints use an optional native dialog reached from Progress. Four compact reference cards show deliberate names and captured catalog context, followed by explicit capture, rename, delete and portable collection controls. First/Second radio groups support current-to-reference or reference-to-reference comparisons. They add no map rail and never turn a snapshot into another editable profile. Flexible actions, wrapped names and a single-column narrow layout retain 44 px targets with ordinary and actual enlarged browser text. The comparison labels ownership separately from activation and resets, uses only the current revealed universe, and makes unknown operation context explicit. Names, snapshots and controls stay in a private replay-blocked region.
+
 ## Native Game presentation refinement
+
+Large SP costs use an exact coefficient and visible power of ten instead of an ambiguous suffix. Full grouped values remain available to assistive technology and in titles. The inspector gives cost its own readable header row; expanded details show the complete value with breaks only between comma groups, a stable ID and copy/manual-copy controls. Cost notation changes neither native values nor eligibility.
 
 Three Game-only concepts received an independent spacing and accessibility review after feedback that the large cards changed the game's appearance and obscured its lines:
 
@@ -37,6 +45,12 @@ Compact details show the upgrade's icon, title, cost, status and purchase action
 Overview is an on-demand camera mode, reached through Map options or the compact desktop Map view button. It temporarily hides the inspector so the visible graph can use the existing canvas; selection and inspector expansion are retained for return. It shows the complete visible node shape with normal branch contrast and a short orientation caption. Nodes can become very small, so the existing return-to-start camera slot changes to Return to inspection while a selection exists, or Return to previous view otherwise. Refocus selected upgrade in Map options remains available during ordinary exploration.
 
 This adds no permanent minimap, camera button or phone panel. The four existing camera targets keep their footprint. Overview leaves room below its caption and above camera controls, fits only current shared visible frames, and uses the current reduced-motion preference. Refocus restores the existing useful node scale and responsive inspection insets. Spoiler changes retain the exact camera instead of widening or resetting the view automatically.
+
+## Saved upgrade comparison
+
+Saved upgrade comparison is a separate optional reference dialog, reached from Map options or Compare this upgrade in expanded details. It holds four deliberately selected visible upgrades across owned, pending, blocked and available states. Two columns at roomy desktop widths become a single readable column on narrow or enlarged-text views. Each card keeps native benefit, exact cost, state, separate purchase/reveal gates, activation and retention alongside source/version context. Stable IDs distinguish same-title entries. Existing Show on map and requirement-review routes permit inspection without a purchase action in the comparison.
+
+An inline full-list picker searches visible titles/effects. At capacity the player explicitly chooses the entry to replace, or removes it; hidden references do not consume displayed capacity or disclose counts. Missing IDs show a generic unavailable card. Export, restore and storage-conflict recovery remain local/private, visibly separate from progress backup and Undo. The native dialog and single scroll surface keep controls reachable with ordinary and actual enlarged browser text; card/picker buttons wrap with at least 44px targets. No permanent rail, notes, winner, goals, stacked benefit or SP balance is added.
 
 ## Next-upgrade guidance
 
@@ -146,6 +160,13 @@ Keep motion brief and purposeful, such as centering a selected node. Respect red
 - Search and detail panels are usable on narrow screens and at increased text size.
 - A spoiler-hidden screen exposes only content allowed by the shared visibility rules.
 - Added fonts, icons and wiki text have recorded provenance and attribution.
+
+
+Public reference copying belongs to expanded upgrade details. Its optional manual text field and buttons wrap at enlarged browser fonts, preserve 44px controls and never add permanent map rails. Opening a reference focuses visible details; hidden or missing targets receive a fixed generic announcement without changing spoiler choice. Page title and preview metadata remain generic.
+
+## Portable reference selection
+
+A secondary action in expanded details adds an explicit visible upgrade to a four-entry visit-only sheet. Map options opens the private selection and complete outgoing document preview. Wrapped 44px controls support removal, clearing, review, saving and a separate print tab without adding a persistent map rail. The self-contained document uses readable native text, full exact costs and grouped visible requirements; it labels the excerpt limits and version. No private progress or inferred routes enter the sheet.
 
 ## Optional forward impact
 

@@ -3,11 +3,12 @@ import { forwardImpact, type HypotheticalEvent, type ImpactRow } from './domain/
 import { visibility } from './domain/rules'
 import type { Catalog, Profile, Upgrade } from './domain/types'
 import { ReadOnlyRequirement } from './RequirementView'
+import { SPCost } from './SPCost'
 import './ForwardImpactPanel.css'
 
 const gate = (value: boolean) => value ? 'Satisfied' : 'Missing'
 function Identity({ upgrade }: { upgrade: Upgrade }) {
-  return <><h4>{upgrade.title}</h4><small>ID: {upgrade.id} · {BigInt(upgrade.cost).toLocaleString('en')} SP</small></>
+  return <><h4>{upgrade.title}</h4><small>ID: {upgrade.id} · <SPCost value={upgrade.cost} /></small></>
 }
 function Rows({ title, rows, after, profile, catalog }: { title: string; rows: ImpactRow[]; after: Profile; profile: Profile; catalog: Catalog }) {
   const [limit, setLimit] = useState(10)
@@ -27,7 +28,7 @@ export function ForwardImpactPanel({ catalog, profile, event }: { catalog: Catal
     <p>Only visible requirement portions are explained; native gates still apply.</p>
     {result.kind === 'unavailable' ? <p role="status">{result.reason}</p> : <>
       <h3>{event.kind === 'purchase' ? 'Proposed purchase' : 'Proposed item receipt'}: {result.target.title}</h3>
-      <small>ID: {result.target.id}{'cost' in result.target && ` · ${BigInt(result.target.cost).toLocaleString('en')} SP`}</small>
+      <small>ID: {result.target.id}{'cost' in result.target && <> · <SPCost value={result.target.cost} /></>}</small>
       {result.kind === 'blocked' ? <><p role="status">{result.reason}</p><h3>Current purchase gates</h3><ReadOnlyRequirement requirement={result.target.purchase} profile={profile} visible={visible} /><h3>Current reveal gates</h3><ReadOnlyRequirement requirement={result.target.reveal} profile={profile} visible={visible} /></> : <>
         <p>{event.kind === 'milestone' ? 'Assume only that this required item has actually been received, crafted or purchased. Its acquisition path is not inferred.' : 'Assume this purchase only. Newly eligible upgrades are not also purchased.'}</p>
         {'activation' in result.target && result.target.activation === 'after-ultra-ascension' && <p>This Astral purchase stays awaiting activation. Its future activation requires a full Ultra Ascension transition, including clearing and retention; it is not forecast here.</p>}

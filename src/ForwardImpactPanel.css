@@ -10,8 +10,4 @@ dialog:has(.forward-impact) { overflow-wrap: anywhere; }
 .forward-impact summary { min-height: 44px; cursor: pointer; }
 .forward-impact .requirement-expression { margin: 8px 0; }
 .forward-impact button, .forward-impact-close, .forward-impact-trigger { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
-.detail-secondary { margin-top: 12px; }
-@media (max-width: 68.75em), (max-height: 540px) {
-  .detail-secondary { display: none; }
-  .details.expanded .detail-secondary { display: block; }
-}
+.forward-impact-details { margin-top: 12px; }
