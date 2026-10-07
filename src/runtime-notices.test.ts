@@ -48,9 +48,12 @@ describe('complete bundled runtime notices', () => {
     expect(() => validateBundleCoverage(root, wrongEmbeddedVersion, modules)).toThrow('Embedded Graphlib version')
   })
   it('rejects missing, unreviewed and newly generated runtime identities', () => {
-    expect(() => validateBundleCoverage(root, manifest, modules.filter((module) => !module.id.includes('/react/')))).toThrow('coverage differs')
-    expect(() => validateBundleCoverage(root, manifest, [...modules, { id: '/fixture/node_modules/unreviewed-runtime/index.js', renderedLength: 1 }])).toThrow('coverage differs')
-    expect(() => validateBundleCoverage(root, manifest, [...modules, { id: '\0new-runtime-helper.js', renderedLength: 1 }])).toThrow('Unreviewed generated')
+    expect(() => validateBundleCoverage(root, manifest, modules.filter((module) => module.id !== '/fixture/node_modules/react/index.js'))).toThrow('No longer bundled: react.')
+    expect(() => validateBundleCoverage(root, manifest, [...modules, { id: '/fixture/node_modules/unreviewed-runtime/index.js', renderedLength: 1 }])).toThrow('Unreviewed packages: unreviewed-runtime.')
+    expect(() => validateBundleCoverage(root, manifest, [...modules, { id: '\0new-runtime-helper.js', renderedLength: 1 }])).toThrow('new-runtime-helper.js')
+    const wrongKind = structuredClone(manifest)
+    wrongKind.packages.find((item) => item.name === 'react')!.inclusion = 'helper'
+    expect(() => validateBundleCoverage(root, wrongKind, modules)).toThrow('Inclusion kind changed: react.')
   })
   it('rejects an omitted or changed notice in the distributable', () => {
     const directory = temporary()
