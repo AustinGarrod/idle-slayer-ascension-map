@@ -25,6 +25,40 @@ function delayedLocks() {
 }
 
 describe('coordinated profile persistence', () => {
+  it('distinguishes checking, no saved profile, a loaded profile and unreadable progress', () => {
+    const storage = { getItem: () => null, setItem: vi.fn() }
+    const checking = createProfileSession({ revision: 'fixture', storage: () => storage, locks: () => undefined })
+    expect(checking.getState().persistence).toBe('loading')
+    checking.initialize()
+    expect(checking.getState()).toMatchObject({ persistence: 'new', writable: true, dirty: false })
+    expect(storage.setItem).not.toHaveBeenCalled()
+    expect(fixture(JSON.stringify(profile('saved'))).session.getState().persistence).toBe('saved')
+    expect(fixture('{corrupt}').session.getState()).toMatchObject({ persistence: 'failed', writable: false })
+    const unreadable = createProfileSession({ revision: 'fixture', storage: () => { throw new Error('Synthetic denied read') }, locks: () => undefined })
+    unreadable.initialize()
+    expect(unreadable.getState()).toMatchObject({ persistence: 'failed', errorKind: 'storage-read' })
+  })
+
+  it('only reports a confirmed save after the pending write completes and recovers after cancellation', async () => {
+    const delayed = delayedLocks()
+    const f = fixture(null, delayed.locks)
+    const observed: string[] = []
+    f.session.subscribe((state) => observed.push(state.persistence))
+    f.session.apply(profile('local'))
+    expect(observed).toEqual(['unsaved', 'saving'])
+    expect(f.session.getState().persistence).toBe('saving')
+    expect(f.stored()).toBeNull()
+    f.session.cancelPending()
+    expect(f.session.getState().persistence).toBe('failed')
+    delayed.release(); await settled()
+    expect(f.stored()).toBeNull()
+    f.session.retry()
+    expect(f.session.getState().persistence).toBe('saving')
+    delayed.release(); await settled()
+    expect(f.session.getState().persistence).toBe('saved')
+    expect(JSON.parse(f.stored()!)).toEqual(profile('local'))
+  })
+
   it('persists only inside the named exclusive lock and preserves the portable schema', async () => {
     let held = false
     const locks: ProfileLocks = { request: async (name, options, callback) => {
@@ -107,31 +141,33 @@ describe('coordinated profile persistence', () => {
     const f = fixture()
     f.failWrites()
     f.session.apply(profile('local')); await settled()
-    expect(f.session.getState()).toMatchObject({ dirty: true, errorKind: 'storage-write' })
+    expect(f.session.getState()).toMatchObject({ dirty: true, persistence: 'failed', errorKind: 'storage-write' })
     f.failWrites(false)
     f.session.retry(); await settled()
-    expect(f.session.getState()).toMatchObject({ dirty: false, error: '' })
+    expect(f.session.getState()).toMatchObject({ dirty: false, persistence: 'saved', error: '' })
     expect(JSON.parse(f.stored()!)).toEqual(profile('local'))
     expect(f.session.undo()).toBe(true); await settled()
     expect(JSON.parse(f.stored()!)).toEqual(emptyProfile('fixture'))
+    expect(f.session.getState().persistence).toBe('saved')
   })
 
   it.each([null, '{corrupt}'])('preserves dirty state when external storage becomes %s', async (external) => {
     const f = fixture(JSON.stringify(profile('previous')))
     f.failWrites(); f.session.apply(profile('local')); await settled()
     f.external(external); f.session.refreshExternal()
-    expect(f.session.getState()).toMatchObject({ profile: profile('local'), dirty: true, history: [], conflict: { kind: external === null ? 'valid' : 'invalid', text: external } })
+    expect(f.session.getState()).toMatchObject({ profile: profile('local'), dirty: true, persistence: 'conflict', history: [], conflict: { kind: external === null ? 'valid' : 'invalid', text: external } })
     f.failWrites(false)
     expect(await f.session.save()).toBe(false)
     expect(f.stored()).toBe(external)
     expect(await f.session.save(true, f.session.getState().version)).toBe(true)
+    expect(f.session.getState().persistence).toBe('saved')
     expect(JSON.parse(f.stored()!)).toEqual(profile('local'))
   })
 
   it('follows deleted storage while clean without recreating it', () => {
     const f = fixture(JSON.stringify(profile('previous')))
     f.external(null); f.session.refreshExternal()
-    expect(f.session.getState()).toMatchObject({ profile: emptyProfile('fixture'), dirty: false, history: [], conflict: null })
+    expect(f.session.getState()).toMatchObject({ profile: emptyProfile('fixture'), dirty: false, persistence: 'new', history: [], conflict: null })
     expect(f.storage.setItem).not.toHaveBeenCalled()
   })
 
@@ -175,7 +211,7 @@ describe('coordinated profile persistence', () => {
     const f = fixture('{corrupt}')
     f.session.apply(profile('restored'), true); await settled()
     expect(JSON.parse(f.stored()!)).toEqual(profile('restored'))
-    expect(f.session.getState()).toMatchObject({ dirty: false, writable: true })
+    expect(f.session.getState()).toMatchObject({ dirty: false, persistence: 'saved', writable: true })
     f.session.undo(); await settled()
     expect(JSON.parse(f.stored()!)).toEqual(emptyProfile('fixture'))
   })

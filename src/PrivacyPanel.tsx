@@ -1,10 +1,11 @@
 import type { getTrackingStatus } from './analytics'
 
-export const trackingDisclosure = 'Your progress is saved on this device. This site uses self-hosted Umami for usage analytics and session recordings, which may include visible map progress. Save files and backup contents are never uploaded. You can disable tracking in Privacy & tracking.'
+export const trackingDisclosure = 'Map progress is stored in this browser when saving succeeds. This site uses self-hosted Umami for usage analytics and session recordings, which may include visible map progress. Save files and backup contents are never uploaded. You can disable tracking in Privacy & tracking.'
 
-export function PrivacyPanel({ status, onChange }: {
+export function PrivacyPanel({ status, onChange, progressStatus = 'Progress saving is checked after the map loads.' }: {
   status: ReturnType<typeof getTrackingStatus>
   onChange: (enabled: boolean) => void
+  progressStatus?: string
 }) {
   const preferenceEnabled = status.preference === 'enabled' && !['opt-out', 'reload-required'].includes(status.reason)
   const urlOnlyOptOut = status.reason === 'opt-out' && status.preference !== 'disabled'
@@ -18,6 +19,7 @@ export function PrivacyPanel({ status, onChange }: {
             : status.enabled ? 'Usage analytics and recording are enabled for this visit.' : 'Usage analytics and recording are disabled.'
   return <div className="privacy-panel">
     <p>{trackingDisclosure}</p>
+    <p className="progress-save-status">{progressStatus}</p>
     <p className="tracking-status" role="status">{explanation}</p>
     <h3>What is collected</h3>
     <p>Page visits, referral and campaign information, browser/device information, approximate location when available, performance measurements and interactions with map features. Recordings can show clicks, navigation and your visible upgrade and milestone states.</p>
