@@ -8,7 +8,13 @@ if (previewURL) {
 export default defineConfig({
   testDir: './tests/browser',
   fullyParallel: true,
-  use: { baseURL: previewURL ?? 'http://127.0.0.1:4173/idle-slayer-ascension-map/' },
+  reporter: [['list'], ['html', { open: 'never' }]],
+  use: {
+    baseURL: previewURL ?? 'http://127.0.0.1:4173/idle-slayer-ascension-map/',
+    trace: 'retain-on-failure',
+    screenshot: 'only-on-failure',
+    video: 'off',
+  },
   webServer: previewURL ? undefined : {
     command: 'node node_modules/vite/bin/vite.js preview --host 127.0.0.1 --port 4173 --strictPort',
     url: 'http://127.0.0.1:4173/idle-slayer-ascension-map/',

@@ -1,19 +1,20 @@
-import { createContext, useContext, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { KeyboardEvent, ReactNode } from 'react'
-import { Background, Handle, MarkerType, Position, ReactFlow, ReactFlowProvider, useReactFlow } from '@xyflow/react'
-import type { Node, NodeProps } from '@xyflow/react'
+import { useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import type { KeyboardEvent } from 'react'
+import { Background, MarkerType, ReactFlow, ReactFlowProvider, useReactFlow } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import '@fontsource/press-start-2p/latin-400.css'
 import type { Catalog, Profile, Requirement, Upgrade } from './domain/types'
 import { emptyProfile, MAX_PROFILE_EPOCH } from './domain/types'
 import { planAstralActivation, planPurchase, planRemoval, planUltraAscension, retainedPurchasesOnReset, satisfies, searchVisible, visibility } from './domain/rules'
 import { formatRequirement } from './domain/requirement-label'
-import { exportProfileBackup, parseProfileBackup, PROFILE_STORAGE_KEY } from './domain/storage'
+import { exportProfileBackup, parseProfileBackup } from './domain/storage'
 import { visibleProgress } from './domain/progress-summary'
-import { createProfileSession, type ProfilePersistence, type StoredSnapshot } from './domain/profile-session'
+import type { StoredSnapshot } from './domain/profile-session'
+import { useProfileSession } from './useProfileSession'
+import { Dialog, DialogFeedbackContext } from './MapDialog'
+import { Icon, nodeTypes, edgeTypes } from './UpgradeCard'
+import type { UpgradeNode } from './UpgradeCard'
 import { createMapLayout, GAME_NODE_SIZE, MAP_NODE_HEIGHT, MAP_NODE_WIDTH } from './domain/map-layout'
-import { DependencyEdge } from './DependencyEdge'
-import { NativeEdge } from './NativeEdge'
 import { loadLayoutPreference, saveLayoutPreference } from './domain/layout-preference'
 import { recommendUpgrades } from './domain/recommendations'
 import { schemaVersion, source as wikiSource, rows as wikiRows } from './data/wiki-priorities.json'
@@ -28,73 +29,34 @@ import { analyticsPosition, getTrackingStatus, setTrackingPreference, trackEvent
 import type { AnalyticsOperation } from './analytics'
 import { PrivacyPanel, trackingDisclosure } from './PrivacyPanel'
 
-type UpgradeNode = Node<{ upgrade: Upgrade; state: string }, 'upgrade'>
 type Preview = { operation: AnalyticsOperation | 'prior_ascensions'; title: string; text: string; profile: Profile; changes?: string[]; groups?: { label: string; ids: string[] }[]; replaceStorage?: boolean; upgradeId?: string; milestoneId?: string; sessionVersion?: number; resolution?: 'saved' | 'local' }
 type Menu = 'options' | 'progress' | 'milestones' | 'about' | 'recommendations' | 'game-import' | 'privacy' | 'keyboard-help' | null
 type SelectionSource = 'map' | 'search' | 'neighbor' | 'recommendation' | 'start' | 'keyboard'
 const menuTitles: Record<Exclude<Menu, null>, string> = { options: 'Map options', progress: 'Your progress', milestones: 'Milestones', about: 'About this map', recommendations: 'Suggested next upgrade', 'game-import': 'Import game progress', privacy: 'Privacy & tracking', 'keyboard-help': 'Keyboard map controls' }
 const graphKeyboardHelp = 'Arrow Right or Down: next visible upgrade. Arrow Left or Up: previous. Home or End: first or last. Enter or Space: select. Escape: deselect. Tab: leave upgrades for camera controls. Shift+Tab: return to the map shortcut. Upgrades are browsed in catalog order; tree positions stay fixed. Directional pan controls close during keyboard exploration.'
-const DialogFeedbackContext = createContext<{ title: string | null; announcement: string; sequence: number; content: ReactNode; clear: () => void }>({ title: null, announcement: '', sequence: 0, content: null, clear: () => {} })
 
-function Icon({ node }: { node: Upgrade }) {
-  return <img className="upgrade-icon" src={`${import.meta.env.BASE_URL}${node.icon}`} alt="" />
-}
-
-function UpgradeCard({ data }: NodeProps<UpgradeNode>) {
-  return <div className={`upgrade-node nopan ${data.state}`}>
-    <Handle type="target" position={Position.Top} id="top-in" />
-    <Handle type="target" position={Position.Bottom} id="bottom-in" />
-    <Handle type="target" position={Position.Left} id="left-in" />
-    <Handle type="target" position={Position.Right} id="right-in" />
-    <Icon node={data.upgrade} />
-    <span className="node-symbol" aria-hidden="true">{data.state === 'purchased' ? '✓' : data.state === 'pending' ? '◷' : data.state === 'available' ? '+' : '◇'}</span>
-    <span className="node-title">{data.upgrade.title}</span>
-    <Handle type="source" position={Position.Top} id="top-out" />
-    <Handle type="source" position={Position.Bottom} id="bottom-out" />
-    <Handle type="source" position={Position.Left} id="left-out" />
-    <Handle type="source" position={Position.Right} id="right-out" />
-  </div>
-}
-const nodeTypes = { upgrade: UpgradeCard }
-const edgeTypes = { dependency: DependencyEdge, native: NativeEdge }
 const wikiPriorities = { schemaVersion, source: wikiSource, rows: wikiRows }
 const cost = (value: string) => BigInt(value).toLocaleString('en')
 
-function Dialog({ title, children, close }: { title: string; children: ReactNode; close: () => void }) {
-  const ref = useRef<HTMLDialogElement>(null)
-  const feedbackRef = useRef<HTMLDivElement>(null)
-  const feedback = useContext(DialogFeedbackContext)
-  const activeFeedback = feedback.title === title
-  const dismiss = () => { feedback.clear(); close() }
-  useEffect(() => {
-    const previousFocus = document.activeElement
-    const dialog = ref.current
-    dialog?.showModal()
-    return () => {
-      dialog?.close()
-      if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus({ preventScroll: true })
-    }
-  }, [])
-  useEffect(() => {
-    if (activeFeedback && feedback.announcement) feedbackRef.current?.scrollIntoView({ block: 'nearest' })
-  }, [activeFeedback, feedback.announcement, feedback.sequence])
-  return <dialog ref={ref} onCancel={(event) => { event.preventDefault(); dismiss() }} aria-labelledby="dialog-title">
-    <div className="dialog-heading"><h2 id="dialog-title">{title}</h2><button aria-label="Close dialog" onClick={dismiss}>×</button></div>
-    {activeFeedback && <div id="dialog-feedback" ref={feedbackRef} className="dialog-feedback telemetry-private rr-block" role="status" aria-live="polite" aria-atomic="true">{feedback.content}</div>}
-    {children}
-  </dialog>
-}
-
 function Atlas({ catalog }: { catalog: Catalog }) {
-  const profileSession = useMemo(() => createProfileSession({ revision: catalog.revision, storage: () => window.localStorage, locks: () => window.navigator.locks }), [catalog.revision])
-  const [profile, setProfile] = useState(() => emptyProfile(catalog.revision))
-  const [loaded, setLoaded] = useState(false)
-  const [storageError, setStorageError] = useState('')
-  const [storageWritable, setStorageWritable] = useState(false)
-  const [history, setHistory] = useState<Profile[]>([])
-  const [saving, setSaving] = useState(false)
-  const [persistence, setPersistence] = useState<ProfilePersistence>('loading')
-  const [conflict, setConflict] = useState<StoredSnapshot | null>(null)
+  const { session: profileSession, state: sessionState, loaded } = useProfileSession(catalog.revision, {
+    onState: (state) => { currentProfile.current = state.profile },
+    onErrorChange: (state, recovered) => {
+      if (recovered) trackEvent('storage_recovered', { action: 'save' })
+      else trackEvent('storage_error', { reason: state.errorKind ?? 'unavailable', action: storageLoadReported.current ? 'save' : 'load' })
+    },
+    onInitialized: () => { storageLoadReported.current = true },
+    onBeforeInitialize: syncAnalyticsContext,
+    onExternalChange: (state) => {
+      invalidatePendingFiles()
+      setPreviewState(null); setPurchaseTarget(null); setChoices({})
+      setGameImport(null); setGameImportLoading(false); setGameImportError('')
+      setConflictReview(null); setTrackingReload(null); setMenuState(null)
+      setMessage(state.conflict ? 'Saved progress changed. This session was kept for recovery.' : 'Progress updated from another tab. Previous previews and undo were cleared.')
+    },
+    onDispose: invalidatePendingFiles,
+  })
+  const { profile, history, writable: storageWritable, error: storageError, pending: saving, persistence, conflict } = sessionState
   const [conflictReview, setConflictReview] = useState<{ version: number; snapshot: StoredSnapshot } | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
   const [graphFocus, setGraphFocus] = useState(catalog.startId)
@@ -220,10 +182,13 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     if (detailsElement.current) detailsElement.current.scrollTop = 0
     heading.focus({ preventScroll: true })
   }, [detail?.id, detailFocusRevision])
-  useEffect(() => {
+  function syncAnalyticsContext() {
     updateAnalyticsContext({ catalog_version: catalog.gameVersion, catalog_revision: catalog.revision,
       layout: layoutMode === 'native' ? 'game' : 'web', spoilers: profile.showSpoilers,
       visibleUpgradeIds: visible.ids, visibleMilestoneIds: new Set(visible.milestones.map((item) => item.id)) })
+  }
+  useEffect(() => {
+    syncAnalyticsContext()
     if (loaded && !appReadyReported.current) { appReadyReported.current = true; trackEvent('app_ready') }
   }, [catalog, layoutMode, loaded, profile.showSpoilers, visible])
   useEffect(() => {
@@ -304,35 +269,11 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     setMessage(announcement)
     return true
   }
-  useEffect(() => {
-    let externalVersion = profileSession.getState().externalVersion
-    let previousError = ''
-    const unsubscribe = profileSession.subscribe((state) => {
-      currentProfile.current = state.profile
-      setProfile(state.profile); setHistory(state.history); setStorageWritable(state.writable)
-      setStorageError(state.error); setSaving(state.pending); setPersistence(state.persistence); setConflict(state.conflict)
-      if (state.error && state.error !== previousError) trackEvent('storage_error', { reason: state.errorKind ?? 'unavailable', action: storageLoadReported.current ? 'save' : 'load' })
-      else if (!state.error && previousError) trackEvent('storage_recovered', { action: 'save' })
-      previousError = state.error
-      if (state.externalVersion !== externalVersion) {
-        externalVersion = state.externalVersion
-        gameImportRequest.current++; restoreRequest.current++; trackingChangeRequest.current++
-        setPreviewState(null); setPurchaseTarget(null); setChoices({}); setGameImport(null); setGameImportLoading(false); setGameImportError('')
-        setConflictReview(null); setTrackingReload(null); setMenuState(null)
-        setMessage(state.conflict ? 'Saved progress changed. This session was kept for recovery.' : 'Progress updated from another tab. Previous previews and undo were cleared.')
-      }
-    })
-    profileSession.initialize()
-    storageLoadReported.current = true
-    setLoaded(true)
-    const storageChanged = (event: StorageEvent) => {
-      let local: Storage
-      try { local = window.localStorage } catch { profileSession.refreshExternal(); return }
-      if (event.storageArea === local && (event.key === null || event.key === PROFILE_STORAGE_KEY)) profileSession.refreshExternal()
-    }
-    window.addEventListener('storage', storageChanged)
-    return () => { window.removeEventListener('storage', storageChanged); unsubscribe(); gameImportRequest.current++; restoreRequest.current++; trackingChangeRequest.current++; profileSession.cancelPending() }
-  }, [profileSession])
+  function invalidatePendingFiles() {
+    gameImportRequest.current++
+    restoreRequest.current++
+    trackingChangeRequest.current++
+  }
   function reviewConflict() {
     setMessage('')
     const current = profileSession.getState()
