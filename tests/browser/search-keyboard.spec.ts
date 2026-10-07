@@ -3,6 +3,27 @@ import { expect, test } from './fixtures'
 import { emptyProfile, type Catalog } from '../../src/domain/types'
 import { visibility } from '../../src/domain/rules'
 import { focusedDiscoveryTitleIsReadable } from './helpers/discovery-focus'
+import type { Page } from '@playwright/test'
+
+async function closeAfterNativeTab(page: Page, checkDelayedFocus = false) {
+  const region = page.getByRole('region', { name: 'Visible upgrade results', exact: true })
+  // Firefox can include the labelled scroll region in its native Tab order.
+  // Accept only that extra stop, then continue without refocusing a locator.
+  if (await region.evaluate((element) => document.activeElement === element)) {
+    await expect(region).toBeFocused()
+    const controls = await page.getByRole('searchbox').getAttribute('aria-controls')
+    expect(controls).not.toBeNull()
+    await expect(region).toHaveAttribute('id', controls!)
+    if (checkDelayedFocus) {
+      await page.clock.runFor(64)
+      await expect(region).toBeFocused()
+    }
+    await page.keyboard.press('Tab')
+  }
+  const close = page.getByRole('button', { name: 'Close search results', exact: true })
+  await expect(close).toBeFocused()
+  return close
+}
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('idle-slayer-ascension-map.analytics.v1', 'disabled'))
@@ -61,7 +82,7 @@ test('text editing, native Tab and Space remain available alongside arrow select
   await expect(input).toBeFocused()
   expect(await input.evaluate((element) => (element as HTMLInputElement).selectionStart)).toBe(3)
   await input.press('Tab')
-  await expect(page.getByRole('button', { name: 'Close search results', exact: true })).toBeFocused()
+  await closeAfterNativeTab(page)
   await page.keyboard.press('Tab')
   await expect(page.getByRole('combobox', { name: 'Progress state', exact: true })).toBeFocused()
   const rows = page.locator('.search-result'), secondTitle = await rows.nth(1).locator('.discovery-title').innerText()
@@ -152,9 +173,9 @@ test('deferred reopening cannot steal later Tab focus or override a newer candid
   await page.clock.pauseAt(await page.evaluate(() => Date.now()) + 1000)
   await input.press('ArrowDown')
   await expect(page.locator('.search-result').first()).toBeVisible()
+  await expect(input).toBeFocused()
   await input.press('Tab')
-  const close = page.getByRole('button', { name: 'Close search results', exact: true })
-  await expect(close).toBeFocused()
+  const close = await closeAfterNativeTab(page, true)
   await page.clock.runFor(64)
   await expect(close).toBeFocused()
 
