@@ -135,6 +135,30 @@ test('chosen progression intentions are readable at the actual 200% font without
   expect(await page.evaluate(() => localStorage.getItem('idle-slayer-ascension-map.profile.v1'))).toBeNull()
 })
 
+test('action-labelled Undo and Redo reflow at the actual 200% browser font', async ({ page }) => {
+  await page.goto('./')
+  await expect(page.locator('html')).toHaveCSS('font-size', '32px')
+  await page.getByRole('button', { name: 'Map options', exact: true }).click()
+  const options = page.getByRole('dialog', { name: 'Map options', exact: true })
+  await options.getByRole('checkbox', { name: 'Show spoilers', exact: true }).check()
+  const controls = options.getByRole('group', { name: 'Session history', exact: true })
+  for (const name of ['Undo', 'Redo']) {
+    const button = controls.getByRole('button', { name, exact: true })
+    await button.scrollIntoViewIfNeeded()
+    await expect(button).toBeInViewport()
+    expect(await button.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true)
+    const box = await button.boundingBox()
+    expect(box!.width).toBeGreaterThanOrEqual(44)
+    expect(box!.height).toBeGreaterThanOrEqual(44)
+  }
+  await controls.getByRole('button', { name: 'Undo', exact: true }).click()
+  await page.getByRole('button', { name: 'Map options', exact: true }).click()
+  await expect(page.getByRole('dialog', { name: 'Map options', exact: true }).getByRole('checkbox', { name: 'Show spoilers', exact: true })).not.toBeChecked()
+  await page.getByRole('dialog', { name: 'Map options', exact: true }).getByRole('button', { name: 'Redo', exact: true }).click()
+  await page.getByRole('button', { name: 'Map options', exact: true }).click()
+  await expect(page.getByRole('dialog', { name: 'Map options', exact: true }).getByRole('checkbox', { name: 'Show spoilers', exact: true })).toBeChecked()
+})
+
 test('overview fits visible frames and keeps its return label readable at the actual 200% font', async ({ page }) => {
   await page.goto('./')
   await expect(page.locator('html')).toHaveCSS('font-size', '32px')
