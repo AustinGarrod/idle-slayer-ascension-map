@@ -23,7 +23,7 @@ export function Dialog({ title, children, close }: { title: string; children: Re
   }, [activeFeedback, feedback.announcement, feedback.sequence])
   return <dialog ref={ref} onCancel={(event) => { event.preventDefault(); dismiss() }} aria-labelledby="dialog-title">
     <div className="dialog-heading"><h2 id="dialog-title">{title}</h2><button aria-label="Close dialog" onClick={dismiss}>×</button></div>
-    {activeFeedback && <div id="dialog-feedback" ref={feedbackRef} className="dialog-feedback telemetry-private rr-block" role="status" aria-live="polite" aria-atomic="true">{feedback.content}</div>}
+    {activeFeedback && <div id="dialog-feedback" ref={feedbackRef} className="dialog-feedback telemetry-private rr-block" role="status" aria-label="Map action feedback" aria-live="polite" aria-atomic="true">{feedback.content}</div>}
     {children}
   </dialog>
 }

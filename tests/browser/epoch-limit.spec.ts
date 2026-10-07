@@ -24,7 +24,7 @@ test('maximum accepted epoch refuses Ultra Ascension and remains exportable with
   await page.goto('./'); await openProgress(page)
   await page.getByRole('button', { name: 'Ultra Ascend…', exact: true }).click()
   await expect(page.getByRole('dialog', { name: 'Ultra Ascend?', exact: true })).toHaveCount(0)
-  await expect(page.getByRole('status')).toContainText('supported Ultra Ascension count limit')
+  await expect(page.getByRole('status', { name: 'Map action feedback', exact: true })).toContainText('supported Ultra Ascension count limit')
   expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), key)).toEqual(profile)
   const download = page.waitForEvent('download')
   await page.getByRole('button', { name: 'Export JSON backup', exact: true }).click()

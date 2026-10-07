@@ -104,7 +104,7 @@ export function SearchPanel({ upgrades, profile, inputRef, open, onOpenChange, o
   return <div className="search-box" onKeyDown={(event) => { if (event.key === 'Escape' && !event.nativeEvent.isComposing) { event.stopPropagation(); close() } }}>
     <label className="sr-only" htmlFor="search">Search visible upgrade titles and effects</label>
     <button type="button" className="search-toggle" aria-label="Toggle search results" aria-expanded={open} aria-controls={open ? resultsId : undefined} onClick={() => { if (open) close(); else { onOpenChange(true); inputRef.current?.focus({ preventScroll: true }) } }}><span aria-hidden="true">⌕</span></button>
-    <p id={statusId} role="status" aria-live="polite" aria-atomic="true" className="sr-only telemetry-private rr-block">{open ? `Search results open. ${results.length} visible results${results.length ? '.' : '; no matching visible upgrades.'}` : 'Search results closed.'}</p>
+    <p id={statusId} role="status" aria-label="Search result state" aria-live="polite" aria-atomic="true" className="sr-only telemetry-private rr-block">{open ? `Search results open. ${results.length} visible results${results.length ? '.' : '; no matching visible upgrades.'}` : 'Search results closed.'}</p>
     <p id={hintId} className="sr-only">Arrow Down or Arrow Up moves into results. In results, Arrow keys, Home and End choose a candidate; Enter or Space opens it. Escape closes results. Tab visits the controls and every result.</p>
     <input className="telemetry-private rr-block" id="search" ref={inputRef} type="search" aria-controls={open ? resultsId : undefined} aria-describedby={`${statusId} ${hintId}`} autoComplete="off" placeholder="Find an upgrade…" value={query}
       onFocus={() => onOpenChange(true)}
