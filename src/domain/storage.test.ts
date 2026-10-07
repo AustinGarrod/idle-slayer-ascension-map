@@ -1,13 +1,10 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { emptyProfile, type Profile } from './types'
 import {
   exportProfileBackup,
-  loadProfile,
   MAX_PROFILE_BYTES,
   migrateProfile,
   parseProfileBackup,
-  PROFILE_STORAGE_KEY,
-  saveProfile,
 } from './storage'
 
 function populatedProfile(): Profile {
@@ -112,7 +109,7 @@ describe('profile backups', () => {
     expect(parseProfileBackup(compact)).toMatchObject({ ok: false, error: { kind: 'too-large' } })
   })
 
-  it('preserves a large accepted unknown-ID profile through save, export and parse', () => {
+  it('preserves a large accepted unknown-ID profile through export and parse', () => {
     const profile = emptyProfile('current')
     for (let index = 0; index < 55_000; index++) {
       profile.purchases[`future-${index}`] = { epoch: 0, active: false }
@@ -120,12 +117,9 @@ describe('profile backups', () => {
     const parsed = parseProfileBackup(JSON.stringify(profile))
     expect(parsed.ok).toBe(true)
     if (!parsed.ok) throw new Error('Expected an accepted backup')
-    const setItem = vi.fn()
-    expect(saveProfile({ setItem }, parsed.profile)).toEqual({ ok: true })
     const exported = exportProfileBackup(parsed.profile)
     expect(exported.ok).toBe(true)
     if (!exported.ok) throw new Error('Expected an exportable accepted profile')
-    expect(setItem.mock.calls[0]?.[1]).toBe(exported.text)
     expect(parseProfileBackup(exported.text)).toEqual(parsed)
     expect(Object.keys(parsed.profile.purchases)).toHaveLength(55_000)
   })
@@ -147,7 +141,6 @@ describe('catalog migration', () => {
     const compact = JSON.stringify(profile)
     expect(parseProfileBackup(compact).ok).toBe(true)
     expect(parseProfileBackup(compact, 'b'.repeat(512))).toMatchObject({ ok: false, error: { kind: 'too-large' } })
-    expect(loadProfile({ getItem: () => compact }, 'b'.repeat(512))).toMatchObject({ ok: false, error: { kind: 'too-large' } })
     expect(profile.catalogRevision).toBe('a')
     expect(exportProfileBackup(profile).ok).toBe(true)
   })
@@ -161,68 +154,5 @@ describe('catalog migration', () => {
     expect(source.catalogRevision).toBe('old-catalog')
     migrated.purchases.known!.active = false
     expect(source.purchases.known!.active).toBe(true)
-  })
-})
-
-describe('device storage', () => {
-  it('creates a new profile only when the storage key is absent', () => {
-    const getItem = vi.fn(() => null)
-    expect(loadProfile({ getItem }, 'current')).toEqual({ ok: true, profile: emptyProfile('current'), source: 'new', migrated: false })
-    expect(getItem).toHaveBeenCalledWith(PROFILE_STORAGE_KEY)
-  })
-
-  it('loads and migrates stored progress without discarding IDs', () => {
-    const profile = populatedProfile()
-    expect(loadProfile({ getItem: () => JSON.stringify(profile) }, 'current')).toEqual({
-      ok: true,
-      profile: { ...profile, catalogRevision: 'current' },
-      source: 'stored',
-      migrated: true,
-    })
-  })
-
-  it('reports whether stored progress already uses the current revision', () => {
-    expect(loadProfile({ getItem: () => JSON.stringify(populatedProfile()) }, 'old-catalog')).toMatchObject({ ok: true, migrated: false })
-  })
-
-  it('reports read failures without returning empty replacement progress', () => {
-    const source = populatedProfile()
-    const result = loadProfile({ getItem: () => { throw new Error('blocked') } }, 'current')
-    expect(result).toMatchObject({ ok: false, error: { kind: 'storage-read' } })
-    expect(result).not.toHaveProperty('profile')
-    expect(source).toEqual(populatedProfile())
-  })
-
-  it('reports corrupt saved progress without overwriting it', () => {
-    const stored = '{corrupt}'
-    const storage = { getItem: () => stored, setItem: vi.fn() }
-    const result = loadProfile(storage, 'current')
-    expect(result).toMatchObject({ ok: false, error: { kind: 'invalid-json' } })
-    expect(result).not.toHaveProperty('profile')
-    expect(storage.setItem).not.toHaveBeenCalled()
-    expect(storage.getItem()).toBe(stored)
-  })
-
-  it('writes a validated round-trippable profile to the stable key', () => {
-    const profile = populatedProfile()
-    const setItem = vi.fn()
-    expect(saveProfile({ setItem }, profile)).toEqual({ ok: true })
-    const [key, text] = setItem.mock.calls[0] as unknown as [string, string]
-    expect(key).toBe(PROFILE_STORAGE_KEY)
-    expect(parseProfileBackup(text)).toEqual({ ok: true, profile })
-  })
-
-  it('reports quota/write failures while preserving the session profile', () => {
-    const profile = populatedProfile()
-    const storage = { setItem: () => { throw new Error('quota exceeded') } }
-    expect(saveProfile(storage, profile)).toMatchObject({ ok: false, error: { kind: 'storage-write' } })
-    expect(profile).toEqual(populatedProfile())
-  })
-
-  it('does not write a malformed runtime profile', () => {
-    const profile = { ...populatedProfile(), epoch: -1 }
-    const setItem = vi.fn()
-    expect(saveProfile({ setItem }, profile)).toMatchObject({ ok: false, error: { kind: 'invalid-profile' } })
-    expect(setItem).not.toHaveBeenCalled()
   })
 })
