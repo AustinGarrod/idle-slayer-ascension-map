@@ -1,0 +1,152 @@
+import { expect, test, type Page } from '@playwright/test'
+import { readFileSync } from 'node:fs'
+import { emptyProfile, type Catalog } from '../../src/domain/types'
+import { PROFILE_STORAGE_KEY } from '../../src/domain/storage'
+import { PROFILE_WRITE_LOCK } from '../../src/domain/profile-session'
+
+const catalog = JSON.parse(readFileSync('public/catalog.json', 'utf8')) as Catalog
+const initial = emptyProfile(catalog.revision)
+const start = catalog.upgrades.find((node) => node.id === catalog.startId)!
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('idle-slayer-ascension-map.analytics.v1', 'disabled'))
+  await page.route('https://analytics.garrod.house/**', (route) => route.abort())
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+})
+async function purchase(page: Page) {
+  await page.goto('./')
+  await page.getByRole('searchbox').fill(start.title)
+  await page.locator('.search-result').filter({ hasText: start.title }).first().click()
+  await page.getByRole('button', { name: 'Record purchase…', exact: true }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Apply purchases', exact: true }).click()
+  await expect(page.locator('.atlas')).toHaveAttribute('aria-busy', 'false')
+}
+async function open(page: Page, name: string) {
+  await expect(page.locator('.toolbar')).toBeVisible()
+  const action = page.getByRole('button', { name, exact: true })
+  if (!await action.isVisible()) await page.getByRole('button', { name: 'Map options', exact: true }).click()
+  await action.click()
+}
+async function history(page: Page, direction: 'Undo' | 'Redo', label: string) {
+  let action = page.locator('footer').getByRole('button', { name: direction, exact: true })
+  if (!await action.isVisible()) {
+    await page.getByRole('button', { name: 'Map options', exact: true }).click()
+    action = page.getByRole('dialog').getByRole('button', { name: direction, exact: true })
+  }
+  await expect(action).toContainText(label)
+  await expect(action).toHaveAccessibleDescription(new RegExp(`${direction}: ${label}`))
+  await action.click()
+  await expect(page.locator('.atlas')).toHaveAttribute('aria-busy', 'false')
+}
+const stored = (page: Page) => page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), PROFILE_STORAGE_KEY)
+
+test('purchase and spoiler actions are labeled, accidental Undo can be redone, and reload clears visit history', async ({ page }) => {
+  await purchase(page)
+  await open(page, 'Progress')
+  const progress = page.getByRole('dialog', { name: 'Your progress', exact: true })
+  await expect(progress).toContainText('Up to 20 changes')
+  await expect(progress).toContainText('A new change clears Redo')
+  await expect(progress).toContainText('Reloading or an external progress change clears both')
+  await progress.getByRole('button', { name: 'Close dialog', exact: true }).click()
+  const toggle = page.getByRole('checkbox', { name: 'Show spoilers', exact: true })
+  if (!await toggle.isVisible()) await page.getByRole('button', { name: 'Map options', exact: true }).click()
+  await toggle.check()
+  const options = page.getByRole('dialog', { name: 'Map options', exact: true })
+  if (await options.isVisible()) await options.getByRole('button', { name: 'Close dialog', exact: true }).click()
+  await history(page, 'Undo', 'Spoiler setting')
+  expect(await stored(page)).toMatchObject({ showSpoilers: false, purchases: { [start.id]: { active: true } } })
+  await expect(page.locator('.toast')).toContainText('Undid spoiler setting')
+  await history(page, 'Redo', 'Spoiler setting')
+  expect((await stored(page)).showSpoilers).toBe(true)
+  await history(page, 'Undo', 'Spoiler setting')
+  await history(page, 'Undo', 'Purchase recording')
+  expect((await stored(page)).purchases).toEqual({})
+  await history(page, 'Redo', 'Purchase recording')
+  expect((await stored(page)).purchases[start.id]?.active).toBe(true)
+  await page.reload()
+  await open(page, 'Progress')
+  await expect(page.getByRole('dialog').getByRole('button', { name: 'Undo', exact: true })).toBeDisabled()
+  await expect(page.getByRole('dialog').getByRole('button', { name: 'Redo', exact: true })).toBeDisabled()
+  expect((await stored(page)).purchases[start.id]?.active).toBe(true)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+})
+
+test('restore Undo and Redo retain hidden and unknown records without exposing their identities in history', async ({ page }) => {
+  await purchase(page)
+  const hidden = catalog.upgrades.find((node) => node.title === 'Soul Reaper III')!
+  const incoming = { ...initial, epoch: 2, purchases: { [hidden.id]: { epoch: 1, active: false }, 'unknown-private-id': { epoch: 1, active: true } } }
+  await open(page, 'Progress')
+  const chooser = page.waitForEvent('filechooser')
+  await page.getByRole('dialog').getByRole('button', { name: 'Restore JSON backup…', exact: true }).click()
+  await (await chooser).setFiles({ name: 'private-history-fixture.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(incoming)) })
+  await page.getByRole('dialog', { name: 'Restore progress?', exact: true }).getByRole('button', { name: 'Apply changes', exact: true }).click()
+  await expect.poll(() => stored(page)).toEqual(incoming)
+  await history(page, 'Undo', 'JSON restore')
+  expect((await stored(page)).purchases[start.id]?.active).toBe(true)
+  await open(page, 'Progress')
+  const controls = page.getByRole('dialog').getByRole('group', { name: 'Session history', exact: true })
+  await expect(controls).not.toContainText(hidden.title)
+  expect(await controls.innerHTML()).not.toMatch(/unknown-private-id|private-history-fixture/)
+  await controls.getByRole('button', { name: 'Redo', exact: true }).click()
+  await expect.poll(() => stored(page)).toEqual(incoming)
+  expect(Object.keys(await stored(page)).sort()).toEqual(Object.keys(initial).sort())
+})
+
+test('a new edit clears Redo and external progress clears both history directions', async ({ page, context }) => {
+  await purchase(page)
+  await history(page, 'Undo', 'Purchase recording')
+  await open(page, 'Progress')
+  const progress = page.getByRole('dialog')
+  await expect(progress.getByRole('button', { name: 'Redo', exact: true })).toBeEnabled()
+  await progress.getByRole('spinbutton', { name: 'Previous Ultra Ascensions', exact: true }).fill('1')
+  await progress.getByRole('button', { name: 'Review history…', exact: true }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Record history', exact: true }).click()
+  await expect.poll(async () => (await stored(page)).epoch).toBe(1)
+  await open(page, 'Progress')
+  await expect(page.getByRole('dialog').getByRole('button', { name: 'Undo', exact: true })).toContainText('Previous ascension history')
+  await expect(page.getByRole('dialog').getByRole('button', { name: 'Redo', exact: true })).toBeDisabled()
+  await page.getByRole('dialog').getByRole('button', { name: 'Undo', exact: true }).click()
+  await expect.poll(async () => (await stored(page)).epoch).toBe(0)
+  const other = await context.newPage(); await other.goto(page.url())
+  await other.evaluate(({ key, profile }) => localStorage.setItem(key, JSON.stringify(profile)), { key: PROFILE_STORAGE_KEY, profile: { ...initial, showSpoilers: true } })
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await open(page, 'Progress')
+  await expect(page.getByRole('dialog').getByRole('button', { name: 'Undo', exact: true })).toBeDisabled()
+  await expect(page.getByRole('dialog').getByRole('button', { name: 'Redo', exact: true })).toBeDisabled()
+})
+
+test('failed coordination retains exportable history and Undo/Redo without claiming a save', async ({ page }) => {
+  await page.addInitScript((name) => {
+    const native = navigator.locks.request.bind(navigator.locks)
+    navigator.locks.request = ((requested: string, options: LockOptions, callback: (lock: unknown) => unknown) => requested === name ? Promise.resolve(callback(null)) : native(requested, options, callback)) as typeof native
+  }, PROFILE_WRITE_LOCK)
+  await purchase(page)
+  await history(page, 'Undo', 'Purchase recording')
+  await history(page, 'Redo', 'Purchase recording')
+  expect(await page.evaluate((key) => localStorage.getItem(key), PROFILE_STORAGE_KEY)).toBeNull()
+  await open(page, 'Progress')
+  await expect(page.getByRole('dialog')).toContainText('Another tab is saving')
+  const download = page.waitForEvent('download')
+  await page.getByRole('dialog').getByRole('button', { name: 'Export JSON backup', exact: true }).click()
+  const path = await (await download).path()
+  expect(JSON.parse(readFileSync(path!, 'utf8')).purchases[start.id].active).toBe(true)
+})
+
+test('Undo cancels an outstanding JSON read so its late result cannot create a stale restore', async ({ page }) => {
+  await page.addInitScript(() => {
+    const native = File.prototype.text
+    File.prototype.text = function () { const file = this; return new Promise<string>((resolve) => { Object.assign(window, { releaseHistoryRead: () => { void native.call(file).then((text) => { resolve(text); Object.assign(window, { historyReadFinished: true }) }) } }) }) }
+  })
+  await purchase(page)
+  await open(page, 'Progress')
+  const chooser = page.waitForEvent('filechooser')
+  await page.getByRole('dialog').getByRole('button', { name: 'Restore JSON backup…', exact: true }).click()
+  await (await chooser).setFiles({ name: 'delayed.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ ...initial, epoch: 8 })) })
+  await expect.poll(() => page.evaluate(() => typeof (window as Window & { releaseHistoryRead?: () => void }).releaseHistoryRead)).toBe('function')
+  await page.getByRole('dialog').getByRole('button', { name: 'Undo', exact: true }).click()
+  await expect.poll(async () => (await stored(page)).purchases).toEqual({})
+  await page.evaluate(() => (window as Window & { releaseHistoryRead?: () => void }).releaseHistoryRead?.())
+  await expect.poll(() => page.evaluate(() => (window as Window & { historyReadFinished?: boolean }).historyReadFinished)).toBe(true)
+  await expect(page.getByRole('dialog', { name: 'Your progress', exact: true })).toBeVisible()
+  await expect(page.getByRole('dialog', { name: 'Restore progress?', exact: true })).toHaveCount(0)
+  expect((await stored(page)).epoch).toBe(0)
+})
