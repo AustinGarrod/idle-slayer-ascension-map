@@ -13,6 +13,8 @@ A free, unofficial companion for Idle Slayer: explore the Ascension tree, record
 
 **Recent upgrades…** in Map view/options or expanded upgrade details returns to your latest inspections. It remembers up to 20 different visible upgrades for this visit, independently of progress Undo.
 
+**Goals:** in expanded upgrade details, **Set progression goal…** records an acquisition, activation or recurring rebuild intention without purchasing anything. Review and reorder visible goals in **Progress**. Intentions stay in separate browser storage and are not included in progress JSON backups; reset, import and Undo only recompute their status.
+
 Use **Map view…** on desktop or **Map options → Overview visible map** on phones to orient within the visible tree. **Return to inspection** or **Refocus selected upgrade** brings back your current target without changing progress.
 
 **Map help…** in Map options, Progress or About gives optional setup and state guidance. [The player guide](docs/player-guide.md) explains layouts, existing-progress setup, pending Astrals, milestones, reset/history entry, backup/restore and recommendations. [Steam import compatibility](docs/save-import.md) explains supported files and the retained-ownership baseline. The app does not simulate SP balances or Stone allocation.
