@@ -1,4 +1,4 @@
-import { chromium, expect, test as base, type BrowserContext } from '@playwright/test'
+import { chromium, expect, test as base, type BrowserContext, type Page } from '@playwright/test'
 import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { readFileSync } from 'node:fs'
@@ -13,12 +13,16 @@ const test = base.extend({
     await mkdir(join(directory, 'Default'), { recursive: true })
     await writeFile(join(directory, 'Default', 'Preferences'), JSON.stringify({ webkit: { webprefs: { default_font_size: 32 } } }))
     let context: BrowserContext | undefined
+    const errors: string[] = []
+    const watch = (page: Page) => page.on('pageerror', (error) => errors.push(error.message))
     try {
       context = await chromium.launchPersistentContext(directory, {
         channel: 'chromium', headless: true, ignoreDefaultArgs: ['--hide-scrollbars'], baseURL, viewport: { width: 320, height: 568 },
         ...(info.project.name === 'mobile' ? { isMobile: true, hasTouch: true, userAgent: info.project.use.userAgent, deviceScaleFactor: info.project.use.deviceScaleFactor } : {}),
       })
-      await context.addInitScript(() => localStorage.setItem('idle-slayer-ascension-map.analytics.v1', 'disabled'))
+      context.pages().forEach(watch)
+      context.on('page', watch)
+      await context.addInitScript(() => { if (location.origin !== 'null') localStorage.setItem('idle-slayer-ascension-map.analytics.v1', 'disabled') })
       await context.route('https://analytics.garrod.house/**', (route) => route.abort())
       const page = await context.newPage()
       await page.emulateMedia({ reducedMotion: 'reduce' })
@@ -27,6 +31,7 @@ const test = base.extend({
       await context?.close()
       if (dirname(resolve(directory)) !== resolve(info.outputDir)) throw new Error('Refusing to remove a browser profile outside this test output directory')
       await rm(directory, { recursive: true, force: true })
+      expect(errors, 'Unhandled browser errors during this large-text scenario').toEqual([])
     }
   },
 })
@@ -181,4 +186,57 @@ test('successive suggestion confirmation stays readable at the actual 200% brows
   }
   await dialog.getByRole('button', { name: 'Apply and continue suggestions', exact: true }).click()
   await expect(page.getByRole('dialog', { name: 'Suggested next upgrade', exact: true }).locator('.recommendation-main')).toContainText('Soul Gatherer Bundle')
+})
+
+
+test('prior ascension history keeps its input and actions inside a narrow large-text dialog', async ({ page }) => {
+  await page.goto('./')
+  await expect(page.locator('html')).toHaveCSS('font-size', '32px')
+  await page.getByRole('button', { name: 'Map options', exact: true }).click()
+  await page.getByRole('dialog', { name: 'Map options', exact: true }).getByRole('button', { name: 'Progress', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Your progress', exact: true })
+  const form = dialog.locator('.prior-ascensions')
+  expect(await form.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true)
+  const input = form.getByRole('spinbutton', { name: 'Previous Ultra Ascensions', exact: true })
+  await input.scrollIntoViewIfNeeded()
+  await expect(input).toBeInViewport()
+  expect(await input.evaluate((element) => { const r = element.getBoundingClientRect(); const d = element.closest('dialog')!.getBoundingClientRect(); return r.left >= d.left && r.right <= d.right && r.height >= 44 })).toBe(true)
+  await input.fill('3')
+  const review = form.getByRole('button', { name: 'Review history…', exact: true })
+  await review.scrollIntoViewIfNeeded()
+  await expect(review).toBeInViewport()
+  await review.click()
+  await expect(page.getByRole('dialog', { name: 'Record prior Ultra Ascensions?', exact: true })).toContainText('from 0 to 3')
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+  expect(await page.evaluate(() => localStorage.getItem('idle-slayer-ascension-map.profile.v1'))).toBeNull()
+})
+
+test('long prerequisite return labels remain fully visible and clickable with large text', async ({ page }) => {
+  const catalog = JSON.parse(readFileSync('public/catalog.json', 'utf8')) as Catalog
+  const profile = { ...emptyProfile(catalog.revision), showSpoilers: true }
+  await page.addInitScript((profile) => localStorage.setItem('idle-slayer-ascension-map.profile.v1', JSON.stringify(profile)), profile)
+  await page.goto('./')
+  await expect(page.locator('html')).toHaveCSS('font-size', '32px')
+  await page.getByRole('searchbox').fill("Doesn't Matter to Me")
+  await page.getByRole('searchbox').press('Enter')
+  const expand = page.getByRole('button', { name: 'Show details', exact: true })
+  if (await expand.isVisible()) await expand.click()
+  const purchase = page.locator('.details dt').filter({ hasText: /^Purchase requirements$/ }).locator('+ dd')
+  await purchase.getByRole('button').first().click()
+  const back = page.locator('.details').getByRole('button', { name: "Return to Doesn't Matter to Me", exact: true })
+  await back.scrollIntoViewIfNeeded()
+  expect(await back.evaluate((element) => {
+    const r = element.getBoundingClientRect()
+    const details = element.closest('.details')!.getBoundingClientRect()
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+    let node: Node | null
+    const text: DOMRect[] = []
+    while ((node = walker.nextNode())) { const range = document.createRange(); range.selectNodeContents(node); text.push(...range.getClientRects()) }
+    return r.width >= 44 && r.height >= 44 && r.left >= details.left && r.right <= details.right && text.length > 0 && text.every((line) => line.top >= details.top && line.bottom <= details.bottom && line.left >= details.left && line.right <= details.right && document.elementFromPoint(line.x + line.width / 2, line.y + line.height / 2)?.closest('button') === element)
+  })).toBe(true)
+  await page.screenshot({ path: test.info().outputPath('long-prerequisite-return-200-percent.png') })
+  await back.click()
+  await expect(page.locator('.details h2')).toHaveText("Doesn't Matter to Me")
+  await expect(page.locator('.details h2')).toBeFocused()
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('idle-slayer-ascension-map.profile.v1')!))).toEqual(profile)
 })
