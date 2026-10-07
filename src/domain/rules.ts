@@ -97,6 +97,25 @@ export function planPurchase(catalog: Catalog, original: Profile, id: string, ch
   catch (error) { if (error instanceof PlanningStop) return error.result; throw error }
 }
 
+export type AstralActivationPlan =
+  | { kind: 'ready'; profile: Profile }
+  | { kind: 'blocked'; reason: string }
+
+/** Manual confirmation records this Astral's retained history, never its targets' history. */
+export function planAstralActivation(catalog: Catalog, original: Profile, id: string): AstralActivationPlan {
+  const node = catalog.upgrades.find((upgrade) => upgrade.id === id)
+  const purchase = original.purchases[id]
+  if (!node || !purchase || node.activation !== 'after-ultra-ascension' || node.retention === 'repeat' || purchase.active) {
+    return { kind: 'blocked', reason: 'Only an owned Astral lock awaiting activation can be confirmed.' }
+  }
+  if (original.epoch === 0) {
+    return { kind: 'blocked', reason: 'Record at least one previous Ultra Ascension in Progress before recording an already activated Astral.' }
+  }
+  const profile = structuredClone(original)
+  profile.purchases[id] = { epoch: Math.min(purchase.epoch, original.epoch - 1), active: true }
+  return { kind: 'ready', profile }
+}
+
 export function planRemoval(catalog: Catalog, original: Profile, id: string, milestone = false) {
   const profile = structuredClone(original)
   const retentionTargets = new Set(catalog.grants.flatMap((rule) => rule.ids))

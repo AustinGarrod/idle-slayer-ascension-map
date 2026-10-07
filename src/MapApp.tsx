@@ -6,7 +6,7 @@ import '@xyflow/react/dist/style.css'
 import '@fontsource/press-start-2p/latin-400.css'
 import type { Catalog, Profile, Requirement, Upgrade } from './domain/types'
 import { emptyProfile } from './domain/types'
-import { planPurchase, planRemoval, planUltraAscension, satisfies, searchVisible, visibility } from './domain/rules'
+import { planAstralActivation, planPurchase, planRemoval, planUltraAscension, satisfies, searchVisible, visibility } from './domain/rules'
 import { exportProfileBackup, loadProfile, parseProfileBackup, saveProfile } from './domain/storage'
 import { createMapLayout, GAME_NODE_SIZE, MAP_NODE_HEIGHT, MAP_NODE_WIDTH } from './domain/map-layout'
 import { DependencyEdge } from './DependencyEdge'
@@ -355,6 +355,11 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     const result = planRemoval(catalog, profile, id, milestone)
     setPreview({ operation: milestone ? 'milestone_removal' : 'removal', upgradeId: milestone ? undefined : id, milestoneId: milestone ? id : undefined, title: milestone ? 'Remove milestone?' : 'Remove purchase?', text: `This clears ${result.removed.length} purchase${result.removed.length === 1 ? '' : 's'} that would lose their dependency path. Valid alternate paths and earlier retained ownership stay intact.`, profile: result.profile, changes: result.removed })
   }
+  function previewAstralActivation(id: string) {
+    const result = planAstralActivation(catalog, profile, id)
+    if (result.kind === 'blocked') { setMessage(result.reason); return }
+    setPreview({ operation: 'astral_activation', upgradeId: id, title: 'Record an activated Astral?', text: 'Use this when entering existing game progress where this Astral lock already activated in an earlier Ultra Ascension. This Astral receives an earlier-ascension ownership baseline so removing its former prerequisites keeps it. Other purchases keep their recorded history.', profile: result.profile })
+  }
   function ultra() {
     const result = planUltraAscension(catalog, profile)
     if (!result) { setMessage(`Ultra Ascension requires: ${label(catalog.ultraAscension)}.`); return }
@@ -446,7 +451,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
         <div className="source-notes"><h3>Sources</h3>{detail.sources.map((source, i) => <p key={i}>{source.url ? <a onClick={() => trackEvent('source_link_opened', { source: 'details', upgrade_id: detail.id, action: 'other' })} href={source.url} target="_blank" rel="noreferrer">{source.label}</a> : source.label}{source.evidence && <small>{source.evidence}</small>}</p>)}</div></div>
         <div className="detail-actions">
         {profile.purchases[detail.id] ? <button className="danger full" onClick={() => previewRemoval(detail.id)}>Remove purchase…</button> : visible.grants.has(detail.id) ? <p>Granted permanently by an active upgrade.</p> : <button className="primary full" onClick={() => startPurchase(detail.id)}>Record purchase…</button>}
-        {profile.purchases[detail.id] && detail.activation === 'after-ultra-ascension' && !profile.purchases[detail.id].active && <button className="full" onClick={() => setPreview({ operation: 'astral_activation', upgradeId: detail.id, title: 'Record an activated Astral?', text: 'Use this when entering existing game progress where this Astral lock is already activated.', profile: { ...profile, purchases: { ...profile.purchases, [detail.id]: { ...profile.purchases[detail.id], active: true } } } })}>Already activated…</button>}
+        {profile.purchases[detail.id] && detail.activation === 'after-ultra-ascension' && !profile.purchases[detail.id].active && <button className="full" onClick={() => previewAstralActivation(detail.id)}>Already activated…</button>}
         </div></aside>}
     </div>
     <footer><span>Unofficial companion · Profile saved on this device</span><button disabled={!history.length} onClick={undo}>Undo</button><button onClick={() => setMenu('about')}>About & sources</button><button onClick={() => setMenu('privacy')}>Privacy & tracking</button></footer>

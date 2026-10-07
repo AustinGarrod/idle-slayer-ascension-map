@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { emptyProfile } from './types'
 import type { Catalog, Requirement, Upgrade } from './types'
-import { permanentGrants, planPurchase, planRemoval, planUltraAscension, searchVisible, visibility } from './rules'
+import { permanentGrants, planAstralActivation, planPurchase, planRemoval, planUltraAscension, searchVisible, visibility } from './rules'
 
 // Deliberately synthetic fixtures exercise the engine; never shipped as game data.
 const always: Requirement = { kind: 'always' }
@@ -85,6 +85,57 @@ describe('spoiler boundaries', () => {
     expect(visibility(catalog, profile).ids.has('child')).toBe(true)
     profile.showSpoilers = true
     expect(visibility(catalog, profile).total).toBe(8)
+  })
+})
+
+describe('manual Astral activation', () => {
+  it('records only the selected lock as earlier retained ownership without changing other history', () => {
+    const profile = emptyProfile('fixture')
+    profile.epoch = 3
+    profile.purchases = { a: { epoch: 3, active: true }, astral: { epoch: 3, active: false }, grant: { epoch: 3, active: true }, unknown: { epoch: 1, active: false } }
+    profile.milestones.item = true
+    const before = structuredClone(profile)
+    const result = planAstralActivation(catalog, profile, 'astral')
+    expect(result.kind).toBe('ready')
+    if (result.kind !== 'ready') throw new Error('Expected a valid existing Astral activation')
+    expect(result.profile).toEqual({ ...profile, purchases: { ...profile.purchases, astral: { epoch: 2, active: true } } })
+    expect(profile).toEqual(before)
+    expect(planRemoval(catalog, result.profile, 'a').profile.purchases.astral).toEqual({ epoch: 2, active: true })
+    expect(planRemoval(catalog, result.profile, 'astral').profile.purchases.astral).toBeUndefined()
+  })
+
+  it('preserves an earlier purchase baseline and never awards an absent retention target', () => {
+    const profile = emptyProfile('fixture')
+    profile.epoch = 3
+    profile.purchases.astral = { epoch: 1, active: false }
+    const result = planAstralActivation(catalog, profile, 'astral')
+    expect(result.kind).toBe('ready')
+    if (result.kind !== 'ready') throw new Error('Expected activation')
+    expect(result.profile.purchases.astral).toEqual({ epoch: 1, active: true })
+    expect(result.profile.purchases.grant).toBeUndefined()
+  })
+
+  it('requires recorded Ultra Ascension history instead of creating activation at epoch zero', () => {
+    const profile = emptyProfile('fixture')
+    profile.purchases.astral = { epoch: 0, active: false }
+    const before = structuredClone(profile)
+    expect(planAstralActivation(catalog, profile, 'astral')).toMatchObject({ kind: 'blocked', reason: expect.stringContaining('previous Ultra Ascension') })
+    expect(profile).toEqual(before)
+  })
+
+  it.each(['unknown', 'a', 'absent', 'astral'])('refuses an ineligible %s target without changing progress', (id) => {
+    const profile = emptyProfile('fixture')
+    profile.epoch = 1
+    profile.purchases = { a: { epoch: 1, active: false }, astral: { epoch: 0, active: true }, unknown: { epoch: 0, active: false } }
+    const before = structuredClone(profile)
+    expect(planAstralActivation(catalog, profile, id).kind).toBe('blocked')
+    expect(profile).toEqual(before)
+  })
+
+  it('refuses an unowned Astral rather than awarding it', () => {
+    const profile = { ...emptyProfile('fixture'), epoch: 1 }
+    expect(planAstralActivation(catalog, profile, 'astral').kind).toBe('blocked')
+    expect(profile.purchases).toEqual({})
   })
 })
 
