@@ -214,6 +214,88 @@ test('successive suggestion confirmation stays readable at the actual 200% brows
 })
 
 
+test('public reference copying and manual selection reflow at the actual 200% browser font', async ({ page }) => {
+  const catalog = JSON.parse(readFileSync('public/catalog.json', 'utf8')) as Catalog
+  await page.addInitScript(() => Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async () => { throw new Error('Synthetic clipboard refusal') } } }))
+  await page.goto(`./#upgrade=${catalog.startId}&catalog=${catalog.revision}`)
+  await expect(page.locator('html')).toHaveCSS('font-size', '32px')
+  await expect(page.locator('.details h2')).toHaveText('Permanent Slayer')
+  await page.getByRole('button', { name: 'Show details', exact: true }).click()
+  const region = page.getByRole('region', { name: 'Share upgrade reference', exact: true })
+  const copy = region.getByRole('button', { name: 'Copy upgrade reference', exact: true })
+  await copy.scrollIntoViewIfNeeded()
+  expect(await copy.evaluate((element) => { const r = element.getBoundingClientRect(), range = document.createRange(); range.selectNodeContents(element); return r.width >= 44 && r.height >= 44 && [...range.getClientRects()].every((b) => b.left >= r.left - 1 && b.right <= r.right + 1) })).toBe(true)
+  await copy.click()
+  await region.getByRole('button', { name: 'Select reference link', exact: true }).click()
+  const input = region.getByRole('textbox', { name: 'Upgrade reference link', exact: true })
+  const link = await input.inputValue()
+  expect(new URL(link).hash).toBe(`#upgrade=${catalog.startId}&catalog=${catalog.revision}`)
+  expect(await input.evaluate((element: HTMLTextAreaElement) => [element.selectionStart, element.selectionEnd])).toEqual([0, link.length])
+  expect(await page.locator('.details').evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true)
+  expect(await page.evaluate(() => localStorage.getItem('idle-slayer-ascension-map.profile.v1'))).toBeNull()
+})
+test('recent inspection controls stay usable at the actual 200% browser font', async ({ page }) => {
+  const catalog = JSON.parse(readFileSync('public/catalog.json', 'utf8')) as Catalog
+  const nodes = visibility(catalog, emptyProfile(catalog.revision)).upgrades.slice(0, 2)
+  await page.goto('./')
+  await expect(page.locator('html')).toHaveCSS('font-size', '32px')
+  for (const node of nodes) {
+    await page.getByRole('searchbox').fill(node.title)
+    await page.locator(`.search-result[data-upgrade-id="${node.id}"]`).click()
+  }
+  await page.getByRole('button', { name: 'Map options', exact: true }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Recent upgrades…', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Recent upgrades', exact: true })
+  expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true)
+  for (const row of await dialog.locator('[data-upgrade-id]').all()) {
+    await row.scrollIntoViewIfNeeded()
+    expect(await row.evaluate((element) => { const r = element.getBoundingClientRect(); return r.width >= 44 && r.height >= 44 && element.scrollWidth <= element.clientWidth + 1 })).toBe(true)
+  }
+  await page.screenshot({ path: test.info().outputPath('recent-upgrades-200-percent.png') })
+  const previous = dialog.locator(`[data-upgrade-id="${nodes[0].id}"]`)
+  await previous.focus(); await page.keyboard.press('Enter')
+  await expect(page.locator('.details h2')).toHaveText(nodes[0].title)
+  await expect(page.locator('.details h2')).toBeFocused()
+  await expect(page.getByRole('button', { name: 'Close upgrade details', exact: true })).toBeInViewport()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  expect(await page.evaluate(() => localStorage.getItem('idle-slayer-ascension-map.profile.v1'))).toBeNull()
+})
+
+test('recent guidance and its clear action fit with wide font metrics at actual 200% text', async ({ page }) => {
+  await page.goto('./')
+  await expect(page.locator('html')).toHaveCSS('font-size', '32px')
+  await page.getByRole('searchbox').fill('Permanent Slayer')
+  await page.getByRole('searchbox').press('Enter')
+  await page.getByRole('button', { name: 'Map options', exact: true }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Recent upgrades…', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Recent upgrades', exact: true })
+  // System-font metrics differ across platforms; keep the real browser text size.
+  await dialog.locator('.recent-upgrades').evaluate((element) => { (element as HTMLElement).style.fontFamily = 'Verdana, sans-serif' })
+  expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true)
+  const guidance = dialog.locator('.recent-upgrades > p').first()
+  expect(await guidance.evaluate((element) => {
+    const box = element.getBoundingClientRect()
+    const range = document.createRange(); range.selectNodeContents(element)
+    return [...range.getClientRects()].every((line) => line.left >= box.left - 1 && line.right <= box.right + 1)
+  })).toBe(true)
+  const clear = dialog.getByRole('button', { name: 'Clear recent upgrades', exact: true })
+  await clear.scrollIntoViewIfNeeded()
+  await expect(clear).toBeInViewport()
+  expect(await clear.evaluate((element) => {
+    const box = element.getBoundingClientRect()
+    const panel = element.closest('.recent-upgrades')!.getBoundingClientRect()
+    const range = document.createRange(); range.selectNodeContents(element)
+    return box.width >= 44 && box.height >= 44 && box.left >= panel.left && box.right <= panel.right + 1
+      && [...range.getClientRects()].every((line) => line.left >= box.left && line.right <= box.right && document.elementFromPoint(line.x + line.width / 2, line.y + line.height / 2)?.closest('button') === element)
+  })).toBe(true)
+  await page.screenshot({ path: test.info().outputPath('recent-wide-font-clear-200-percent.png') })
+  await clear.click()
+  await expect(dialog).toContainText('No recently inspected visible upgrades.')
+  await dialog.getByRole('button', { name: 'Close dialog', exact: true }).click()
+  await expect(page.locator('.details h2')).toHaveText('Permanent Slayer')
+  expect(await page.evaluate(() => localStorage.getItem('idle-slayer-ascension-map.profile.v1'))).toBeNull()
+})
+
 test('prior ascension history keeps its input and actions inside a narrow large-text dialog', async ({ page }) => {
   await page.goto('./')
   await expect(page.locator('html')).toHaveCSS('font-size', '32px')
@@ -264,4 +346,27 @@ test('long prerequisite return labels remain fully visible and clickable with la
   await expect(page.locator('.details h2')).toHaveText("Doesn't Matter to Me")
   await expect(page.locator('.details h2')).toBeFocused()
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('idle-slayer-ascension-map.profile.v1')!))).toEqual(profile)
+})
+
+test('reference sheet controls and exact outgoing document reflow at actual 32px text', async ({ page }, info) => {
+  const catalog = JSON.parse(readFileSync('public/catalog.json', 'utf8')) as Catalog
+  await page.goto('./'); await expect(page.locator('html')).toHaveCSS('font-size', '32px')
+  await page.getByRole('searchbox').fill('Permanent Slayer')
+  await page.locator(`.search-result[data-upgrade-id="${catalog.startId}"]`).click()
+  await page.getByRole('button', { name: 'Show details', exact: true }).click()
+  await page.getByRole('button', { name: 'Add to reference sheet', exact: true }).click()
+  await page.getByRole('button', { name: 'Map options', exact: true }).click()
+  await page.getByRole('dialog', { name: 'Map options', exact: true }).getByRole('button', { name: 'Reference sheet', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Upgrade reference sheet', exact: true })
+  await dialog.getByRole('button', { name: 'Review outgoing sheet', exact: true }).click()
+  expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true)
+  for (const button of await dialog.locator('.reference-sheet-panel button').all()) {
+    await button.focus(); await expect(button).toBeFocused(); await expect(button).toBeInViewport()
+    expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44)
+    expect(await button.evaluate((element) => { const r = element.getBoundingClientRect(); const range = document.createRange(); range.selectNodeContents(element); return [...range.getClientRects()].every((box) => box.left >= r.left - 1 && box.right <= r.right + 1) })).toBe(true)
+  }
+  const body = page.frameLocator('iframe').locator('body')
+  expect(await body.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true)
+  await page.screenshot({ path: info.outputPath('reference-sheet-actual32.png') })
+  expect(await page.evaluate(() => localStorage.getItem('idle-slayer-ascension-map.profile.v1'))).toBeNull()
 })

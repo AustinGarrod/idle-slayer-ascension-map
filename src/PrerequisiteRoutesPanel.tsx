@@ -5,8 +5,9 @@ import { discoverUpgrades, upgradeState } from './domain/discovery'
 import { visibleGoals, type GoalMode, type Goals } from './domain/goals'
 import { comparePrerequisiteRoutes, ROUTE_DISPLAY_LIMIT, ROUTE_TARGET_LIMIT, type RouteProblem, type RouteRequirement, type RouteTarget } from './domain/prerequisite-routes'
 import './PrerequisiteRoutesPanel.css'
+import { SPCost } from './SPCost'
 
-const cost = (value: string) => `${BigInt(value).toLocaleString('en')} SP`
+const cost = (value: string) => <SPCost value={value} />
 const modes: Record<GoalMode, string> = { acquire: 'Acquire', activate: 'Activate', rebuild: 'Rebuild' }
 const states = { available: 'Native prerequisites recorded', locked: 'Native requirements blocked', purchased: 'Owned and active', pending: 'Owned, awaiting activation' }
 
@@ -112,7 +113,7 @@ export function PrerequisiteRoutesPanel({ catalog, profile, visible, goals, init
     <small>Only the current visible graph is compared. At most {ROUTE_DISPLAY_LIMIT} routes are shown. “In every displayed route” describes this displayed set, not a globally required or cheapest build. Incomplete paths withhold full totals.</small>
     <div className="route-comparisons">{result.routes.map((route, position) => <article className="route-card" key={route.key} data-route-cost={route.cost ?? 'incomplete'}>
       <h3>Route {position + 1} · {route.cost === null ? 'Incomplete' : route.assumptions.length ? 'Conditional on listed items' : 'Complete for chosen completion modes'}</h3>
-      <p className="route-total">{route.cost === null ? `Full total withheld. Shown visible purchases subtotal: ${cost(route.subtotal)}.` : `Exact combined catalog cost: ${cost(route.cost)}.`}</p>
+      <p className="route-total">{route.cost === null ? <>Full total withheld. Shown visible purchases subtotal: {cost(route.subtotal)}.</> : <>Exact combined catalog cost: {cost(route.cost)}.</>}</p>
       {!!route.problems.length && <ul className="route-blockers">{route.problems.map((problem, i) => <li key={i}>{issue(problem)}</li>)}</ul>}
       {!!route.assumptions.length && <p>Explicit item assumptions: {route.assumptions.map((id) => items.get(id)!.title).join('; ')}. These items are not recorded by this route.</p>}
       {!!route.pending.length && <p>These new purchases would await activation: {route.pending.map((id) => `${index.get(id)!.title} (ID: ${id})`).join('; ')}. Acquisition and effect activation remain distinct.</p>}

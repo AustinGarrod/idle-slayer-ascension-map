@@ -35,6 +35,7 @@ test('four complete Legendary Belt alternatives and intended OR choice never cha
   await add(page, 'Legendary Belt')
   await expect(dialog.locator('.route-card')).toHaveCount(4)
   expect((await dialog.locator('.route-card').evaluateAll((cards) => cards.map((card) => card.getAttribute('data-route-cost')))).sort()).toEqual(['1006', '436', '641', '651'])
+  expect((await dialog.locator('.route-total [data-exact-cost]').evaluateAll((costs) => costs.map((cost) => cost.getAttribute('data-exact-cost')))).sort()).toEqual(['1006', '436', '641', '651'])
   await expect(dialog).toContainText('Pink Ore'); await expect(dialog).toContainText('Purple Ore')
   await dialog.getByRole('radio').nth(1).check()
   await expect(dialog.getByRole('status', { name: 'Route comparison state', exact: true })).toContainText('intended route is selected for reference only')
@@ -73,6 +74,22 @@ test('pending Astral ownership can finish acquisition but cannot satisfy activat
   await expect(dialog.locator('.route-card')).toHaveAttribute('data-route-cost', 'incomplete')
   await expect(dialog).toContainText('already owned but inactive')
   await expect(dialog.locator(`[data-route-step="${lock.id}"]`)).toHaveCount(0)
+  expect(await stored(page)).toBe(JSON.stringify(profile))
+})
+test('combined long catalog totals use shared exact compact notation with full accessible digits', async ({ page }) => {
+  const chosen = [node('Random Shine'), node('Collateral')]
+  const profile = { ...initial, epoch: 2, showSpoilers: true, purchases: Object.fromEntries(catalog.upgrades.filter((upgrade) => !chosen.some((target) => target.id === upgrade.id)).map((upgrade) => [upgrade.id, { epoch: 2, active: true }])), milestones: Object.fromEntries(catalog.milestones.map((item) => [item.id, true as const])) }
+  const total = chosen.reduce((sum, upgrade) => sum + BigInt(upgrade.cost), 0n).toString()
+  await page.setViewportSize({ width: 320, height: 568 })
+  await seed(page, profile); await page.goto('./'); const dialog = await open(page)
+  for (const upgrade of chosen) await add(page, upgrade.title)
+  await expect(dialog.locator('.route-card')).toHaveCount(1)
+  await expect(dialog.locator('.route-card')).toHaveAttribute('data-route-cost', total)
+  const exact = dialog.locator('.route-total').getByRole('math', { name: `${BigInt(total).toLocaleString('en')} Slayer Points`, exact: true })
+  await expect(exact).toHaveAttribute('data-exact-cost', total)
+  await expect(exact.locator('sup')).toHaveText(String(total.length - 1))
+  await exact.scrollIntoViewIfNeeded()
+  expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true)
   expect(await stored(page)).toBe(JSON.stringify(profile))
 })
 test('an external item remains a visible explicit assumption and never becomes recorded progress', async ({ page }) => {

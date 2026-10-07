@@ -11,6 +11,7 @@ import type { Catalog } from '../../src/domain/types'
 import { emptyProfile } from '../../src/domain/types'
 import { visibility } from '../../src/domain/rules'
 import { encodeGameSaveFixture, nativeSaveFixture } from '../fixtures/game-save'
+import { CHECKPOINT_STORAGE_KEY, emptyCheckpoints, exportCheckpoints } from '../../src/domain/checkpoints'
 
 const fixtureRoot = 'tests/fixtures/umami-3.4.0'
 const provenance = JSON.parse(readFileSync(`${fixtureRoot}/provenance.json`, 'utf8')) as { artifacts: Record<string, string> }
@@ -21,6 +22,7 @@ const officialScripts = Object.fromEntries(['script.js', 'recorder.js'].map((nam
 }))
 const websiteId = '11111111-2222-4333-8444-555555555555'
 const preferenceKey = 'idle-slayer-ascension-map.analytics.v1'
+const comparisonKey = 'idle-slayer-ascension-map.comparison.v1'
 const profileKey = 'idle-slayer-ascension-map.profile.v1'
 const fixturePath = '/__analytics-fixture/'
 const appFixturePath = '/__analytics-app/'
@@ -40,6 +42,46 @@ const secrets = {
 const publicMarker = 'PUBLIC-replay-proof-42816'
 let harnessPromise: Promise<string> | undefined
 let applicationPromise: Promise<Map<string, { body: Buffer | string; contentType: string }>> | undefined
+
+test('saved comparison contents stay blocked in real recorder snapshots and mutations without new event payloads', async ({ page, context, baseURL }) => {
+  const origin = new URL(baseURL!).origin
+  let releaseRecorder!: () => void
+  const recorderReady = new Promise<void>((resolve) => { releaseRecorder = resolve })
+  const capture = await installLocalRoutes(context, origin, { recorderReady })
+  await serveIsolatedApplication(context, origin)
+  const privateQuery = 'PRIVATE_COMPARISON_QUERY_87654', privateSnapshot = 'PRIVATE_COMPARISON_SNAPSHOT_87654', privateMutation = 'PRIVATE_COMPARISON_MUTATION_87654'
+  const unknown = 'PRIVATE_COMPARISON_UNAVAILABLE_87654', publicSnapshot = 'PUBLIC_COMPARISON_SNAPSHOT_87654', publicMutation = 'PUBLIC_COMPARISON_MUTATION_87654'
+  await page.addInitScript(({ key, ids }) => localStorage.setItem(key, JSON.stringify({ kind: 'upgrade-comparison', version: 1, ids })), { key: comparisonKey, ids: [catalog.startId, unknown] })
+  await page.goto(`${origin}${appFixturePath}`)
+  await expect(page.locator('.toolbar')).toBeVisible()
+  const mobile = page.getByRole('button', { name: 'Map options', exact: true })
+  await (await mobile.isVisible() ? mobile : page.getByRole('button', { name: 'Map view…', exact: true })).click()
+  await page.getByRole('button', { name: 'Saved upgrade comparison…', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Saved upgrade comparison', exact: true })
+  await expect(dialog.locator('.saved-comparison')).toHaveClass(/telemetry-private rr-block/)
+  await page.evaluate(({ publicSnapshot, privateSnapshot }) => {
+    const node = document.createElement('p'); node.id = 'comparison-public-proof'; node.textContent = publicSnapshot
+    document.querySelector('dialog[open]')!.appendChild(node)
+    const privateNode = document.createElement('p'); privateNode.id = 'comparison-private-proof'; privateNode.textContent = privateSnapshot
+    document.querySelector('.saved-comparison')!.appendChild(privateNode)
+  }, { publicSnapshot, privateSnapshot })
+  await waitForActive(page); releaseRecorder()
+  const snapshot = await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 2 && JSON.stringify(event).includes(publicSnapshot)))
+  expect(blockedReplayNodes(snapshot).some((node) => node.attributes.class.includes('saved-comparison') && !node.childNodes?.length)).toBe(true)
+  await dialog.locator('.saved-comparison-picker summary').click()
+  await dialog.getByRole('searchbox', { name: 'Find a visible upgrade', exact: true }).fill(privateQuery)
+  await page.locator('#comparison-private-proof').evaluate((node, marker) => { node.textContent = marker }, privateMutation)
+  await page.locator('#comparison-public-proof').evaluate((node, marker) => { node.textContent = marker }, publicMutation)
+  await page.locator('#comparison-public-proof').click()
+  const events = await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 3 && JSON.stringify(event).includes(publicMutation)))
+  const evidence = JSON.stringify({ submissions: capture.submissions, replay: events })
+  for (const marker of [privateQuery, privateSnapshot, privateMutation, unknown]) expect(evidence).not.toContain(marker)
+  await dialog.locator(`article[data-upgrade-id="${catalog.startId}"]`).getByRole('button', { name: 'Show on map', exact: true }).click()
+  await expect(page.locator('.details h2')).toHaveText(firstUpgrade.title)
+  expect(capture.submissions.filter((submission) => submission.type === 'event' && submission.payload.name === 'upgrade_selected')).toHaveLength(0)
+  expect(capture.submissions.filter((submission) => submission.type === 'event').some((submission) => /comparison/.test(JSON.stringify(submission.payload)))).toBe(false)
+  expect(capture.unexpected).toEqual([])
+})
 
 function applicationAssets() {
   applicationPromise ??= (async () => {
@@ -748,6 +790,49 @@ test('active dialog feedback remains private in actual recorder snapshots and mu
   expect(capture.unexpected).toEqual([])
 })
 
+test('named checkpoint snapshots and edits stay excluded from actual recorder snapshots, mutations and event data', async ({ page, context, baseURL }) => {
+  const origin = new URL(baseURL!).origin
+  let releaseRecorder!: () => void
+  const recorderReady = new Promise<void>((resolve) => { releaseRecorder = resolve })
+  const capture = await installLocalRoutes(context, origin, { recorderReady })
+  await serveIsolatedApplication(context, origin)
+  const names = ['CHECKPOINT_PRIVATE_STORED_NAME', 'CHECKPOINT_PRIVATE_CAPTURE_NAME', 'CHECKPOINT_PRIVATE_RENAME_NAME']
+  const snapshotProof = 'CHECKPOINT_PUBLIC_SNAPSHOT_PROOF', mutationProof = 'CHECKPOINT_PUBLIC_MUTATION_PROOF'
+  const unknown = 'CHECKPOINT_PRIVATE_UNKNOWN_RECORD', fileMarker = 'CHECKPOINT_PRIVATE_BACKUP_CONTENT'
+  await page.addInitScript(({ key, text }) => localStorage.setItem(key, text), {
+    key: CHECKPOINT_STORAGE_KEY,
+    text: exportCheckpoints({ ...emptyCheckpoints(), entries: [{ id: 'stored', name: names[0], capturedRevision: catalog.revision, profile: { ...initial, purchases: { [unknown]: { epoch: 0, active: false } } } }] }, catalog.revision)!,
+  })
+  await page.goto(`${origin}${appFixturePath}`)
+  await (await openProgress(page)).getByRole('button', { name: 'Progress checkpoints…', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Progress checkpoints', exact: true })
+  await expect(dialog.locator('.checkpoint-list')).toContainText(names[0])
+  await page.evaluate((proof) => {
+    const node = document.createElement('p'); node.id = 'checkpoint-public-proof'; node.textContent = proof
+    document.querySelector('dialog[open]')!.appendChild(node)
+  }, snapshotProof)
+  await waitForActive(page)
+  releaseRecorder()
+  const snapshot = await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 2 && JSON.stringify(event).includes(snapshotProof)))
+  expect(blockedReplayNodes(snapshot).some((node) => node.attributes.class.includes('checkpoint-panel') && !(node.childNodes?.length))).toBe(true)
+  await dialog.getByLabel('Name current checkpoint', { exact: true }).fill(names[1])
+  await dialog.getByRole('button', { name: 'Capture current progress', exact: true }).click()
+  await expect(dialog.getByRole('status', { name: 'Checkpoint storage and actions' })).toContainText('saved on this device')
+  await dialog.getByRole('button', { name: 'Rename checkpoint 2…', exact: true }).click()
+  await dialog.getByLabel('New checkpoint name', { exact: true }).fill(names[2])
+  await dialog.getByRole('button', { name: 'Save checkpoint name', exact: true }).click()
+  await expect(dialog.locator('.checkpoint-list')).toContainText(names[2])
+  await dialog.getByLabel('Progress checkpoints JSON backup', { exact: true }).setInputFiles({ name: 'private-checkpoints.json', mimeType: 'application/json', buffer: Buffer.from(fileMarker) })
+  await expect(dialog).toContainText('not a supported checkpoint collection')
+  await page.locator('#checkpoint-public-proof').evaluate((node, proof) => { node.textContent = proof }, mutationProof)
+  await page.locator('#checkpoint-public-proof').click()
+  const events = await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 3 && JSON.stringify(event).includes(mutationProof)))
+  const evidence = JSON.stringify({ submissions: capture.submissions, replay: events })
+  for (const marker of [...names, unknown, fileMarker, 'private-checkpoints.json']) expect(evidence.includes(marker), 'Checkpoint private content leaked into telemetry').toBe(false)
+  expect(capture.submissions.some((item) => /checkpoint/i.test(String(item.payload.name ?? '')))).toBe(false)
+  expect(capture.unexpected).toEqual([])
+})
+
 test('real recorder proves moderate input masking, blocking and safe application save import', async ({ page, context, baseURL }) => {
   const origin = new URL(baseURL!).origin
   let releaseRecorder!: () => void
@@ -1100,5 +1185,67 @@ test('continuing the final eligible suggestion reports the fresh all-owned reaso
   await expect(suggestions).toContainText('Every visible upgrade is already recorded as owned')
   await expect.poll(reasons).toEqual(['wiki', 'all-owned'])
   expect(capture.submissions.filter((submission) => submission.payload.name === 'recommendation_purchase_applied')).toHaveLength(1)
+  expect(capture.unexpected).toEqual([])
+})
+
+
+test('exact upgrade references keep native recorder URLs and referrers clean and suspend dirty live navigation', async ({ page, context, baseURL }) => {
+  const origin = new URL(baseURL!).origin
+  const capture = await installLocalRoutes(context, origin)
+  await serveIsolatedApplication(context, origin)
+  const hidden = catalog.upgrades.find((upgrade) => !visible.ids.has(upgrade.id))!
+  await page.goto(`${origin}${appFixturePath}?private=${secrets.url}#upgrade=${hidden.id}&catalog=${catalog.revision}`)
+  await expect(page.locator('.toolbar')).toBeVisible()
+  await expect(page.locator('.toast')).toContainText('unavailable under your current spoiler setting')
+  await waitForActive(page)
+  expect(page.url()).toBe(`${origin}${appFixturePath}`)
+  const events = await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 2))
+  const decoded = JSON.stringify({ submissions: capture.submissions, replay: events })
+  expect(decoded).not.toContain(hidden.id)
+  expect(decoded).not.toContain(secrets.url)
+  expect(capture.submissions.filter((item) => ['record', 'heatmap', 'event'].includes(item.type)).every((item) => !String(item.payload.url).includes('upgrade=') && !String(item.payload.url).includes('#'))).toBe(true)
+  const before = capture.submissions.filter((item) => ['record', 'heatmap'].includes(item.type)).length
+  await page.evaluate(({ id, revision }) => { location.hash = `upgrade=${id}&catalog=${revision}` }, { id: catalog.startId, revision: catalog.revision })
+  await expect(page.locator('.details h2')).toHaveText('Permanent Slayer')
+  await expect.poll(() => page.url()).toBe(`${origin}${appFixturePath}`)
+  const submitted = capture.submissions.filter((item) => ['record', 'heatmap'].includes(item.type)).length
+  expect(submitted).toBe(before)
+  await page.evaluate(() => { document.body.appendChild(Object.assign(document.createElement('p'), { textContent: 'SENTINEL-after-reference-suspension' })) })
+  // The real recorder rereads the guarded session cache on flush. Existing
+  // URL privacy tests cover the longer buffering window; this directly
+  // verifies its final public accessor cannot resume this document.
+  expect(await page.evaluate(() => (window as Window & { umami?: { getSession?: () => { cache?: string } } }).umami?.getSession?.().cache)).toBeUndefined()
+
+})
+
+test('reference sheet selections and full outgoing document stay blocked in actual recorder evidence', async ({ page, context, baseURL }) => {
+  const origin = new URL(baseURL!).origin
+  let releaseRecorder!: () => void
+  const recorderReady = new Promise<void>((resolve) => { releaseRecorder = resolve })
+  const capture = await installLocalRoutes(context, origin, { recorderReady })
+  await serveIsolatedApplication(context, origin)
+  await page.goto(`${origin}${appFixturePath}`); await expect(page.locator('.toolbar')).toBeVisible()
+  await page.locator(`.react-flow__node[data-id="${catalog.startId}"]`).click()
+  const expand = page.getByRole('button', { name: 'Show details', exact: true }); if (await expand.isVisible()) await expand.click()
+  await page.getByRole('button', { name: 'Add to reference sheet', exact: true }).click()
+  const menu = page.getByRole('button', { name: 'Map options', exact: true })
+  if (await menu.isVisible()) await menu.click(); else await page.getByRole('button', { name: 'Map view…', exact: true }).click()
+  await page.getByRole('dialog', { name: 'Map options', exact: true }).getByRole('button', { name: 'Reference sheet', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Upgrade reference sheet', exact: true })
+  await dialog.getByRole('button', { name: 'Review outgoing sheet', exact: true }).click()
+  const marker = 'REFERENCE_SHEET_PRIVATE_SNAPSHOT'
+  const snapshotProof = 'REFERENCE_SHEET_PUBLIC_SNAPSHOT'
+  const mutationProof = 'REFERENCE_SHEET_PUBLIC_MUTATION'
+  await dialog.locator('.reference-sheet-panel').evaluate((panel, marker) => { const node = document.createElement('p'); node.textContent = marker; panel.appendChild(node) }, marker)
+  await dialog.evaluate((element, proof) => { const node = document.createElement('p'); node.id = 'reference-sheet-proof'; node.textContent = proof; element.appendChild(node) }, snapshotProof)
+  await waitForActive(page); releaseRecorder()
+  const snapshot = await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 2 && JSON.stringify(event).includes(snapshotProof)))
+  expect(blockedReplayNodes(snapshot).some((node) => node.attributes.class.includes('reference-sheet-panel') && !(node.childNodes?.length))).toBe(true)
+  await page.locator('#reference-sheet-proof').evaluate((node, proof) => { node.textContent = proof }, mutationProof)
+  await page.locator('#reference-sheet-proof').click()
+  const events = await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 3 && JSON.stringify(event).includes(mutationProof)))
+  const evidence = JSON.stringify({ submissions: capture.submissions, replay: events })
+  expect(evidence).not.toContain(marker); expect(evidence).not.toContain('srcdoc'); expect(evidence).not.toContain('This bounded sheet contains')
+  expect(capture.submissions.some((submission) => String(submission.payload.name).includes('reference'))).toBe(false)
   expect(capture.unexpected).toEqual([])
 })
