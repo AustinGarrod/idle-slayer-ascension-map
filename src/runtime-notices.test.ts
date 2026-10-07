@@ -27,11 +27,19 @@ const modules = [
 describe('complete bundled runtime notices', () => {
   it('preserves every complete installed upstream notice and generates an index without local paths', () => {
     expect(() => validateNoticeSources(root, manifest)).not.toThrow()
-    expect(manifest.packages).toHaveLength(22)
-    expect(manifest.packages.reduce((count, item) => count + item.notices.length, 0)).toBe(23)
+    expect(manifest.packages).toHaveLength(23)
+    expect(manifest.packages.reduce((count, item) => count + item.notices.length, 0)).toBe(24)
     expect(renderNoticeIndex(manifest)).toBe(readFileSync('public/licenses/index.html', 'utf8'))
     expect(JSON.stringify(manifest)).not.toMatch(/node_modules|[A-Z]:\\|\/Users\/|\/home\//)
     expect(manifest.packages.find((item) => item.name === 'rolldown')?.notices.map((notice) => notice.source)).toContain('THIRD-PARTY-LICENSE')
+    expect(manifest.packages.find((item) => item.name === 'qrcode-generator')).toMatchObject({
+      version: '2.0.4', license: 'MIT', inclusion: 'module',
+      notices: [{ source: 'LICENSE', file: 'qrcode-generator-MIT.txt', sha256: '3a850fa5f08101db6f40676c2786e10bd2cd5fff7b12ffdf1e0c434d4e49d90c' }],
+    })
+    // The package patch supplies the omitted license; its published JavaScript
+    // must stay identical to the reviewed js2.0.4 release commit.
+    expect(noticeHash(readFileSync('node_modules/qrcode-generator/dist/qrcode.mjs')))
+      .toBe('ea91d7118a5395289170da848b7c6758b996163bfbccf312591ab65a4911b7c0')
   })
   it('rejects stale installed versions and notice hashes', () => {
     const staleVersion = structuredClone(manifest)
@@ -48,9 +56,12 @@ describe('complete bundled runtime notices', () => {
     expect(() => validateBundleCoverage(root, wrongEmbeddedVersion, modules)).toThrow('Embedded Graphlib version')
   })
   it('rejects missing, unreviewed and newly generated runtime identities', () => {
-    expect(() => validateBundleCoverage(root, manifest, modules.filter((module) => !module.id.includes('/react/')))).toThrow('coverage differs')
-    expect(() => validateBundleCoverage(root, manifest, [...modules, { id: '/fixture/node_modules/unreviewed-runtime/index.js', renderedLength: 1 }])).toThrow('coverage differs')
-    expect(() => validateBundleCoverage(root, manifest, [...modules, { id: '\0new-runtime-helper.js', renderedLength: 1 }])).toThrow('Unreviewed generated')
+    expect(() => validateBundleCoverage(root, manifest, modules.filter((module) => module.id !== '/fixture/node_modules/react/index.js'))).toThrow('No longer bundled: react.')
+    expect(() => validateBundleCoverage(root, manifest, [...modules, { id: '/fixture/node_modules/unreviewed-runtime/index.js', renderedLength: 1 }])).toThrow('Unreviewed packages: unreviewed-runtime.')
+    expect(() => validateBundleCoverage(root, manifest, [...modules, { id: '\0new-runtime-helper.js', renderedLength: 1 }])).toThrow('new-runtime-helper.js')
+    const wrongKind = structuredClone(manifest)
+    wrongKind.packages.find((item) => item.name === 'react')!.inclusion = 'helper'
+    expect(() => validateBundleCoverage(root, wrongKind, modules)).toThrow('Inclusion kind changed: react.')
   })
   it('rejects an omitted or changed notice in the distributable', () => {
     const directory = temporary()

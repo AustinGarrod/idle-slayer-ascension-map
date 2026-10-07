@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test'
+import { type Page } from '@playwright/test'
+import { expect, test } from './fixtures'
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
@@ -90,7 +91,7 @@ test('install guidance and recovery actions fit narrow portrait and short landsc
     expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true)
     const repair = page.getByRole('button', { name: 'Repair offline files and reload…', exact: true })
     await repair.scrollIntoViewIfNeeded(); await expect(repair).toBeInViewport()
-    await page.screenshot({ path: `C:/Users/Austin/.codex/issue-runs/1406017346/issue-56-install-${testInfo.project.name}-${width}x${height}.png` })
+    await page.screenshot({ path: testInfo.outputPath(`install-${width}x${height}.png`) })
     await page.getByRole('button', { name: 'Close dialog', exact: true }).click()
   }
 })
@@ -233,6 +234,8 @@ test('updates stay waiting for late windows, then naturally activate after all c
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
   const address = server.address() as { port: number }
   const context = await browser.newContext({ ...testInfo.project.use, serviceWorkers: 'allow' })
+  const browserErrors: string[] = []
+  context.on('page', (window) => window.on('pageerror', (error) => browserErrors.push(error.message)))
   try {
     const profile = emptyProfile(catalog.revision)
     profile.epoch = 3; profile.purchases['future-unknown'] = { epoch: 2, active: false }
@@ -319,5 +322,6 @@ test('updates stay waiting for late windows, then naturally activate after all c
     await context.close(); await new Promise<void>((resolve) => server.close(() => resolve()))
     if (!scratch.startsWith(resolve(tmpdir()) + sep + 'ascension-pwa-update-')) throw new Error('Unsafe test cleanup')
     rmSync(scratch, { recursive: true, force: true })
+    expect(browserErrors, 'Unhandled browser errors in the two-release PWA context').toEqual([])
   }
 })

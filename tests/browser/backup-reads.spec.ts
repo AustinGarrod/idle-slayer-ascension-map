@@ -1,4 +1,6 @@
-import { expect, test, type Page } from '@playwright/test'
+import { openProgress } from './helpers/app'
+import { expect, test } from './fixtures'
+import type { Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import { emptyProfile, type Catalog } from '../../src/domain/types'
 import { PROFILE_STORAGE_KEY } from '../../src/domain/storage'
@@ -27,12 +29,6 @@ test.beforeEach(async ({ page }) => {
   await openProgress(page)
 })
 
-async function openProgress(page: Page) {
-  await expect(page.locator('.toolbar')).toBeVisible()
-  const action = page.getByRole('button', { name: 'Progress', exact: true })
-  if (!await action.isVisible()) await page.getByRole('button', { name: 'Map options', exact: true }).click()
-  await action.click()
-}
 async function selectBackup(page: Page, name: string, epoch: number) {
   await page.getByLabel('Map progress JSON backup', { exact: true }).setInputFiles({ name, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ ...emptyProfile(catalog.revision), epoch })) })
   if (name.startsWith('deferred-')) await expect.poll(() => page.evaluate((name) => typeof (window as ReadWindow).releaseBackup?.[name], name)).toBe('function')
@@ -76,7 +72,7 @@ test('a cancelled newer preview ignores a late older read failure', async ({ pag
   await page.getByRole('button', { name: 'Cancel', exact: true }).click()
   await finishRead(page, 'deferred-reject.json')
   await expect(page.getByRole('dialog')).toHaveCount(0)
-  await expect(page.getByRole('status')).not.toContainText('could not be read')
+  await expect(page.getByRole('status', { name: 'Map action feedback', exact: true })).not.toContainText('could not be read')
   await unchanged(page)
 })
 
@@ -84,7 +80,7 @@ test('a newer failed read supersedes an older success without restoring either b
   await selectBackup(page, 'deferred-older.json', 1)
   await selectBackup(page, 'deferred-reject.json', 2)
   await finishRead(page, 'deferred-reject.json')
-  await expect(page.getByRole('status')).toContainText('could not be read')
+  await expect(page.getByRole('status', { name: 'Map action feedback', exact: true })).toContainText('could not be read')
   await finishRead(page, 'deferred-older.json')
   await expect(page.getByRole('dialog', { name: 'Your progress', exact: true })).toBeVisible()
   await expect(page.getByRole('dialog', { name: 'Restore progress?', exact: true })).toHaveCount(0)

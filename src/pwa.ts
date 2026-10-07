@@ -82,7 +82,7 @@ export function prepareUpdate(): boolean {
   // windows close. A client snapshot cannot safely authorize skipWaiting.
   return true
 }
-export async function repairOffline(signal: AbortSignal, onCommit: () => void): Promise<boolean> {
+export async function repairOffline(signal: AbortSignal, onCommit: () => void, canContinue: () => boolean = () => true): Promise<boolean> {
   if (signal.aborted) return false
   if (!navigator.onLine) { publish({ message: 'Reconnect before repairing the offline download.' }); return false }
   if (registration?.active) {
@@ -93,10 +93,11 @@ export async function repairOffline(signal: AbortSignal, onCommit: () => void): 
       // Dismissal is disabled once unregister begins. External session changes
       // can still abort this operation, including while unregister is pending.
       onCommit()
+      if (signal.aborted || !canContinue()) return false
       if (!await registration.unregister()) throw new Error('Unavailable')
     } catch { if (!signal.aborted) publish({ message: 'Offline repair could not start. Close other map windows and try again.' }); return false }
   } else onCommit()
-  if (signal.aborted) return false
+  if (signal.aborted || !canContinue()) return false
   window.location.reload()
   return true
 }

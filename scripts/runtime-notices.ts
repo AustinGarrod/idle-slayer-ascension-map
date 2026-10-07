@@ -66,7 +66,7 @@ export function validateBundleCoverage(root: string, manifest: NoticeManifest, m
     const match = id.match(/\/node_modules\/((?:@[^/]+\/)?[^/]+)/)
     if (match) add(match[1], 'module')
     else if (helpers.has(id)) add(helpers.get(id)!, 'helper')
-    else if (id.startsWith('\0') && module.renderedLength > 0) throw new Error('Unreviewed generated runtime helper.')
+    else if (id.startsWith('\0') && module.renderedLength > 0) throw new Error('Unreviewed generated runtime helper: ' + JSON.stringify(id))
   }
   if (included.has('@dagrejs/dagre')) {
     const graphlib = manifest.packages.find((item) => item.name === '@dagrejs/graphlib')
@@ -75,7 +75,16 @@ export function validateBundleCoverage(root: string, manifest: NoticeManifest, m
     if (!graphlib || index < 0 || !map.sourcesContent[index].includes("export const version = '" + graphlib.version + "';")) throw new Error('Embedded Graphlib version evidence is stale.')
     add('@dagrejs/graphlib', 'embedded')
   }
-  if (included.size !== manifest.packages.length || manifest.packages.some((item) => included.get(item.name) !== item.inclusion)) throw new Error('Actual bundle runtime coverage differs from reviewed notices.')
+  if (included.size !== manifest.packages.length || manifest.packages.some((item) => included.get(item.name) !== item.inclusion)) {
+    const reviewed = new Map(manifest.packages.map((item) => [item.name, item.inclusion]))
+    const added = [...included.keys()].filter((name) => !reviewed.has(name)).sort()
+    const removed = [...reviewed.keys()].filter((name) => !included.has(name)).sort()
+    const changed = [...included.keys()].filter((name) => reviewed.has(name) && reviewed.get(name) !== included.get(name)).sort()
+    throw new Error('Actual bundle runtime coverage differs from reviewed notices.'
+      + (added.length ? ' Unreviewed packages: ' + added.join(', ') + '.' : '')
+      + (removed.length ? ' No longer bundled: ' + removed.join(', ') + '.' : '')
+      + (changed.length ? ' Inclusion kind changed: ' + changed.join(', ') + '.' : ''))
+  }
   return manifest.packages
 }
 

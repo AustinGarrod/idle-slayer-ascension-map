@@ -98,6 +98,23 @@ describe('read-only next-upgrade recommendations', () => {
     expect(recommendUpgrades(c, p, guide).suggestions[0].upgrade.id).toBe('child')
   })
 
+  it.each([
+    [true, false, ['target', 'other']],
+    [true, true, ['other']],
+    [false, false, ['other']],
+    [false, true, ['other']],
+  ] as const)('uses ownership and native eligibility with an active=%s retention source and owned=%s target', (active, owned, expected) => {
+    const c = catalog([upgrade('source', { retention: 'astral', activation: 'after-ultra-ascension' }),
+      upgrade('target', { purchase: { kind: 'active', id: 'source' } }), upgrade('other')])
+    c.grants = [{ when: { kind: 'active', id: 'source' }, ids: ['target'] }]
+    const p = emptyProfile(c.revision)
+    p.purchases.source = { epoch: 0, active }
+    if (owned) p.purchases.target = { epoch: 0, active: true }
+    const before = structuredClone(p)
+    expect(recommendUpgrades(c, p, priorities([['source', 0], ['target', 1], ['other', 2]])).suggestions.map((item) => item.upgrade.id)).toEqual(expected)
+    expect(p).toEqual(before)
+  })
+
   it('uses a clearly labeled cost fallback only when no eligible upgrade has a wiki rank', () => {
     const c = catalog([upgrade('a', { cost: '9007199254740993' }), upgrade('b', { cost: '9007199254740992' }), upgrade('wiki-locked', { purchase: { kind: 'milestone', id: 'missing' } })])
     const result = recommendUpgrades(c, emptyProfile(c.revision), priorities([['wiki-locked', 0], ['unknown-id', 1]]))

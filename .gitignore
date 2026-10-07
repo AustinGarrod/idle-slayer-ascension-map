@@ -2,6 +2,7 @@
 node_modules/
 .yarn/*
 !.yarn/releases/
+!.yarn/patches/
 dist/
 dist-ssr/
 .cache/

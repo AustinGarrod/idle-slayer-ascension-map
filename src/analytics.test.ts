@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ANALYTICS_CALLBACK, ANALYTICS_PREFERENCE_KEY, createAnalyticsController, type AnalyticsContext, type AnalyticsEventName } from './analytics'
+import { ANALYTICS_CALLBACK, ANALYTICS_PREFERENCE_KEY, analyticsPosition, createAnalyticsController, type AnalyticsContext, type AnalyticsEventName } from './analytics'
 
 const hostname = 'example.test'
 const basePath = '/map/'
@@ -314,8 +314,10 @@ describe('analytics payload privacy', () => {
     analytics.initializeAnalytics()
     analytics.updateAnalyticsContext(context)
     ready()
-    analytics.trackEvent('upgrade_selected', { upgrade_id: 'visible-upgrade', milestone_id: 'hidden-milestone', source: 'search', query: 'PRIVATE', filename: 'PRIVATE.sav', epoch: 112, results: '1-5', query_length: '4-10', position: 4, reason: 'PRIVATE error' })
-    expect(tracker.track).toHaveBeenCalledWith('upgrade_selected', { app_version: '0.1.0', screen_layout: 'wide', catalog_version: '7.2.0', catalog_revision: 'steam-25551532-v1', layout: 'web', spoilers: false, upgrade_id: 'visible-upgrade', source: 'search', results: '1-5', query_length: '4-10' })
+    // Deliberately bypass TypeScript to exercise the JavaScript caller boundary.
+    const unexpectedCaller = analytics.trackEvent as (name: string, properties?: unknown) => void
+    unexpectedCaller('upgrade_selected', { upgrade_id: 'visible-upgrade', milestone_id: 'hidden-milestone', source: 'search', query: 'PRIVATE', filename: 'PRIVATE.sav', epoch: 112, results: '1-5', query_length: '4-10', position: 4, reason: 'PRIVATE error' })
+    expect(tracker.track).toHaveBeenCalledWith('upgrade_selected', { app_version: '0.1.0', screen_layout: 'wide', catalog_version: '7.2.0', catalog_revision: 'steam-25551532-v1', layout: 'web', spoilers: false, upgrade_id: 'visible-upgrade', source: 'search' })
     expect(tracker.identify).toHaveBeenCalledWith({ app_version: '0.1.0', screen_layout: 'wide', catalog_version: '7.2.0', catalog_revision: 'steam-25551532-v1', layout: 'web', spoilers: false })
   })
 
@@ -327,6 +329,91 @@ describe('analytics payload privacy', () => {
     analytics.updateAnalyticsContext({ ...context, visibleUpgradeIds: new Set() })
     ready()
     expect(tracker.track.mock.calls[0][1]).not.toHaveProperty('upgrade_id')
+  })
+
+  it.each([
+    ['search_performed', { query_length: '4-10', results: '1-5', upgrade_id: 'visible-upgrade', source: 'search' }, { query_length: '4-10', results: '1-5' }],
+    ['catalog_error', { reason: 'runtime', action: 'load' }, {}],
+    ['storage_error', { reason: 'invalid-profile', action: 'load', source: 'progress' }, { reason: 'invalid-profile', action: 'load' }],
+    ['map_camera_used', { action: 'pan', source: 'controls', direction: 'left', expanded: true, enabled: true }, { action: 'pan', source: 'controls', direction: 'left', expanded: true }],
+    ['milestone_changed', { milestone_id: 'visible-milestone', recorded: true, upgrade_id: 'visible-upgrade' }, { milestone_id: 'visible-milestone', recorded: true }],
+    ['milestone_removal_applied', { milestone_id: 'visible-milestone', upgrade_id: 'visible-upgrade' }, { milestone_id: 'visible-milestone' }],
+    ['purchase_applied', { upgrade_id: 'visible-upgrade', source: 'details', milestone_id: 'visible-milestone' }, { upgrade_id: 'visible-upgrade', source: 'details' }],
+    ['ultra_ascension_applied', { upgrade_id: 'visible-upgrade', milestone_id: 'visible-milestone', operation: 'ultra_ascension', phase: 'applied' }, {}],
+    ['app_ready', { enabled: true, catalog_revision: 'PRIVATE', layout: 'game', spoilers: true }, {}],
+  ] satisfies [AnalyticsEventName, Record<string, unknown>, Record<string, unknown>][])('filters supported fields for %s at dispatch and the tracker callback', (name, properties, expected) => {
+    const { analytics, tracker, ready, win } = setup()
+    analytics.initializeAnalytics()
+    analytics.updateAnalyticsContext(context)
+    ready()
+    const unexpectedCaller = analytics.trackEvent as (name: string, properties?: unknown) => void
+    unexpectedCaller(name, properties)
+    const common = { app_version: '0.1.0', screen_layout: 'wide', catalog_version: '7.2.0', catalog_revision: 'steam-25551532-v1', layout: 'web', spoilers: false }
+    expect(tracker.track).toHaveBeenCalledWith(name, { ...common, ...expected })
+    const callback = win.ascensionMapBeforeSend!('event', { name, data: properties })
+    expect(callback?.data).toEqual({ ...common, ...expected })
+  })
+
+  it('keeps every supported operation phase available without accepting invented phases or inherited object names', () => {
+    const { analytics, win, ready, tracker } = setup()
+    analytics.initializeAnalytics()
+    ready()
+    const operations = ['purchase', 'removal', 'milestone_removal', 'astral_activation', 'ultra_ascension', 'clear', 'restore', 'recovery'] as const
+    const phases = ['previewed', 'applied', 'cancelled'] as const
+    for (const operation of operations) for (const phase of phases) {
+      const name = `${operation}_${phase}` as const
+      analytics.trackEvent(name)
+      expect(win.ascensionMapBeforeSend!('event', { name })?.name).toBe(name)
+    }
+    expect(tracker.track).toHaveBeenCalledTimes(24)
+    const unexpectedCaller = analytics.trackEvent as (name: string) => void
+    for (const name of ['purchase_started_typo', 'purchase_confirmed', 'constructor', '__proto__', 'toString']) {
+      unexpectedCaller(name)
+      expect(win.ascensionMapBeforeSend!('event', { name })).toBeNull()
+    }
+    expect(tracker.track).toHaveBeenCalledTimes(24)
+  })
+
+  it.each([0, 4, 1.5, Number.NaN, Number.POSITIVE_INFINITY, '1', true])('drops invalid positions such as %s at the JavaScript boundary', (position) => {
+    const { analytics, win } = setup()
+    analytics.initializeAnalytics()
+    const payload = win.ascensionMapBeforeSend!('event', { name: 'prerequisite_chosen', data: { position } })
+    expect(payload?.data).not.toHaveProperty('position')
+  })
+
+  it('preserves positions 1-3 and omits out-of-range UI positions', () => {
+    const { analytics, win } = setup()
+    analytics.initializeAnalytics()
+    for (const position of [1, 2, 3]) {
+      expect(analyticsPosition(position)).toBe(position)
+      expect(win.ascensionMapBeforeSend!('event', { name: 'recommendation_selected', data: { position } })?.data).toHaveProperty('position', position)
+    }
+    for (const position of [0, 4, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) expect(analyticsPosition(position)).toBeUndefined()
+  })
+
+  it('rechecks queued milestone IDs and never substitutes hidden identities or cross-event fields', () => {
+    const { analytics, tracker, ready } = setup()
+    analytics.initializeAnalytics()
+    analytics.updateAnalyticsContext(context)
+    const unexpectedCaller = analytics.trackEvent as (name: string, properties?: unknown) => void
+    unexpectedCaller('milestone_changed', { milestone_id: 'visible-milestone', recorded: true, upgrade_id: 'visible-upgrade' })
+    analytics.updateAnalyticsContext({ ...context, visibleMilestoneIds: new Set() })
+    ready()
+    expect(tracker.track.mock.calls[0][1]).toMatchObject({ recorded: true })
+    expect(tracker.track.mock.calls[0][1]).not.toHaveProperty('milestone_id')
+    expect(tracker.track.mock.calls[0][1]).not.toHaveProperty('upgrade_id')
+  })
+
+  it('ignores malformed property getters without throwing or retaining partial data', () => {
+    const { analytics, tracker, ready } = setup()
+    analytics.initializeAnalytics()
+    ready()
+    const properties = Object.defineProperty({ source: 'map' }, 'upgrade_id', { enumerable: true, get() { throw new Error('PRIVATE') } })
+    const unexpectedCaller = analytics.trackEvent as (name: string, properties?: unknown) => void
+    expect(() => unexpectedCaller('upgrade_selected', properties)).not.toThrow()
+    expect(tracker.track.mock.calls[0][1]).not.toHaveProperty('source')
+    expect(tracker.track.mock.calls[0][1]).not.toHaveProperty('upgrade_id')
+    expect(JSON.stringify(tracker.track.mock.calls)).not.toContain('PRIVATE')
   })
 
   it('sanitizes identify and performance through the same callback without forwarding a distinct ID or caller data', () => {

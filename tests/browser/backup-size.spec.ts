@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
 import { readFileSync } from 'node:fs'
 import type { Catalog } from '../../src/domain/types'
 import { emptyProfile } from '../../src/domain/types'
@@ -22,7 +22,7 @@ test('oversized canonical backup is refused before preview and preserves saved p
   expect(Buffer.byteLength(compact)).toBeLessThan(MAX_PROFILE_BYTES)
   expect(Buffer.byteLength(JSON.stringify(incoming, null, 2))).toBeGreaterThan(MAX_PROFILE_BYTES)
   await page.getByLabel('Map progress JSON backup', { exact: true }).setInputFiles({ name: 'large-synthetic.json', mimeType: 'application/json', buffer: Buffer.from(compact) })
-  await expect(page.getByRole('status')).toContainText('4 MiB save and export limit')
+  await expect(page.getByRole('status', { name: 'Map action feedback', exact: true })).toContainText('4 MiB save and export limit')
   await expect(page.getByRole('dialog')).not.toContainText('Restore progress?')
   expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), PROFILE_STORAGE_KEY)).toEqual(current)
   await expect(page.locator('.map-summary')).toContainText('1 /')

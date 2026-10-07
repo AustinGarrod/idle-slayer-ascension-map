@@ -1,4 +1,7 @@
-import { expect, test, type Locator, type Page } from '@playwright/test'
+import { noPageOverflow, selectedNodeIsUsable } from './helpers/geometry'
+import { chooseLayout, selectUpgrade } from './helpers/app'
+import { expect, test } from './fixtures'
+import type { Locator, Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import type { Catalog, Profile } from '../../src/domain/types'
 import { emptyProfile } from '../../src/domain/types'
@@ -11,28 +14,12 @@ const start = catalog.upgrades.find((upgrade) => upgrade.id === catalog.startId)
 const branch = catalog.upgrades.find((upgrade) => upgrade.title === 'Reinvest')!
 const hidden = catalog.upgrades.find((upgrade) => !visible.ids.has(upgrade.id))!
 const profileKey = 'idle-slayer-ascension-map.profile.v1'
-const runtimeErrors: Error[] = []
 
 test.beforeEach(async ({ page }) => {
-  runtimeErrors.length = 0
-  page.on('pageerror', (error) => runtimeErrors.push(error))
   await page.addInitScript(() => localStorage.setItem('idle-slayer-ascension-map.analytics.v1', 'disabled'))
   await page.route('https://analytics.garrod.house/**', (route) => route.abort())
   await page.emulateMedia({ reducedMotion: 'reduce' })
 })
-test.afterEach(() => expect(runtimeErrors).toEqual([]))
-
-async function chooseLayout(page: Page, name: 'Detailed Layout' | 'Game Layout') {
-  const button = page.getByRole('group', { name: 'Map layout', exact: true }).getByRole('button', { name, exact: true })
-  await button.click()
-  await expect(button).toHaveAttribute('aria-pressed', 'true')
-}
-
-async function selectUpgrade(page: Page, title: string) {
-  await page.getByRole('searchbox').fill(title)
-  await page.locator('.search-result').filter({ hasText: title }).first().click()
-  await expect(page.locator('.details h2')).toHaveText(title)
-}
 
 function upgradeNode(page: Page, id: string): Locator {
   return page.locator(`.react-flow__node[data-id="${id}"]`)
@@ -45,51 +32,25 @@ async function titleIsPainted(title: Locator): Promise<boolean> {
   })
 }
 
-async function noPageOverflow(page: Page) {
-  await expect.poll(() => page.evaluate(() => ({
-    width: document.documentElement.scrollWidth - window.innerWidth,
-    height: document.documentElement.scrollHeight - window.innerHeight,
-    x: window.scrollX,
-    y: window.scrollY,
-  }))).toEqual({ width: 0, height: 0, x: 0, y: 0 })
-}
-
-async function selectedTileIsUsable(page: Page, id: string) {
-  const node = upgradeNode(page, id)
-  await expect(node).toBeInViewport()
-  await expect.poll(() => node.evaluate((element) => {
-    const rect = element.getBoundingClientRect()
-    const map = element.closest('.map')!.getBoundingClientRect()
-    const controls = [...document.querySelectorAll('.camera-controls, .pan-controls, .map-summary')]
-    const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)
-    return {
-      touchTarget: rect.width >= 44 && rect.height >= 44,
-      fullyInsideCanvas: rect.left >= map.left - 1 && rect.right <= map.right + 1 && rect.top >= map.top - 1 && rect.bottom <= map.bottom + 1,
-      overlapsControls: controls.filter((control) => {
-        const box = control.getBoundingClientRect()
-        return box.width > 0 && box.height > 0 && rect.left < box.right && rect.right > box.left && rect.top < box.bottom && rect.bottom > box.top
-      }).map((control) => control.className),
-      hit: hit?.closest('.react-flow__node')?.getAttribute('data-id'),
-    }
-  })).toEqual({ touchTarget: true, fullyInsideCanvas: true, overlapsControls: [], hit: id })
-}
-
-async function webPresentation(page: Page) {
-  return page.evaluate(() => ({
+async function webPresentation(page: Page, sampleCounts?: number[]) {
+  return page.evaluate((sampleCounts) => ({
     nodes: [...document.querySelectorAll<HTMLElement>('.react-flow__node')].map((node) => {
       const matrix = new DOMMatrix(getComputedStyle(node).transform)
       const tile = node.querySelector<HTMLElement>('.upgrade-node')!
       return { id: node.dataset.id, x: matrix.e, y: matrix.f, width: tile.offsetWidth, height: tile.offsetHeight }
     }),
-    paths: [...document.querySelectorAll('.react-flow__edge')].map((edge) => {
-      const path = edge.querySelector('.react-flow__edge-path')!
+    paths: [...document.querySelectorAll('.react-flow__edge')].map((edge, index) => {
+      const path = edge.querySelector<SVGPathElement>('.react-flow__edge-path')!
       const style = getComputedStyle(path)
-      // RF measures handle rectangles through the viewport transform. A
-      // camera resize can introduce subpixel float noise into the same route.
-      const d = path.getAttribute('d')?.replace(/[-+]?\d*\.?\d+(?:e[-+]?\d+)?/g, (number) => String(Math.round(Number(number) * 100) / 100))
-      return { id: edge.getAttribute('data-id'), d, stroke: style.stroke, width: style.strokeWidth, dash: style.strokeDasharray }
+      const d = path.getAttribute('d')
+      const length = path.getTotalLength(), count = sampleCounts?.[index] ?? Math.max(2, Math.ceil(length / 8) + 1)
+      const samples = Array.from({ length: count }, (_, position) => {
+        const point = path.getPointAtLength(length * position / (count - 1))
+        return { x: point.x, y: point.y }
+      })
+      return { id: edge.getAttribute('data-id'), d, length, samples, stroke: style.stroke, width: style.strokeWidth, dash: style.strokeDasharray }
     }),
-  }))
+  }), sampleCounts)
 }
 
 test('Game uses compact native circular tiles without changing any visible center', async ({ page }) => {
@@ -241,7 +202,7 @@ test('Game switch preserves progress and spoilers and restores Web geometry and 
   await expect(upgradeNode(page, start.id).locator('.upgrade-node')).toHaveClass(/purchased/)
   await expect(upgradeNode(page, start.id).locator('.node-symbol')).toHaveText('✓')
   await expect(upgradeNode(page, start.id)).toHaveAttribute('aria-label', /purchased/)
-  await selectedTileIsUsable(page, branch.id)
+  await selectedNodeIsUsable(page, branch.id)
   await expect(upgradeNode(page, hidden.id)).toHaveCount(0)
   await page.getByRole('searchbox').fill(hidden.title)
   await expect(page.locator('.search-result').filter({ hasText: hidden.title })).toHaveCount(0)
@@ -249,7 +210,23 @@ test('Game switch preserves progress and spoilers and restores Web geometry and 
   await chooseLayout(page, 'Detailed Layout')
   await expect(upgradeNode(page, branch.id)).toHaveClass(/selected/)
   await expect(page.locator('.native-connection-outline')).toHaveCount(0)
-  await expect.poll(() => webPresentation(page)).toEqual(before)
+  const sampleCounts = before.paths.map((path) => path.samples.length)
+  const structure = (value: typeof before) => ({ nodes: value.nodes, paths: value.paths.map(({ id, stroke, width, dash }) => ({ id, stroke, width, dash })) })
+  await expect.poll(async () => {
+    const after = await webPresentation(page, sampleCounts)
+    // RF reads transformed handle rectangles. Tiny collinearity differences
+    // can produce equivalent Q/L syntax, so compare the actual rendered routes.
+    // Nodes, identities and styles remain exact. At most 8 units separate the
+    // reference samples; lengths and point distances must stay within 0.05
+    // world units (at most one eighth of a pixel at the maximum map zoom).
+    const coordinatesRestored = after.paths.length === before.paths.length && after.paths.every((path, index) => {
+      const expected = before.paths[index]
+      return path.d !== null && expected.d !== null && path.length > 0 && expected.length > 0
+        && Math.abs(path.length - expected.length) <= 0.05 && path.samples.length === expected.samples.length
+        && path.samples.every((point, position) => Math.hypot(point.x - expected.samples[position].x, point.y - expected.samples[position].y) <= 0.05)
+    })
+    return { ...structure(after), coordinatesRestored }
+  }).toEqual({ ...structure(before), coordinatesRestored: true })
   expect(await page.evaluate((key) => localStorage.getItem(key), profileKey)).toBe(saved)
   await expect(page.locator('.map-summary')).toContainText('1 /')
   await expect(upgradeNode(page, hidden.id)).toHaveCount(0)
@@ -287,11 +264,11 @@ for (const viewport of [{ width: 320, height: 568 }, { width: 844, height: 390 }
     await page.goto('./')
     await chooseLayout(page, 'Game Layout')
     await page.getByRole('button', { name: 'Return to start', exact: true }).click()
-    await selectedTileIsUsable(page, start.id)
+    await selectedNodeIsUsable(page, start.id)
     await noPageOverflow(page)
     await page.getByRole('button', { name: 'Show details', exact: true }).click()
     await expect(page.locator('.detail-content')).toBeVisible()
-    await selectedTileIsUsable(page, start.id)
+    await selectedNodeIsUsable(page, start.id)
     await noPageOverflow(page)
     await page.getByRole('button', { name: 'Close upgrade details', exact: true }).click()
     const node = upgradeNode(page, start.id)
@@ -299,7 +276,7 @@ for (const viewport of [{ width: 320, height: 568 }, { width: 844, height: 390 }
     await node.press('Enter')
     await expect(page.locator('.details h2')).toHaveText(start.title)
     await expect(node).toHaveClass(/selected/)
-    await selectedTileIsUsable(page, start.id)
+    await selectedNodeIsUsable(page, start.id)
     await noPageOverflow(page)
   })
 }

@@ -1,4 +1,6 @@
-import { expect, test, type BrowserContext, type Page, type Request } from '@playwright/test'
+import { openProgress } from './helpers/app'
+import { expect, test } from './fixtures'
+import type { BrowserContext, Page, Request } from '@playwright/test'
 import { createHash } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, resolve, sep } from 'node:path'
@@ -9,6 +11,8 @@ import type { Catalog } from '../../src/domain/types'
 import { emptyProfile } from '../../src/domain/types'
 import { visibility } from '../../src/domain/rules'
 import { encodeGameSaveFixture, nativeSaveFixture } from '../fixtures/game-save'
+import { encodeProgressTransfer, progressTransferLink } from '../../src/domain/progress-transfer'
+import { CHECKPOINT_STORAGE_KEY, emptyCheckpoints, exportCheckpoints } from '../../src/domain/checkpoints'
 
 const fixtureRoot = 'tests/fixtures/umami-3.4.0'
 const provenance = JSON.parse(readFileSync(`${fixtureRoot}/provenance.json`, 'utf8')) as { artifacts: Record<string, string> }
@@ -19,6 +23,7 @@ const officialScripts = Object.fromEntries(['script.js', 'recorder.js'].map((nam
 }))
 const websiteId = '11111111-2222-4333-8444-555555555555'
 const preferenceKey = 'idle-slayer-ascension-map.analytics.v1'
+const comparisonKey = 'idle-slayer-ascension-map.comparison.v1'
 const profileKey = 'idle-slayer-ascension-map.profile.v1'
 const fixturePath = '/__analytics-fixture/'
 const appFixturePath = '/__analytics-app/'
@@ -38,6 +43,46 @@ const secrets = {
 const publicMarker = 'PUBLIC-replay-proof-42816'
 let harnessPromise: Promise<string> | undefined
 let applicationPromise: Promise<Map<string, { body: Buffer | string; contentType: string }>> | undefined
+
+test('saved comparison contents stay blocked in real recorder snapshots and mutations without new event payloads', async ({ page, context, baseURL }) => {
+  const origin = new URL(baseURL!).origin
+  let releaseRecorder!: () => void
+  const recorderReady = new Promise<void>((resolve) => { releaseRecorder = resolve })
+  const capture = await installLocalRoutes(context, origin, { recorderReady })
+  await serveIsolatedApplication(context, origin)
+  const privateQuery = 'PRIVATE_COMPARISON_QUERY_87654', privateSnapshot = 'PRIVATE_COMPARISON_SNAPSHOT_87654', privateMutation = 'PRIVATE_COMPARISON_MUTATION_87654'
+  const unknown = 'PRIVATE_COMPARISON_UNAVAILABLE_87654', publicSnapshot = 'PUBLIC_COMPARISON_SNAPSHOT_87654', publicMutation = 'PUBLIC_COMPARISON_MUTATION_87654'
+  await page.addInitScript(({ key, ids }) => localStorage.setItem(key, JSON.stringify({ kind: 'upgrade-comparison', version: 1, ids })), { key: comparisonKey, ids: [catalog.startId, unknown] })
+  await page.goto(`${origin}${appFixturePath}`)
+  await expect(page.locator('.toolbar')).toBeVisible()
+  const mobile = page.getByRole('button', { name: 'Map options', exact: true })
+  await (await mobile.isVisible() ? mobile : page.getByRole('button', { name: 'Map view…', exact: true })).click()
+  await page.getByRole('button', { name: 'Saved upgrade comparison…', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Saved upgrade comparison', exact: true })
+  await expect(dialog.locator('.saved-comparison')).toHaveClass(/telemetry-private rr-block/)
+  await page.evaluate(({ publicSnapshot, privateSnapshot }) => {
+    const node = document.createElement('p'); node.id = 'comparison-public-proof'; node.textContent = publicSnapshot
+    document.querySelector('dialog[open]')!.appendChild(node)
+    const privateNode = document.createElement('p'); privateNode.id = 'comparison-private-proof'; privateNode.textContent = privateSnapshot
+    document.querySelector('.saved-comparison')!.appendChild(privateNode)
+  }, { publicSnapshot, privateSnapshot })
+  await waitForActive(page); releaseRecorder()
+  const snapshot = await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 2 && JSON.stringify(event).includes(publicSnapshot)))
+  expect(blockedReplayNodes(snapshot).some((node) => node.attributes.class.includes('saved-comparison') && !node.childNodes?.length)).toBe(true)
+  await dialog.locator('.saved-comparison-picker summary').click()
+  await dialog.getByRole('searchbox', { name: 'Find a visible upgrade', exact: true }).fill(privateQuery)
+  await page.locator('#comparison-private-proof').evaluate((node, marker) => { node.textContent = marker }, privateMutation)
+  await page.locator('#comparison-public-proof').evaluate((node, marker) => { node.textContent = marker }, publicMutation)
+  await page.locator('#comparison-public-proof').click()
+  const events = await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 3 && JSON.stringify(event).includes(publicMutation)))
+  const evidence = JSON.stringify({ submissions: capture.submissions, replay: events })
+  for (const marker of [privateQuery, privateSnapshot, privateMutation, unknown]) expect(evidence).not.toContain(marker)
+  await dialog.locator(`article[data-upgrade-id="${catalog.startId}"]`).getByRole('button', { name: 'Show on map', exact: true }).click()
+  await expect(page.locator('.details h2')).toHaveText(firstUpgrade.title)
+  expect(capture.submissions.filter((submission) => submission.type === 'event' && submission.payload.name === 'upgrade_selected')).toHaveLength(0)
+  expect(capture.submissions.filter((submission) => submission.type === 'event').some((submission) => /comparison/.test(JSON.stringify(submission.payload)))).toBe(false)
+  expect(capture.unexpected).toEqual([])
+})
 
 function applicationAssets() {
   applicationPromise ??= (async () => {
@@ -218,12 +263,6 @@ async function initializeHarness(page: Page) {
 
 async function waitForActive(page: Page) {
   await expect.poll(() => page.evaluate(() => (window as unknown as { analyticsHarness: { getTrackingStatus: () => { active: boolean } } }).analyticsHarness.getTrackingStatus().active)).toBe(true)
-}
-
-async function openProgress(page: Page) {
-  const button = page.getByRole('button', { name: 'Progress', exact: true })
-  if (!await button.isVisible()) await page.getByRole('button', { name: 'Map options', exact: true }).click()
-  await button.click()
 }
 
 test('local production preview stays untracked and has usable privacy controls', async ({ page, context, baseURL }) => {
@@ -673,6 +712,86 @@ test('catalog parsing errors show only fixed public wording in the actual record
   expect(capture.unexpected).toEqual([])
 })
 
+test('prerequisite route targets, queries and intentions remain blocked in real recorder snapshots and mutations', async ({ page, context, baseURL }) => {
+  const origin = new URL(baseURL!).origin
+  let releaseRecorder!: () => void
+  const recorderReady = new Promise<void>((resolve) => { releaseRecorder = resolve })
+  const capture = await installLocalRoutes(context, origin, { recorderReady })
+  await serveIsolatedApplication(context, origin)
+  const snapshotProof = 'ROUTE_PUBLIC_SNAPSHOT_PROOF', mutationProof = 'ROUTE_PUBLIC_MUTATION_PROOF'
+  const marker = 'ROUTE_PRIVATE_QUERY_82749'
+  const belt = catalog.upgrades.find((upgrade) => upgrade.title === 'Legendary Belt')!
+  await page.goto(`${origin}${appFixturePath}`)
+  await expect(page.locator('.toolbar')).toBeVisible()
+  const compact = page.getByRole('button', { name: 'Map options', exact: true })
+  await (await compact.isVisible() ? compact : page.getByRole('button', { name: 'Map view…', exact: true })).click()
+  await page.getByRole('dialog', { name: 'Map options', exact: true }).getByRole('button', { name: 'Compare prerequisite routes…', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Prerequisite routes', exact: true })
+  const input = dialog.getByRole('searchbox', { name: 'Find a route target', exact: true })
+  await input.fill(belt.title)
+  await dialog.locator(`[data-route-choice="${belt.id}"]`).click()
+  await dialog.getByRole('radio').first().check()
+  await page.evaluate((proof) => {
+    const node = document.createElement('p'); node.id = 'route-public-proof'; node.textContent = proof
+    document.querySelector('dialog[open]')!.appendChild(node)
+  }, snapshotProof)
+  await waitForActive(page)
+  releaseRecorder()
+  const snapshot = await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 2 && JSON.stringify(event).includes(snapshotProof)))
+  expect(blockedReplayNodes(snapshot).some((node) => node.attributes.class.includes('prerequisite-routes') && !(node.childNodes?.length))).toBe(true)
+  await dialog.locator('.route-picker summary').click()
+  await input.fill(marker)
+  await page.locator('#route-public-proof').evaluate((element, proof) => { element.textContent = proof }, mutationProof)
+  await page.locator('#route-public-proof').click()
+  const events = await waitForReplayEvents(capture, (items) => items.some((event) => event.type === 3 && JSON.stringify(event).includes(mutationProof)))
+  const evidence = JSON.stringify({ submissions: capture.submissions, replay: events })
+  for (const privateValue of [marker, 'Exact combined catalog cost', 'Mark route 1 as intended', 'Chosen OR alternatives']) expect(evidence).not.toContain(privateValue)
+  expect(await page.evaluate((key) => localStorage.getItem(key), profileKey)).toBeNull()
+  expect(capture.unexpected).toEqual([])
+})
+
+test('single-event hypothetical controls and results stay blocked in real replay and emit no purchase events', async ({ page, context, baseURL }) => {
+  const origin = new URL(baseURL!).origin
+  let releaseRecorder!: () => void
+  const recorderReady = new Promise<void>((resolve) => { releaseRecorder = resolve })
+  const capture = await installLocalRoutes(context, origin, { recorderReady })
+  await serveIsolatedApplication(context, origin)
+  await page.goto(`${origin}${appFixturePath}`)
+  await expect(page.locator('.toolbar')).toBeVisible()
+  await waitForActive(page)
+  await page.locator(`.react-flow__node[data-id="${catalog.startId}"]`).click()
+  const toggle = page.getByRole('button', { name: 'Show details', exact: true })
+  if (await toggle.isVisible()) await toggle.click()
+  const before = await page.evaluate((key) => localStorage.getItem(key), profileKey)
+  await page.getByRole('button', { name: 'Analyze forward impact…', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Forward impact', exact: true })
+  await expect(dialog.locator('.forward-impact')).toBeVisible()
+  const privateSnapshot = 'PRIVATE_FORWARD_EVENT_SNAPSHOT'
+  const privateMutation = 'PRIVATE_FORWARD_EVENT_MUTATION'
+  const publicSnapshot = 'PUBLIC_FORWARD_SNAPSHOT'
+  const publicMutation = 'PUBLIC_FORWARD_MUTATION'
+  await page.evaluate(({ privateSnapshot, publicSnapshot }) => {
+    const privateNode = document.createElement('p'); privateNode.id = 'forward-private-proof'; privateNode.textContent = privateSnapshot
+    document.querySelector('.forward-impact')!.appendChild(privateNode)
+    const publicNode = document.createElement('p'); publicNode.id = 'forward-public-proof'; publicNode.textContent = publicSnapshot
+    document.querySelector('dialog[open]')!.appendChild(publicNode)
+  }, { privateSnapshot, publicSnapshot })
+  releaseRecorder()
+  const snapshot = await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 2 && JSON.stringify(event).includes(publicSnapshot)))
+  expect(blockedReplayNodes(snapshot).some((entry) => entry.attributes.class.includes('forward-impact') && !entry.childNodes?.length)).toBe(true)
+  await dialog.locator('summary').first().click()
+  await page.locator('#forward-private-proof').evaluate((node, text) => { node.textContent = text }, privateMutation)
+  await page.locator('#forward-public-proof').evaluate((node, text) => { node.textContent = text }, publicMutation)
+  await page.locator('#forward-public-proof').click()
+  const events = await waitForReplayEvents(capture, (items) => items.some((event) => event.type === 3 && JSON.stringify(event).includes(publicMutation)))
+  const proof = JSON.stringify({ submissions: capture.submissions, replay: events })
+  for (const marker of [privateSnapshot, privateMutation]) expect(proof).not.toContain(marker)
+  for (const name of ['purchase_started', 'purchase_previewed', 'purchase_applied', 'milestone_changed', 'progress_undo']) expect(capture.submissions.filter((item) => item.payload.name === name)).toHaveLength(0)
+  expect(capture.submissions.some((item) => item.payload.name === 'panel_opened' && (item.payload.data as Record<string, unknown>)?.panel === 'forward-impact')).toBe(false)
+  expect(await page.evaluate((key) => localStorage.getItem(key), profileKey)).toBe(before)
+  expect(capture.unexpected).toEqual([])
+})
+
 test('active dialog feedback remains private in actual recorder snapshots and mutations', async ({ page, context, baseURL }) => {
   const origin = new URL(baseURL!).origin
   let releaseRecorder!: () => void
@@ -711,6 +830,49 @@ test('active dialog feedback remains private in actual recorder snapshots and mu
   await expect(page.locator('body')).not.toContainText(fileMarker)
   await expect(page.locator('body')).not.toContainText(readMarker)
   await expect.poll(() => capture.submissions.some((item) => item.payload.name === 'backup_error' && (item.payload.data as Record<string, unknown> | undefined)?.reason === 'read')).toBe(true)
+  expect(capture.unexpected).toEqual([])
+})
+
+test('named checkpoint snapshots and edits stay excluded from actual recorder snapshots, mutations and event data', async ({ page, context, baseURL }) => {
+  const origin = new URL(baseURL!).origin
+  let releaseRecorder!: () => void
+  const recorderReady = new Promise<void>((resolve) => { releaseRecorder = resolve })
+  const capture = await installLocalRoutes(context, origin, { recorderReady })
+  await serveIsolatedApplication(context, origin)
+  const names = ['CHECKPOINT_PRIVATE_STORED_NAME', 'CHECKPOINT_PRIVATE_CAPTURE_NAME', 'CHECKPOINT_PRIVATE_RENAME_NAME']
+  const snapshotProof = 'CHECKPOINT_PUBLIC_SNAPSHOT_PROOF', mutationProof = 'CHECKPOINT_PUBLIC_MUTATION_PROOF'
+  const unknown = 'CHECKPOINT_PRIVATE_UNKNOWN_RECORD', fileMarker = 'CHECKPOINT_PRIVATE_BACKUP_CONTENT'
+  await page.addInitScript(({ key, text }) => localStorage.setItem(key, text), {
+    key: CHECKPOINT_STORAGE_KEY,
+    text: exportCheckpoints({ ...emptyCheckpoints(), entries: [{ id: 'stored', name: names[0], capturedRevision: catalog.revision, profile: { ...initial, purchases: { [unknown]: { epoch: 0, active: false } } } }] }, catalog.revision)!,
+  })
+  await page.goto(`${origin}${appFixturePath}`)
+  await (await openProgress(page)).getByRole('button', { name: 'Progress checkpoints…', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Progress checkpoints', exact: true })
+  await expect(dialog.locator('.checkpoint-list')).toContainText(names[0])
+  await page.evaluate((proof) => {
+    const node = document.createElement('p'); node.id = 'checkpoint-public-proof'; node.textContent = proof
+    document.querySelector('dialog[open]')!.appendChild(node)
+  }, snapshotProof)
+  await waitForActive(page)
+  releaseRecorder()
+  const snapshot = await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 2 && JSON.stringify(event).includes(snapshotProof)))
+  expect(blockedReplayNodes(snapshot).some((node) => node.attributes.class.includes('checkpoint-panel') && !(node.childNodes?.length))).toBe(true)
+  await dialog.getByLabel('Name current checkpoint', { exact: true }).fill(names[1])
+  await dialog.getByRole('button', { name: 'Capture current progress', exact: true }).click()
+  await expect(dialog.getByRole('status', { name: 'Checkpoint storage and actions' })).toContainText('saved on this device')
+  await dialog.getByRole('button', { name: 'Rename checkpoint 2…', exact: true }).click()
+  await dialog.getByLabel('New checkpoint name', { exact: true }).fill(names[2])
+  await dialog.getByRole('button', { name: 'Save checkpoint name', exact: true }).click()
+  await expect(dialog.locator('.checkpoint-list')).toContainText(names[2])
+  await dialog.getByLabel('Progress checkpoints JSON backup', { exact: true }).setInputFiles({ name: 'private-checkpoints.json', mimeType: 'application/json', buffer: Buffer.from(fileMarker) })
+  await expect(dialog).toContainText('not a supported checkpoint collection')
+  await page.locator('#checkpoint-public-proof').evaluate((node, proof) => { node.textContent = proof }, mutationProof)
+  await page.locator('#checkpoint-public-proof').click()
+  const events = await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 3 && JSON.stringify(event).includes(mutationProof)))
+  const evidence = JSON.stringify({ submissions: capture.submissions, replay: events })
+  for (const marker of [...names, unknown, fileMarker, 'private-checkpoints.json']) expect(evidence.includes(marker), 'Checkpoint private content leaked into telemetry').toBe(false)
+  expect(capture.submissions.some((item) => /checkpoint/i.test(String(item.payload.name ?? '')))).toBe(false)
   expect(capture.unexpected).toEqual([])
 })
 
@@ -926,7 +1088,7 @@ test('a pending search uses current visible results and context without restarti
   await expect(page.locator('.results-heading')).toContainText('0 visible results')
   await page.clock.runFor(300)
   await other.evaluate(({ key, profile }) => localStorage.setItem(key, JSON.stringify(profile)), { key: profileKey, profile: { ...initial, showSpoilers: true } })
-  await expect(page.locator('.results-heading')).toContainText('16 visible results')
+  await expect(page.locator('.results-heading')).toContainText('17 visible results')
   await page.clock.runFor(200)
   await expect.poll(() => searches().length).toBe(1)
   expect(searches()[0].payload.data).toMatchObject({ query_length: '4-10', results: '6-20', spoilers: true })
@@ -1044,5 +1206,249 @@ test('unsaved progress opt-out preserves cancellation and exports current memory
   expect(await page.evaluate((key) => localStorage.getItem(key), preferenceKey)).toBe('disabled')
   expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), profileKey)).toEqual(initial)
   expect(capture.scriptRequests).toEqual([])
+  expect(capture.unexpected).toEqual([])
+})
+
+
+test('real recorder excludes transfer URL payloads, QR contents, links and replacement previews', async ({ page, context, baseURL }) => {
+  const origin = new URL(baseURL!).origin
+  let releaseRecorder!: () => void
+  const recorderReady = new Promise<void>((resolve) => { releaseRecorder = resolve })
+  const marker = 'SENTINEL-private-transfer-progress-27591'
+  const outgoing = { ...initial, purchases: { [marker]: { epoch: 0, active: false } } }
+  const incoming = { ...initial, epoch: 314159, purchases: { [marker]: { epoch: 2, active: false }, [catalog.startId]: { epoch: 314159, active: true } } }
+  const encoded = await encodeProgressTransfer(catalog, incoming, 'web')
+  if (!encoded.ok) throw new Error(encoded.error)
+  const link = progressTransferLink(encoded.token, origin, appFixturePath)
+  const capture = await installLocalRoutes(context, origin, { recorderReady })
+  await serveIsolatedApplication(context, origin)
+  await page.addInitScript(({ key, outgoing }) => localStorage.setItem(key, JSON.stringify(outgoing)), { key: profileKey, outgoing })
+  await page.goto(link)
+  await waitForActive(page)
+  const dialog = page.getByRole('dialog', { name: 'Transfer map progress', exact: true })
+  await expect(dialog.getByRole('heading', { name: 'Review transfer', exact: true })).toBeVisible()
+  expect(new URL(page.url()).hash).toBe('')
+  await expect(dialog).not.toContainText(marker)
+  const snapshotProof = 'TRANSFER-public-snapshot-proof-42816'
+  await dialog.evaluate((element, proof) => {
+    const publicNode = document.createElement('p'); publicNode.textContent = proof; element.appendChild(publicNode)
+  }, snapshotProof)
+  releaseRecorder()
+  const snapshot = await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 2 && JSON.stringify(event).includes(snapshotProof)))
+  expect(blockedReplayNodes(snapshot).some((node) => node.attributes.class.includes('progress-transfer') && !(node.childNodes?.length))).toBe(true)
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
+  await openProgress(page)
+  await page.getByRole('button', { name: 'Transfer to another device…', exact: true }).click()
+  await page.getByRole('button', { name: 'Create transfer snapshot', exact: true }).click()
+  await expect(page.getByRole('img', { name: 'Progress transfer QR code', exact: true })).toBeVisible()
+  const generatedLink = await page.getByRole('textbox', { name: 'Private transfer link', exact: true }).inputValue()
+  await page.evaluate((proof) => {
+    const button = document.createElement('button'); button.id = 'transfer-public-replay-proof'; button.textContent = proof
+    document.querySelector('dialog')!.appendChild(button)
+  }, publicMarker)
+  await page.locator('#transfer-public-replay-proof').click()
+  const events = await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 3 && JSON.stringify(event).includes(publicMarker)))
+  const evidence = JSON.stringify({ submissions: capture.submissions, replay: events })
+  for (const privateValue of [marker, encoded.token, generatedLink, '314159']) expect(evidence).not.toContain(privateValue)
+  expect(capture.unexpected).toEqual([])
+})
+
+test('transfer URL cleanup failure prevents tracker and recorder startup', async ({ page, context, baseURL }) => {
+  const origin = new URL(baseURL!).origin
+  const encoded = await encodeProgressTransfer(catalog, initial, 'native')
+  if (!encoded.ok) throw new Error(encoded.error)
+  const capture = await installLocalRoutes(context, origin)
+  await serveIsolatedApplication(context, origin)
+  await page.addInitScript(() => { history.replaceState = () => { throw new DOMException('Synthetic blocked transfer URL cleanup', 'SecurityError') } })
+  await page.goto(progressTransferLink(encoded.token, origin, appFixturePath))
+  await expect(page.getByRole('dialog').locator('.dialog-feedback')).toContainText('Tracking was kept off')
+  expect(capture.scriptRequests).toEqual([])
+  expect(capture.submissions).toEqual([])
+  expect(capture.unexpected).toEqual([])
+})
+
+for (const tracking of ['enabled', 'disabled'] as const) {
+  for (const outcome of ['valid', 'malformed', 'navigate away'] as const) {
+    test(`deferred catalog receives only the latest transfer ${outcome} with tracking ${tracking}`, async ({ page, context, baseURL }) => {
+      const origin = new URL(baseURL!).origin
+      const marker = 'SENTINEL-delayed-transfer-profile-61928'
+      const destination = { ...initial, epoch: 2, purchases: { [catalog.startId]: { epoch: 2, active: true } } }
+      const incoming = { ...initial, epoch: 7, purchases: { [catalog.startId]: { epoch: 7, active: true }, [marker]: { epoch: 3, active: false } } }
+      const older = await encodeProgressTransfer(catalog, { ...incoming, epoch: 8 }, 'native')
+      const latest = await encodeProgressTransfer(catalog, incoming, 'web')
+      if (!older.ok || !latest.ok) throw new Error('Synthetic delayed-transfer fixture failed')
+      const capture = await installLocalRoutes(context, origin)
+      await serveIsolatedApplication(context, origin)
+      let releaseCatalog!: () => void
+      const catalogReady = new Promise<void>((resolve) => { releaseCatalog = resolve })
+      await context.route(`${origin}${appFixturePath}catalog.json`, async (route) => {
+        await catalogReady
+        await route.fulfill({ json: catalog })
+      })
+      await page.addInitScript(({ preferenceKey, profileKey, tracking, destination }) => {
+        localStorage.setItem(preferenceKey, tracking); localStorage.setItem(profileKey, JSON.stringify(destination))
+      }, { preferenceKey, profileKey, tracking, destination })
+      const requests: { url: string; referrer: string | undefined }[] = []
+      page.on('request', (request) => requests.push({ url: request.url(), referrer: request.headers().referer }))
+      await page.goto(outcome === 'valid' ? `${origin}${appFixturePath}` : progressTransferLink(older.token, origin, appFixturePath))
+      await expect(page.getByRole('status')).toHaveText('Loading the native Ascension tree…')
+      expect(new URL(page.url()).hash).toBe('')
+      if (tracking === 'enabled') {
+        await waitForActive(page)
+        await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 2))
+      }
+      // Exercise supersession before either the catalog or Atlas exists. The
+      // early listener must run ahead of the production URL sanitizer.
+      for (const hash of ['#transfer=v1.invalid', `#transfer=${latest.token}`]) {
+        await page.evaluate((value) => { location.hash = value }, hash)
+        await expect.poll(() => new URL(page.url()).hash).toBe('')
+        await expect(page.getByRole('dialog')).toHaveCount(0)
+      }
+      if (outcome === 'malformed') {
+        await page.evaluate(() => { location.hash = '#transfer=v1.invalid' })
+        await expect.poll(() => new URL(page.url()).hash).toBe('')
+      } else if (outcome === 'navigate away') {
+        await page.evaluate(() => { location.hash = '#elsewhere' })
+        // Public-reference startup now cleans arbitrary addresses regardless
+        // of tracking preference; cancellation must survive that cleanup.
+        await expect.poll(() => new URL(page.url()).hash).toBe('')
+      }
+      releaseCatalog()
+      await expect(page.locator('.toolbar')).toBeVisible()
+      const receiver = page.getByRole('dialog', { name: 'Transfer map progress', exact: true })
+      if (outcome === 'navigate away') {
+        await expect(page.getByRole('dialog')).toHaveCount(0)
+      } else {
+        await expect(receiver).toBeVisible()
+        await expect(page.getByRole('dialog')).toHaveCount(1)
+        if (outcome === 'valid') {
+          await expect(receiver.getByRole('heading', { name: 'Review transfer', exact: true })).toBeFocused()
+          await expect(receiver.getByRole('row', { name: 'Ultra Ascensions 2 7', exact: true })).toBeVisible()
+        } else {
+          await expect(receiver.locator('.dialog-feedback')).toContainText('incomplete, corrupt or unsupported')
+          await expect(receiver.getByRole('button', { name: 'Apply transfer', exact: true })).toHaveCount(0)
+        }
+        await receiver.getByRole('button', { name: 'Cancel', exact: true }).click()
+        await expect(page.getByRole('dialog')).toHaveCount(0)
+      }
+      expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), profileKey)).toEqual(destination)
+      expect(await page.evaluate((key) => localStorage.getItem(key), preferenceKey)).toBe(tracking)
+      const evidence = JSON.stringify({ submissions: capture.submissions, replay: replayEvents(capture), requests })
+      for (const secret of [marker, older.token, latest.token, 'transfer=']) expect(evidence).not.toContain(secret)
+      if (tracking === 'disabled') { expect(capture.scriptRequests).toEqual([]); expect(capture.submissions).toEqual([]) }
+      expect(capture.unexpected).toEqual([])
+    })
+  }
+}
+test('continuing the final eligible suggestion reports the fresh all-owned reason once', async ({ page, context, baseURL }) => {
+  const origin = new URL(baseURL!).origin
+  const capture = await installLocalRoutes(context, origin, { recorderBody: '' })
+  await serveIsolatedApplication(context, origin)
+  const profile = { ...initial, purchases: Object.fromEntries(catalog.upgrades.filter((upgrade) => upgrade.id !== catalog.startId).map((upgrade) => [upgrade.id, { epoch: 0, active: true }])) }
+  await page.addInitScript(({ key, profile }) => localStorage.setItem(key, JSON.stringify(profile)), { key: profileKey, profile })
+  await page.goto(`${origin}${appFixturePath}`)
+  await expect(page.locator('.toolbar')).toBeVisible()
+  await waitForActive(page)
+  const reasons = () => capture.submissions.filter((submission) => submission.type === 'event' && submission.payload.name === 'recommendations_viewed').map((submission) => (submission.payload.data as Record<string, unknown>).reason)
+  await page.getByRole('button', { name: 'Next upgrade', exact: true }).click()
+  const suggestions = page.getByRole('dialog', { name: 'Suggested next upgrade', exact: true })
+  await expect(suggestions.locator('.recommendation-main')).toHaveAttribute('data-upgrade-id', catalog.startId)
+  await expect.poll(reasons).toEqual(['wiki'])
+  await suggestions.getByRole('button', { name: 'Record purchase…', exact: true }).click()
+  await page.getByRole('dialog', { name: 'Record purchase?', exact: true }).getByRole('button', { name: 'Apply and continue suggestions', exact: true }).click()
+  await expect(suggestions).toContainText('Every visible upgrade is already recorded as owned')
+  await expect.poll(reasons).toEqual(['wiki', 'all-owned'])
+  expect(capture.submissions.filter((submission) => submission.payload.name === 'recommendation_purchase_applied')).toHaveLength(1)
+  expect(capture.unexpected).toEqual([])
+})
+
+
+test('exact upgrade references keep native recorder URLs and referrers clean and suspend dirty live navigation', async ({ page, context, baseURL }) => {
+  const origin = new URL(baseURL!).origin
+  const capture = await installLocalRoutes(context, origin)
+  await serveIsolatedApplication(context, origin)
+  const hidden = catalog.upgrades.find((upgrade) => !visible.ids.has(upgrade.id))!
+  await page.goto(`${origin}${appFixturePath}?private=${secrets.url}#upgrade=${hidden.id}&catalog=${catalog.revision}`)
+  await expect(page.locator('.toolbar')).toBeVisible()
+  await expect(page.locator('.toast')).toContainText('unavailable under your current spoiler setting')
+  await waitForActive(page)
+  expect(page.url()).toBe(`${origin}${appFixturePath}`)
+  const events = await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 2))
+  const decoded = JSON.stringify({ submissions: capture.submissions, replay: events })
+  expect(decoded).not.toContain(hidden.id)
+  expect(decoded).not.toContain(secrets.url)
+  expect(capture.submissions.filter((item) => ['record', 'heatmap', 'event'].includes(item.type)).every((item) => !String(item.payload.url).includes('upgrade=') && !String(item.payload.url).includes('#'))).toBe(true)
+  const before = capture.submissions.filter((item) => ['record', 'heatmap'].includes(item.type)).length
+  await page.evaluate(({ id, revision }) => { location.hash = `upgrade=${id}&catalog=${revision}` }, { id: catalog.startId, revision: catalog.revision })
+  await expect(page.locator('.details h2')).toHaveText('Permanent Slayer')
+  await expect.poll(() => page.url()).toBe(`${origin}${appFixturePath}`)
+  const submitted = capture.submissions.filter((item) => ['record', 'heatmap'].includes(item.type)).length
+  expect(submitted).toBe(before)
+  await page.evaluate(() => { document.body.appendChild(Object.assign(document.createElement('p'), { textContent: 'SENTINEL-after-reference-suspension' })) })
+  // The real recorder rereads the guarded session cache on flush. Existing
+  // URL privacy tests cover the longer buffering window; this directly
+  // verifies its final public accessor cannot resume this document.
+  expect(await page.evaluate(() => (window as Window & { umami?: { getSession?: () => { cache?: string } } }).umami?.getSession?.().cache)).toBeUndefined()
+
+})
+
+test('reference sheet selections and full outgoing document stay blocked in actual recorder evidence', async ({ page, context, baseURL }) => {
+  const origin = new URL(baseURL!).origin
+  let releaseRecorder!: () => void
+  const recorderReady = new Promise<void>((resolve) => { releaseRecorder = resolve })
+  const capture = await installLocalRoutes(context, origin, { recorderReady })
+  await serveIsolatedApplication(context, origin)
+  await page.goto(`${origin}${appFixturePath}`); await expect(page.locator('.toolbar')).toBeVisible()
+  await page.locator(`.react-flow__node[data-id="${catalog.startId}"]`).click()
+  const expand = page.getByRole('button', { name: 'Show details', exact: true }); if (await expand.isVisible()) await expand.click()
+  await page.getByRole('button', { name: 'Add to reference sheet', exact: true }).click()
+  const menu = page.getByRole('button', { name: 'Map options', exact: true })
+  if (await menu.isVisible()) await menu.click(); else await page.getByRole('button', { name: 'Map view…', exact: true }).click()
+  await page.getByRole('dialog', { name: 'Map options', exact: true }).getByRole('button', { name: 'Reference sheet', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Upgrade reference sheet', exact: true })
+  await dialog.getByRole('button', { name: 'Review outgoing sheet', exact: true }).click()
+  const marker = 'REFERENCE_SHEET_PRIVATE_SNAPSHOT'
+  const snapshotProof = 'REFERENCE_SHEET_PUBLIC_SNAPSHOT'
+  const mutationProof = 'REFERENCE_SHEET_PUBLIC_MUTATION'
+  await dialog.locator('.reference-sheet-panel').evaluate((panel, marker) => { const node = document.createElement('p'); node.textContent = marker; panel.appendChild(node) }, marker)
+  await dialog.evaluate((element, proof) => { const node = document.createElement('p'); node.id = 'reference-sheet-proof'; node.textContent = proof; element.appendChild(node) }, snapshotProof)
+  await waitForActive(page); releaseRecorder()
+  const snapshot = await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 2 && JSON.stringify(event).includes(snapshotProof)))
+  expect(blockedReplayNodes(snapshot).some((node) => node.attributes.class.includes('reference-sheet-panel') && !(node.childNodes?.length))).toBe(true)
+  await page.locator('#reference-sheet-proof').evaluate((node, proof) => { node.textContent = proof }, mutationProof)
+  await page.locator('#reference-sheet-proof').click()
+  const events = await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 3 && JSON.stringify(event).includes(mutationProof)))
+  const evidence = JSON.stringify({ submissions: capture.submissions, replay: events })
+  expect(evidence).not.toContain(marker); expect(evidence).not.toContain('srcdoc'); expect(evidence).not.toContain('This bounded sheet contains')
+  expect(capture.submissions.some((submission) => String(submission.payload.name).includes('reference'))).toBe(false)
+  expect(capture.unexpected).toEqual([])
+})
+
+test('hypothetical UA names, stage choices and results stay blocked in real recorder snapshots and mutations', async ({ page, context, baseURL }) => {
+  const origin = new URL(baseURL!).origin
+  let releaseRecorder!: () => void
+  const recorderReady = new Promise<void>((resolve) => { releaseRecorder = resolve })
+  const capture = await installLocalRoutes(context, origin, { recorderReady })
+  await serveIsolatedApplication(context, origin)
+  const name = 'ROADMAP_PRIVATE_NAME_74621', query = 'ROADMAP_PRIVATE_QUERY_63928', snapshotProof = 'ROADMAP_PUBLIC_SNAPSHOT', mutationProof = 'ROADMAP_PUBLIC_MUTATION'
+  await page.goto(`${origin}${appFixturePath}`); await expect(page.locator('.toolbar')).toBeVisible()
+  const compact = page.getByRole('button', { name: 'Map options', exact: true })
+  await (await compact.isVisible() ? compact : page.getByRole('button', { name: 'Map view…', exact: true })).click()
+  await page.getByRole('dialog', { name: 'Map options', exact: true }).getByRole('button', { name: 'Plan hypothetical UAs…', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Hypothetical UA roadmap', exact: true })
+  await dialog.getByRole('textbox', { name: 'Plan name', exact: true }).fill(name)
+  const picker = dialog.locator('.roadmap-picker'); await picker.locator('summary').click(); const input = picker.getByRole('searchbox')
+  await input.fill('Legendary Belt'); await picker.locator(`[data-roadmap-choice="${catalog.upgrades.find((node) => node.title === 'Legendary Belt')!.id}"]`).click(); await dialog.getByRole('radio').first().check()
+  await dialog.evaluate((element, proof) => { const node = document.createElement('p'); node.id = 'roadmap-replay-proof'; node.textContent = proof; element.appendChild(node) }, snapshotProof)
+  await waitForActive(page); releaseRecorder()
+  const snapshot = await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 2 && JSON.stringify(event).includes(snapshotProof)))
+  expect(blockedReplayNodes(snapshot).some((node) => node.attributes.class.includes('ua-roadmap') && !node.childNodes?.length)).toBe(true)
+  await picker.locator('summary').click(); await input.fill(query)
+  await page.locator('#roadmap-replay-proof').evaluate((node, proof) => { node.textContent = proof }, mutationProof); await page.locator('#roadmap-replay-proof').click()
+  const events = await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 3 && JSON.stringify(event).includes(mutationProof)))
+  const evidence = JSON.stringify({ submissions: capture.submissions, replay: events })
+  for (const privateText of [name, query, 'Exact purchase sum across stages', 'Explicit OR choices', 'Intend route 1 for this stage']) expect(evidence).not.toContain(privateText)
+  expect(await page.evaluate((key) => localStorage.getItem(key), profileKey)).toBeNull()
+  expect(capture.submissions.some((entry) => /roadmap|purchase|milestone/.test(String(entry.payload.name)))).toBe(false)
   expect(capture.unexpected).toEqual([])
 })

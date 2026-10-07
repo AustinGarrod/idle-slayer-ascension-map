@@ -88,6 +88,8 @@ exposes its item control. **Show spoilers** is the explicit first-entry route
 for those milestones. This conservative policy avoids inventing an earlier
 story event or an Ultra Ascension gate absent from the native reveal logic.
 
+The catalog retains the legacy `grants` field name for these four conditional-retention rules. It represents preservation of existing purchases, never a separate ownership state or an award of an absent target.
+
 ## English descriptions and sprites
 
 Titles and text originate in the game's `en-US` localization TextAsset.
@@ -105,6 +107,8 @@ receipt records each reviewed sprite's native object reference and SHA-256.
 No wiki data or wiki images were needed for this build.
 
 ## Reproduce and refresh on Windows
+
+Start with the [ordered catalog-refresh runbook](catalog-refresh.md). It distinguishes unchanged-build reproduction from new-build investigation and coordinates native, sprite, recommendation, save-format and release evidence before promotion. The commands below remain the detailed catalog/receipt promotion reference.
 
 Follow [`scripts/extract/README.md`](../scripts/extract/README.md) for the exact
 Python environment, asset extraction, normalization and sprite review commands.

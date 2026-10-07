@@ -1,5 +1,5 @@
 import { decodeGameSave } from './save-codec'
-import { permanentGrants } from './rules'
+import { conditionallyRetainedPurchases } from './rules'
 import { exportProfileBackup } from './storage'
 import type { Catalog, Profile } from './types'
 
@@ -108,7 +108,7 @@ export function importGameSave(catalog: Catalog, currentProfile: Profile, bytes:
     if (state === 1) { profile.milestones[item.id] = true; summary.recordedMilestones++ }
   }
   if (epoch > 0) {
-    const retained = permanentGrants(catalog, profile)
+    const retained = conditionallyRetainedPurchases(catalog, profile)
     for (const node of catalog.upgrades) {
       const purchase = profile.purchases[node.id]
       if (purchase?.active && (node.retention !== 'repeat' || retained.has(node.id))) purchase.epoch = epoch - 1

@@ -8,11 +8,21 @@ Three new arrangements received an independent spacing and interaction review af
 
 1. **Dual Atlas — selected:** Web orders prerequisite paths left to right; Game retains familiar native positions. A compact toolbar keeps the two choices visible. The review found that 320–359 px screens cannot accommodate a footer and three toolbar rows; compact screens now use two rows, a Map options dialog and a docked summary. Short landscape screens use one toolbar row and a side inspector, preserving a useful canvas.
 2. **Branch lens:** Focus the map on a selected upgrade, its ancestors and immediate dependents. The review found clearer paths but an additional navigation state that needs an explicit return to the whole map. The implemented Atlas borrows incident-path emphasis and the expandable summary, while keeping the whole visible graph available.
-3. **Upgrade navigator:** A visible-upgrade list becomes the primary navigation with a Map/List switch. The review found this strong for keyboards and narrow phones, but permanent list and detail rails would crowd tablets. Atlas retains title search and direct neighbor buttons without adding another browsing mode.
+3. **Upgrade navigator:** A visible-upgrade list becomes the primary navigation with a Map/List switch. The review found this strong for keyboards and narrow phones, but permanent list and detail rails would crowd tablets. Atlas retains on-demand title/effect discovery and direct neighbor buttons without adding another browsing mode.
 
 The chosen design uses directed paths with arrowheads, gold dashed incoming connections and magenta solid outgoing connections for the selected upgrade. Unrelated cards and paths become less prominent but remain available. Connected from and Leads to buttons navigate to visible neighbors; the exact purchase AND/OR and activation rules remain separate text. Web routing uses visible-only layered ranks and crossing minimization. Hidden nodes contribute neither spaces nor routes. Game's later native presentation refinement is described below.
 
+The search overlay also browses all visible upgrades with an empty query and a Progress state filter. Its scrollable list has no result cap; the existing count/close header stays reachable while scrolling. Native Tab focus keeps each result title clear of that measured sticky header, including tall rows at enlarged browser text sizes. Rows pair state text and symbols with exact costs and short native effect excerpts, with stable IDs for duplicate visible titles. Available means the native purchase and reveal gates are recorded; no SP balance is inferred. Controls stay inside the on-demand overlay so the ordinary toolbar and map retain their space. Filters and search affect discovery only, and hidden upgrades never contribute rows, counts or duplicate-title hints.
+
+The exploration trail stays in an on-demand **Recent upgrades** dialog, reached through Map view/options or expanded connection details. Its newest-first list remembers at most 20 distinct inspected IDs during this visit. Visible duplicate titles include their native cost and stable ID. Selection returns through the existing inspector/camera behavior; no permanent phone control row is added. Shared visibility immediately removes hidden entries, and progress Undo remains separate.
+
+## Named progress checkpoints
+
+Named progress checkpoints use an optional native dialog reached from Progress. Four compact reference cards show deliberate names and captured catalog context, followed by explicit capture, rename, delete and portable collection controls. First/Second radio groups support current-to-reference or reference-to-reference comparisons. They add no map rail and never turn a snapshot into another editable profile. Flexible actions, wrapped names and a single-column narrow layout retain 44 px targets with ordinary and actual enlarged browser text. The comparison labels ownership separately from activation and resets, uses only the current revealed universe, and makes unknown operation context explicit. Names, snapshots and controls stay in a private replay-blocked region.
+
 ## Native Game presentation refinement
+
+Large SP costs use an exact coefficient and visible power of ten instead of an ambiguous suffix. Full grouped values remain available to assistive technology and in titles. The inspector gives cost its own readable header row; expanded details show the complete value with breaks only between comma groups, a stable ID and copy/manual-copy controls. Cost notation changes neither native values nor eligibility.
 
 Three Game-only concepts received an independent spacing and accessibility review after feedback that the large cards changed the game's appearance and obscured its lines:
 
@@ -29,6 +39,18 @@ The layout buttons read Game Layout and Detailed Layout, with Game first. At the
 Larger browser text grows the toolbar rows and layout-button columns instead of clipping their labels. Font-relative breakpoints switch narrow views to three rows for identity/menu, layout choices, and search/Next upgrade. The search icon's inset also scales with text. When the enlarged toolbar and usable map area exceed the viewport height, the page can scroll vertically; controls and labels stay within its width. Browser acceptance uses an actual 32px Chromium default font at 320×568, with both layouts, rather than a CSS font override. Default-size portrait and landscape arrangements remain unchanged.
 
 Compact details show the upgrade's icon, title, cost, status and purchase action. Show details expands the internally scrollable description, requirements, connections and sources. The inspector occupies an actual layout row or column so selected nodes cannot center behind it. The full footer moves into Map options. Four directional camera buttons appear only after opening Map navigation, while zoom and return-to-start remain immediately available. Browser acceptance includes 320×568 portrait, 844×390 landscape, 568×320 and 375×350 short windows, compact/expanded details, internal scrolling and selected-node hit testing. Short windows use measured available space: 480–639px landscape widths place details beside the canvas, and narrower views reduce the map reservation so dismissal and purchase actions remain reachable. Selection fits the smaller canvas and uses space beside camera controls when needed; normal portrait allocation remains intact.
+
+## Visible map overview
+
+Overview is an on-demand camera mode, reached through Map options or the compact desktop Map view button. It temporarily hides the inspector so the visible graph can use the existing canvas; selection and inspector expansion are retained for return. It shows the complete visible node shape with normal branch contrast and a short orientation caption. Nodes can become very small, so the existing return-to-start camera slot changes to Return to inspection while a selection exists, or Return to previous view otherwise. Refocus selected upgrade in Map options remains available during ordinary exploration.
+
+This adds no permanent minimap, camera button or phone panel. The four existing camera targets keep their footprint. Overview leaves room below its caption and above camera controls, fits only current shared visible frames, and uses the current reduced-motion preference. Refocus restores the existing useful node scale and responsive inspection insets. Spoiler changes retain the exact camera instead of widening or resetting the view automatically.
+
+## Saved upgrade comparison
+
+Saved upgrade comparison is a separate optional reference dialog, reached from Map options or Compare this upgrade in expanded details. It holds four deliberately selected visible upgrades across owned, pending, blocked and available states. Two columns at roomy desktop widths become a single readable column on narrow or enlarged-text views. Each card keeps native benefit, exact cost, state, separate purchase/reveal gates, activation and retention alongside source/version context. Stable IDs distinguish same-title entries. Existing Show on map and requirement-review routes permit inspection without a purchase action in the comparison.
+
+An inline full-list picker searches visible titles/effects. At capacity the player explicitly chooses the entry to replace, or removes it; hidden references do not consume displayed capacity or disclose counts. Missing IDs show a generic unavailable card. Export, restore and storage-conflict recovery remain local/private, visibly separate from progress backup and Undo. The native dialog and single scroll surface keep controls reachable with ordinary and actual enlarged browser text; card/picker buttons wrap with at least 44px targets. No permanent rail, notes, winner, goals, stacked benefit or SP balance is added.
 
 ## Next-upgrade guidance
 
@@ -126,6 +148,8 @@ Avoid broad gradients, glossy surfaces and oversized decoration. Use restrained 
 
 Ensure readable text contrast and an obvious keyboard focus ring. Give touch controls at least a 44-pixel target. Provide keyboard access to search results, upgrade details and progress actions; offer map navigation controls that do not depend only on dragging or a scroll wheel.
 
+Keyboard graph exploration has one Tab stop. Arrow keys browse previous/next visible upgrades in catalog order, with Home/End shortcuts and the existing selection keys. Focus centers the upgrade using the map's camera insets and retains the gold ring. A focus-revealed shortcut allows direct camera access before entering the graph; Tab and Shift+Tab leave the graph immediately. Its brief instructions and the Keyboard map controls dialog explain the order, exits and screen-reader interaction mode. The shortcut disappears after focus leaves it, preserving the ordinary map layout. Keyboard exploration closes the directional pan panel so focused upgrades remain usable beside camera controls even in a short expanded-inspector canvas; Map navigation reopens all pan actions.
+
 Keep motion brief and purposeful, such as centering a selected node. Respect reduced-motion preferences by making camera changes immediate. Do not add continuous animation behind the map.
 
 ## Acceptance checklist
@@ -136,3 +160,24 @@ Keep motion brief and purposeful, such as centering a selected node. Respect red
 - Search and detail panels are usable on narrow screens and at increased text size.
 - A spoiler-hidden screen exposes only content allowed by the shared visibility rules.
 - Added fonts, icons and wiki text have recorded provenance and attribution.
+
+
+Public reference copying belongs to expanded upgrade details. Its optional manual text field and buttons wrap at enlarged browser fonts, preserve 44px controls and never add permanent map rails. Opening a reference focuses visible details; hidden or missing targets receive a fixed generic announcement without changing spoiler choice. Page title and preview metadata remain generic.
+
+## Portable reference selection
+
+A secondary action in expanded details adds an explicit visible upgrade to a four-entry visit-only sheet. Map options opens the private selection and complete outgoing document preview. Wrapped 44px controls support removal, clearing, review, saving and a separate print tab without adding a persistent map rail. The self-contained document uses readable native text, full exact costs and grouped visible requirements; it labels the excerpt limits and version. No private progress or inferred routes enter the sheet.
+
+## Optional forward impact
+
+A private single-event analysis stays in the existing independently scrolling dialog. Entry lives after the main Purchase actions in expanded details, or beside an unrecorded visible item in Milestones. Compact details hide the auxiliary action until expanded, retaining the ordinary Purchase keyboard path and useful map space. Native before/after gate states, stable IDs and exact costs distinguish affected upgrades; optional requirement explanations preserve visible AND/OR grouping. Rows expand in batches and text wraps at enlarged browser defaults. Opening or closing analysis changes no progress, selection or camera, and another menu, preview or external progress change invalidates it.
+
+## Optional player intentions
+
+Prerequisite-route comparison stays in an optional native dialog, with its inspector entry after the purchase controls and hidden alongside compact detail content. Four current-visible target slots, completion modes and explicit item assumptions precede bounded route cards. OR alternatives, shared IDs, recorded requirements and blockers remain textual; no permanent rail or purchase action is added. All inputs, choices, route annotations and feedback are replay-blocked. Native Tab keeps picker titles clear of the measured dialog heading, including tall cost/ID rows with enlarged text.
+
+Goals stay in the existing scrollable Progress dialog, with entry from expanded upgrade details. No permanent rail competes with the map or selected inspector. A compact completion selector distinguishes acquisition, activation and a repeat-purchase rebuild; full explanatory wording stays alongside it. Current visible rows pair stable ID/exact cost with status and native requirement inspection, explicit ordering and retirement controls. Goal panels, choices and recovery feedback are excluded from replay. Intentions never become actual progress or a recommended optimal build.
+
+## Optional hypothetical UA roadmap
+
+A private native dialog contains two deliberate sequence names and an optional side-by-side summary that wraps to one column on narrow screens. Ordered purchase-stage cards separate targets/completion modes, hypothetical item receipts, explicit OR routes, pre-UA eligibility and after-reset activation/retention/clearing. All controls remain on the dialog's one scroll surface, with wrapped 44px targets and native Tab title clearance at actual enlarged browser text. The expanded-details entry follows Purchase inside the existing detail-secondary region; Map options supplies the other entry. No map rail or actual purchase/reset action is added. Names, choices and results are blocked from replay, and closing discards the open comparison.
