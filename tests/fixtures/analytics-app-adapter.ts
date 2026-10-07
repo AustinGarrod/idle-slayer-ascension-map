@@ -1,5 +1,6 @@
 import { createAnalyticsController } from '../../src/analytics'
 export type { AnalyticsContext, AnalyticsEventName, AnalyticsOperation, AnalyticsProperties, TrackingStatus } from '../../src/analytics'
+export { ANALYTICS_PREFERENCE_KEY } from '../../src/analytics'
 
 // The browser test's in-memory app build aliases only application imports to this
 // module. The normal app build never imports it or enables tracking on localhost.

@@ -425,6 +425,76 @@ test('unavailable tracker is optional and leaves the isolated page usable', asyn
   expect(capture.unexpected).toEqual([])
 })
 
+for (const startup of ['loading', 'network-error'] as const) {
+  test(`startup privacy controls remain usable during ${startup}`, async ({ page, context, baseURL }, testInfo) => {
+    if (testInfo.project.name === 'mobile') await page.setViewportSize({ width: 320, height: 568 })
+    const origin = new URL(baseURL!).origin
+    const capture = await installLocalRoutes(context, origin)
+    await serveIsolatedApplication(context, origin)
+    let releaseCatalog!: () => void
+    const catalogReady = new Promise<void>((resolve) => { releaseCatalog = resolve })
+    await context.route(`${origin}${appFixturePath}catalog.json`, async (route) => {
+      if (startup === 'loading') await catalogReady
+      await route.fulfill({ status: 503, body: 'Synthetic catalog outage' })
+    })
+    await page.goto(`${origin}${fixturePath}`)
+    const storedProfile = JSON.stringify(initial)
+    await page.evaluate(({ key, profile }) => localStorage.setItem(key, profile), { key: profileKey, profile: storedProfile })
+    await page.goto(`${origin}${appFixturePath}`)
+    await waitForActive(page)
+    if (startup === 'loading') await expect(page.getByRole('status')).toHaveText('Loading the native Ascension tree…')
+    else await expect(page.getByRole('button', { name: 'Try again', exact: true })).toBeVisible()
+    await expect(page.locator('.startup-disclosure')).toContainText('self-hosted Umami')
+    const privacy = page.locator('details').filter({ has: page.locator('summary').filter({ hasText: 'Privacy & tracking' }) })
+    await privacy.locator('summary').focus()
+    await page.keyboard.press('Enter')
+    const disable = privacy.getByRole('button', { name: 'Disable tracking and reload', exact: true })
+    await expect(disable).toBeVisible()
+    await disable.scrollIntoViewIfNeeded()
+    await expect(disable).toBeInViewport()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Startup disclosure overflows horizontally').toBe(true)
+    const firstScriptRequests = capture.scriptRequests.length
+    await Promise.all([page.waitForEvent('load'), disable.click()])
+    expect(await page.evaluate((key) => localStorage.getItem(key), preferenceKey)).toBe('disabled')
+    expect(await page.evaluate((key) => localStorage.getItem(key), profileKey)).toBe(storedProfile)
+    expect(capture.scriptRequests).toHaveLength(firstScriptRequests)
+    expect(await page.evaluate(() => (window as unknown as { analyticsHarness: { getTrackingStatus: () => { enabled: boolean; active: boolean } } }).analyticsHarness.getTrackingStatus())).toMatchObject({ enabled: false, active: false })
+    await privacy.locator('summary').click()
+    await expect(privacy.getByRole('button', { name: 'Enable tracking and reload', exact: true })).toBeVisible()
+    releaseCatalog()
+    await expect(page.getByRole('button', { name: 'Try again', exact: true })).toBeVisible()
+    expect(capture.unexpected).toEqual([])
+  })
+}
+
+test('startup privacy disclosure refreshes cross-tab tracking status while the catalog is pending', async ({ page, context, baseURL }) => {
+  const origin = new URL(baseURL!).origin
+  const capture = await installLocalRoutes(context, origin)
+  await serveIsolatedApplication(context, origin)
+  let releaseCatalog!: () => void
+  const catalogReady = new Promise<void>((resolve) => { releaseCatalog = resolve })
+  await context.route(`${origin}${appFixturePath}catalog.json`, async (route) => {
+    await catalogReady
+    await route.fulfill({ status: 503, body: 'Synthetic catalog outage' })
+  })
+  await page.goto(`${origin}${appFixturePath}`)
+  await waitForActive(page)
+  const privacy = page.locator('details')
+  await privacy.locator('summary').click()
+  await expect(privacy.getByRole('status')).toHaveText('Usage analytics and recording are enabled for this visit.')
+  const otherTab = await context.newPage()
+  await otherTab.goto(`${origin}${fixturePath}`)
+  await otherTab.evaluate((key) => localStorage.setItem(key, 'disabled'), preferenceKey)
+  await expect(privacy.getByRole('status')).toHaveText('Usage analytics and recording are disabled.')
+  await privacy.locator('summary').click()
+  await otherTab.evaluate((key) => localStorage.setItem(key, 'enabled'), preferenceKey)
+  await privacy.locator('summary').click()
+  await expect(privacy.getByRole('status')).toContainText('Tracking remains off in this tab')
+  await expect(privacy.getByRole('button', { name: 'Enable tracking and reload', exact: true })).toBeVisible()
+  releaseCatalog()
+  expect(capture.unexpected).toEqual([])
+})
+
 test('catalog parsing errors show only fixed public wording in the actual recorded application', async ({ page, context, baseURL }) => {
   const origin = new URL(baseURL!).origin
   const capture = await installLocalRoutes(context, origin)

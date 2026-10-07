@@ -201,6 +201,8 @@ dialog > button { margin: 6px 8px 0 0; }
 .loading { width: min(640px, calc(100% - 32px)); margin: 15svh auto; padding: 24px; border: 1px solid var(--frame); background: var(--surface); }
 .loading h1 { color: var(--bright-gold); font-size: .875rem; line-height: 1.8; }
 .loading p { color: var(--muted); }
+.startup-privacy { margin-top: 20px; }
+.startup-privacy summary { min-height: 44px; padding: 12px; border: 1px solid var(--frame); color: var(--bright-gold); cursor: pointer; }
 
 /* Compact chrome also applies to short landscape windows. */
 @media (max-width: 1100px), (max-height: 540px) {
