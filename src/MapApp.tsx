@@ -448,7 +448,8 @@ function Atlas({ catalog }: { catalog: Catalog }) {
   }
   function previewRemoval(id: string, milestone = false) {
     const result = planRemoval(catalog, profile, id, milestone)
-    setPreview({ operation: milestone ? 'milestone_removal' : 'removal', upgradeId: milestone ? undefined : id, milestoneId: milestone ? id : undefined, title: milestone ? 'Remove milestone?' : 'Remove purchase?', text: `This clears ${result.removed.length} purchase${result.removed.length === 1 ? '' : 's'} that would lose their dependency path. Valid alternate paths and earlier retained ownership stay intact.`, profile: result.profile, changes: result.removed })
+    const changes = result.removed.filter((changedId) => visible.ids.has(changedId))
+    setPreview({ operation: milestone ? 'milestone_removal' : 'removal', upgradeId: milestone ? undefined : id, milestoneId: milestone ? id : undefined, title: milestone ? 'Remove milestone?' : 'Remove purchase?', text: `This clears ${changes.length} visible purchase${changes.length === 1 ? '' : 's'} that would lose their dependency path. Valid alternate paths and earlier retained ownership stay intact. The change applies to the entire profile. Lists and counts show only currently visible upgrades.`, profile: result.profile, changes })
   }
   function previewAstralActivation(id: string) {
     const result = planAstralActivation(catalog, profile, id)
@@ -459,7 +460,9 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     const result = planUltraAscension(catalog, profile)
     if (!result) { setMessage(profile.epoch >= MAX_PROFILE_EPOCH ? 'The supported Ultra Ascension count limit has been reached. Progress was not changed; your current backup remains usable.' : `Ultra Ascension requires: ${label(catalog.ultraAscension)}.`); return }
     setMenu(null)
-    setPreview({ operation: 'ultra_ascension', title: 'Ultra Ascend?', text: `Start epoch ${result.profile.epoch}. Clear ${result.cleared.length} repeat purchases, activate ${result.activated.length} Astral locks, and retain ${result.granted.length} purchased grant targets. Keep Astral ownership and milestones.`, profile: result.profile, groups: [{ label: 'Repeat purchases cleared', ids: result.cleared }, { label: 'Astral locks activated', ids: result.activated }, { label: 'Purchased grant targets retained', ids: result.granted }] })
+    const groups = [{ label: 'Repeat purchases cleared', ids: result.cleared }, { label: 'Astral locks activated', ids: result.activated }, { label: 'Purchased grant targets retained', ids: result.granted }]
+      .map((group) => ({ ...group, ids: group.ids.filter((id) => visible.ids.has(id)) }))
+    setPreview({ operation: 'ultra_ascension', title: 'Ultra Ascend?', text: `Start epoch ${result.profile.epoch}. Clear ${groups[0].ids.length} visible repeat purchases, activate ${groups[1].ids.length} visible Astral locks, and retain ${groups[2].ids.length} visible purchased grant targets. Keep Astral ownership and milestones. The change applies to the entire profile. Lists and counts show only currently visible upgrades.`, profile: result.profile, groups })
   }
   function backup(): boolean {
     const result = exportProfileBackup(profile)
