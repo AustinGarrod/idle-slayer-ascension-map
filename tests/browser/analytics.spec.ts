@@ -466,8 +466,10 @@ test('real recorder proves moderate input masking, blocking and safe application
     controller.trackEvent('upgrade_selected', { upgrade_id: secrets.unknown, source: 'map' })
     controller.trackEvent('runtime_error', { reason: 'runtime', message: secrets.error })
   }, { secrets, visibleId: catalog.startId })
-  await expect.poll(() => capture.submissions.some((item) => item.type === 'heatmap' && Array.isArray(item.payload.events) && item.payload.events.some((event: { type: string }) => event.type === 'click'))).toBe(true)
-  const events = await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 3 && event.data?.source === 5))
+  const events = await waitForReplayEvents(capture, (events) =>
+    events.some((event) => event.type === 3 && event.data?.source === 5)
+    && capture.submissions.some((item) => item.type === 'heatmap' && Array.isArray(item.payload.events)
+      && item.payload.events.some((event: { type: string }) => event.type === 'click')))
   expect(events.some((event) => event.type === 2 && JSON.stringify(event).includes(publicMarker))).toBe(true)
   expect(events.some((event) => event.type === 2 && JSON.stringify(event).includes(firstUpgrade.title))).toBe(true)
   expect(events.some((event) => event.type === 3 && event.data?.source === 5 && typeof event.data.text === 'string' && /^\*+$/.test(event.data.text))).toBe(true)
