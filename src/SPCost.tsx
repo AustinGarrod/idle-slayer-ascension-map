@@ -29,7 +29,7 @@ export function ExactCostDetails({ value, upgradeId }: { value: string; upgradeI
     {presentCost(value).scientific && <p>Compact costs use powers of ten. Every displayed digit is exact; no rounding is used.</p>}
     <small>Upgrade ID: {upgradeId}</small>
     <button onClick={() => void copyCost()}>Copy exact cost</button><small>Copies digits without separators.</small>
-    <p role="status">{copy === 'copied' ? 'Exact cost copied.' : copy === 'manual' ? 'Copy unavailable. Select the exact digits below and copy them manually.' : ''}</p>
+    <p role="status" aria-label="Exact cost copy feedback">{copy === 'copied' ? 'Exact cost copied.' : copy === 'manual' ? 'Copy unavailable. Select the exact digits below and copy them manually.' : ''}</p>
     {copy === 'manual' && <textarea ref={manual} aria-label="Exact cost digits" readOnly value={value} onFocus={() => manual.current?.select()} />}
   </section>
 }
