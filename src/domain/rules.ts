@@ -140,10 +140,7 @@ export function planRemoval(catalog: Catalog, original: Profile, id: string, mil
   return { profile, removed }
 }
 
-export function planUltraAscension(catalog: Catalog, original: Profile) {
-  if (original.epoch >= MAX_PROFILE_EPOCH || !satisfies(catalog.ultraAscension, original)) return null
-  const profile = structuredClone(original)
-  const cleared: string[] = []
+function activateAstralLocks(catalog: Catalog, profile: Profile): string[] {
   const activated: string[] = []
   for (const node of catalog.upgrades) {
     const purchase = profile.purchases[node.id]
@@ -153,6 +150,21 @@ export function planUltraAscension(catalog: Catalog, original: Profile) {
       activated.push(node.id)
     }
   }
+  return activated
+}
+
+/** Describe existing targets retained after the reset's native activation phase. */
+export function retainedPurchasesOnReset(catalog: Catalog, original: Profile): Set<string> {
+  const profile = structuredClone(original)
+  activateAstralLocks(catalog, profile)
+  return permanentGrants(catalog, profile)
+}
+
+export function planUltraAscension(catalog: Catalog, original: Profile) {
+  if (original.epoch >= MAX_PROFILE_EPOCH || !satisfies(catalog.ultraAscension, original)) return null
+  const profile = structuredClone(original)
+  const cleared: string[] = []
+  const activated = activateAstralLocks(catalog, profile)
   const retained = permanentGrants(catalog, profile)
   for (const node of catalog.upgrades) {
     if (profile.purchases[node.id] && node.retention === 'repeat' && !retained.has(node.id)) {
