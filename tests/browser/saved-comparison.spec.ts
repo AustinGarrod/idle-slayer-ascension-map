@@ -249,6 +249,29 @@ test('dirty external races keep memory and require fresh deliberate recovery', a
   await other.close()
 })
 
+test('profile conflict recovery replaces the comparison modal and preserves its saved reference', async ({ page, context }) => {
+  await seed(page, initial, [ordinary[1].id])
+  await page.addInitScript((key) => {
+    const original = Storage.prototype.setItem
+    Storage.prototype.setItem = function (name, value) { if (name === key) throw new DOMException('Synthetic profile write refusal'); return original.call(this, name, value) }
+  }, PROFILE_STORAGE_KEY)
+  await page.goto('./')
+  await page.getByRole('button', { name: 'Return to start', exact: true }).click()
+  await page.getByRole('button', { name: 'Record purchase…', exact: true }).click()
+  await page.getByRole('button', { name: 'Apply purchases', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('could not be saved')
+  const reference = await stored(page), dialog = await open(page)
+  const other = await context.newPage(); await other.goto('./')
+  await other.evaluate(({ key, profile }) => localStorage.setItem(key, JSON.stringify(profile)), { key: PROFILE_STORAGE_KEY, profile: { ...initial, showSpoilers: true } })
+  await dialog.getByRole('button', { name: 'Review progress conflict', exact: true }).click()
+  await expect(page.locator('dialog[open]')).toHaveCount(1)
+  const recovery = page.getByRole('dialog', { name: 'Review progress conflict', exact: true })
+  await expect(recovery).toBeVisible()
+  await recovery.getByRole('button', { name: 'Cancel', exact: true }).click()
+  expect(await stored(page)).toBe(reference)
+  await other.close()
+})
+
 test('late comparison file reads cannot reopen a closed or changed reference', async ({ page }) => {
   await seed(page)
   await page.addInitScript(() => {
