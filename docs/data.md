@@ -131,6 +131,17 @@ installation. Unknown native IDs from prior profiles must remain in backups and
 local progress when the catalog changes. Publishing remains subject to the
 implementation plan's complete catalog, rule and browser verification gate.
 
+After building, `yarn check:release` validates the distributable itself. Its
+`dist/catalog.json` must match both the reviewed source bytes and catalog receipt
+hash; every catalog icon must be present, nonempty and match the corresponding
+native ID's reviewed sprite hash. The application HTML must contain its root
+mount and reference local built entries covered by the runtime notice receipt.
+Stylesheets, their imports and packaged font/asset references must resolve inside
+the Pages artifact. The recursive artifact scan rejects links, empty files and
+prohibited private inputs before reading deployed content. These checks establish
+artifact completeness and receipt consistency; browser checks and native semantic
+review remain separate release requirements.
+
 ## Content ownership and attribution
 
 Application source code and extraction tools are separate from game content.

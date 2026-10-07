@@ -1,8 +1,8 @@
-import { readFileSync, readdirSync } from 'node:fs'
-import { join } from 'node:path'
+import { readFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { recommendationDataErrors } from '../src/domain/recommendation-data-validation.ts'
 import { validateNoticeDistribution } from './runtime-notices.ts'
+import { validateReleaseArtifact } from './release-artifact.ts'
 
 const catalogBytes = readFileSync('public/catalog.json')
 const catalog = JSON.parse(catalogBytes)
@@ -21,15 +21,6 @@ if (createHash('sha256').update(saveReceiptBytes).digest('hex') !== 'd2746dfe356
   || saveReceipt.catalogSha256 !== receipt.catalogSha256 || saveReceipt.reviewedGameVersion !== catalog.gameVersion
   || saveReceipt.steamBuild !== catalog.steamBuild
   || JSON.stringify(saveReceipt.milestoneMappings.map((item) => item.id).sort()) !== JSON.stringify(catalog.milestones.map((item) => item.id).sort())) throw new Error('Steam import evidence does not match the reviewed catalog and receipt. Re-review native save semantics before supporting a changed game version.')
-function inspect(directory) {
-  for (const entry of readdirSync(directory, { withFileTypes: true })) {
-    const path = join(directory, entry.name)
-    if (entry.isDirectory()) {
-      if (/^(?:\.local-game|Idle Slayer_Data|\.git|logic|extract)$/i.test(entry.name)) throw new Error(`Private source in deployment: ${path}`)
-      inspect(path)
-    } else if (/\.(?:dll|exe|acf|assets|resS|resource|dat|sav|py|ps1)$/i.test(entry.name) || /(?:^\.env|appmanifest)/i.test(entry.name)) throw new Error(`Private input in deployment: ${path}`)
-  }
-}
+validateReleaseArtifact(process.cwd(), 'dist')
 validateNoticeDistribution(process.cwd(), 'dist')
-inspect('dist')
-console.log(`Release gate passed: ${receipt.nativeNodeCount} reviewed upgrades, ${receipt.nativeEdgeCount} native connections, ${priorities.rows.length} reviewed wiki priorities; static dist contains no private game inputs.`)
+console.log(`Release gate passed: built application entries and CSS assets, ${receipt.nativeNodeCount} reviewed upgrades, ${receipt.nativeEdgeCount} native connections, ${receipt.spriteCount} receipt-matched icons, ${priorities.rows.length} reviewed wiki priorities and complete runtime notices; static dist contains no private game inputs.`)
