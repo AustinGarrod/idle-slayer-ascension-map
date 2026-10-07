@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { SPCost } from './SPCost'
 import { compareProgress } from './domain/progress-comparison'
 import type { Catalog, Profile } from './domain/types'
 
@@ -33,7 +34,7 @@ export function ProgressComparison({ catalog, current, incoming, viewer = curren
     <p>{count === 0 ? 'No differences among currently visible upgrades or milestones.' : `${count} changes among currently visible upgrades and milestones.`}</p>
     <ul className="comparison-changes">
       {changes.upgrades.slice(0, shown).map(({ upgrade, before, after }) => <li key={upgrade.id}>
-        <b>{upgrade.title}</b><small>{BigInt(upgrade.cost).toLocaleString('en')} SP · ID: {upgrade.id}</small>
+        <b>{upgrade.title}</b><small><SPCost value={upgrade.cost} /> · ID: {upgrade.id}</small>
         <span>{ownership(before)} → {ownership(after)}</span>
         {before && after && before.epoch !== after.epoch && <small>Ownership baseline: UA {before.epoch.toLocaleString('en')} → UA {after.epoch.toLocaleString('en')}</small>}
       </li>)}

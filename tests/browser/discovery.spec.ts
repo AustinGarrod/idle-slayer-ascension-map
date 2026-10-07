@@ -43,7 +43,7 @@ test('discovers native coin effects with status and exact cost while preserving 
   for (const title of ['Boost Coin', "Doesn't Matter to Me", 'King of The Sea']) {
     const node = visible.upgrades.find((node) => node.title === title)!
     await expect(result(page, node.id)).toContainText(title)
-    await expect(result(page, node.id)).toContainText(cost(node.cost))
+    await expect(result(page, node.id).getByRole('math')).toHaveAttribute('title', cost(node.cost))
     await expect(result(page, node.id).locator('.discovery-state')).toHaveText(/Available|Locked/)
     await expect(result(page, node.id).locator('.discovery-effect')).toContainText(/coins/i)
   }
@@ -89,11 +89,11 @@ test('duplicate titles expose stable IDs and exact costs and select the intended
   await expect(page.locator('.search-result').filter({ has: page.locator('.discovery-title', { hasText: /^Astral Key$/ }) })).toHaveCount(keys.length)
   for (const node of keys) {
     await expect(result(page, node.id)).toContainText(`ID: ${node.id}`)
-    await expect(result(page, node.id)).toContainText(cost(node.cost))
+    await expect(result(page, node.id).getByRole('math')).toHaveAttribute('title', cost(node.cost))
   }
   const final = keys.at(-1)!
   await result(page, final.id).click()
-  await expect(page.locator('.detail-cost')).toHaveText(cost(final.cost))
+  await expect(page.locator('.detail-cost').getByRole('math')).toHaveAttribute('title', cost(final.cost))
   await expect(page.locator('.react-flow__node.selected')).toHaveAttribute('data-id', final.id)
 })
 
