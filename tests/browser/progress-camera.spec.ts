@@ -42,7 +42,7 @@ async function history(page: Page, epoch: string) {
   await counter.fill(epoch)
   await page.getByRole('button', { name: 'Review history…', exact: true }).click()
   await page.getByRole('button', { name: 'Record history', exact: true }).click()
-  await expect(page.locator('.map-summary')).toContainText('Epoch ' + epoch)
+  await expect(page.locator('.map-summary')).toContainText('Ultra Ascensions ' + epoch)
   await rendered(page)
 }
 async function prepare(page: Page, layout: 'Game Layout' | 'Detailed Layout', select = true) {
@@ -81,7 +81,7 @@ for (const layout of ['Game Layout', 'Detailed Layout'] as const) {
     await openAction(page, 'Undo')
     const options = page.getByRole('dialog', { name: 'Map options', exact: true })
     if (await options.isVisible()) await options.getByRole('button', { name: 'Close dialog', exact: true }).click()
-    await expect(page.locator('.map-summary')).toContainText('Epoch 0')
+    await expect(page.locator('.map-summary')).toContainText('Ultra Ascensions 0')
     await rendered(page)
     expect(await position(page)).toEqual(originalPosition)
     await usableSelection(page)

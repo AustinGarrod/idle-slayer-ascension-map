@@ -31,6 +31,21 @@ const test = base.extend({
   },
 })
 
+test('optional map help remains readable and actionable at the actual 200% font', async ({ page }) => {
+  await page.goto('./')
+  await expect(page.locator('html')).toHaveCSS('font-size', '32px')
+  await page.getByRole('button', { name: 'Map options', exact: true }).click()
+  await page.getByRole('dialog', { name: 'Map options', exact: true }).getByRole('button', { name: 'Map help…', exact: true }).click()
+  const help = page.getByRole('dialog', { name: 'Map help', exact: true })
+  await expect(help).toBeVisible()
+  expect(await help.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true)
+  await help.getByRole('button', { name: 'Review spoiler setting', exact: true }).click()
+  const options = page.getByRole('dialog', { name: 'Map options', exact: true })
+  await expect(options.getByRole('checkbox', { name: 'Show spoilers', exact: true })).not.toBeChecked()
+  await options.getByRole('button', { name: 'Close dialog', exact: true }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+})
+
 test('complete discovery remains reachable with the actual browser default font at 200%', async ({ page }) => {
   const catalog = JSON.parse(readFileSync('public/catalog.json', 'utf8')) as Catalog
   const upgrades = visibility(catalog, emptyProfile(catalog.revision)).upgrades
