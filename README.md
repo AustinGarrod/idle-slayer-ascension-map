@@ -7,7 +7,7 @@ A free, unofficial companion for Idle Slayer: explore the Ascension tree, record
 ## Start playing
 
 1. Open the map. **Game Layout** follows native coordinates; **Detailed Layout** spreads visible dependency paths out for reading. Spoilers start hidden.
-2. Search for an upgrade or select a tile to see its effect, exact cost, requirements and connected upgrades. **Next upgrade** offers eligible suggestions; it does not claim affordability or an optimal build.
+2. Search by upgrade title or effect, or leave search empty to browse all visible upgrades. Filter **Progress state** to review available, locked, owned or awaiting-activation upgrades; results show status and exact cost. Select a result or tile to inspect requirements and connected upgrades. **Next upgrade** offers eligible suggestions; availability checks native requirements without checking SP balance or claiming an optimal build.
 3. Select an upgrade and choose **Record purchase…** to enter purchases manually. Alternatively, open **Progress → Import game save…** (on phones, **Map options → Progress**) for a reviewed Windows Steam 7.2.0 save. Import and consequential changes require a preview and confirmation; the app never changes the game.
 4. Use **Export JSON backup** regularly. Progress belongs to this browser's local storage, with labeled session-only Undo/Redo (up to 20 changes) and validated restore; there is no account, cloud backup or automatic game-file access.
 
