@@ -3,12 +3,13 @@ import { chromium, type Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { openProgress, purchaseStart } from './helpers/app'
+import { openProgress, purchaseStart, selectUpgrade } from './helpers/app'
 import { seedProfile, denyProfileWrites } from './helpers/profile'
 import type { Catalog, Profile } from '../../src/domain/types'
 import { emptyProfile } from '../../src/domain/types'
 import { CHECKPOINT_STORAGE_KEY, emptyCheckpoints, exportCheckpoints, type CheckpointVault } from '../../src/domain/checkpoints'
 import { PROFILE_STORAGE_KEY } from '../../src/domain/storage'
+import { GOALS_STORAGE_KEY } from '../../src/domain/goals'
 import { planUltraAscension, visibility } from '../../src/domain/rules'
 
 const catalog = JSON.parse(readFileSync('public/catalog.json', 'utf8')) as Catalog
@@ -53,6 +54,32 @@ test('deliberate named snapshots persist across reload without creating progress
   expect(await stored(page)).toBe(reference); expect(await progress(page)).toBe(before)
   await expect(dialog).not.toContainText('Undo is available after replacement')
   await expect(dialog.getByRole('button', { name: /Apply progress|Apply changes/ })).toHaveCount(0)
+})
+
+test('current progression intentions and checkpoint references keep independent state and modal routes', async ({ page }) => {
+  await seedProfile(page, initial, true); await page.goto('./')
+  await selectUpgrade(page, catalog.upgrades.find((node) => node.id === catalog.startId)!.title)
+  const expand = page.getByRole('button', { name: 'Show details', exact: true })
+  if (await expand.isVisible()) await expand.click()
+  await page.getByRole('button', { name: 'Set progression goal…', exact: true }).click()
+  const progressDialog = page.getByRole('dialog', { name: 'Your progress', exact: true })
+  await progressDialog.getByRole('combobox', { name: 'Goal completion', exact: true }).selectOption('rebuild')
+  await progressDialog.getByRole('button', { name: 'Save goal', exact: true }).click()
+  const goals = await page.evaluate((key) => localStorage.getItem(key), GOALS_STORAGE_KEY), before = await progress(page)
+  await progressDialog.getByRole('button', { name: 'Progress checkpoints…', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Progress checkpoints', exact: true })
+  await expect(dialog).toBeVisible()
+  await expect(page.locator('dialog[open]')).toHaveCount(1)
+  await capture(page, 'Recorded state before goal edit')
+  expect(await page.evaluate((key) => localStorage.getItem(key), GOALS_STORAGE_KEY)).toBe(goals)
+  const references = await stored(page)
+  expect(JSON.parse(references!).entries[0].profile).toEqual(initial)
+  await page.keyboard.press('Escape')
+  const returned = await openProgress(page)
+  await returned.getByRole('combobox', { name: 'Goal completion', exact: true }).selectOption('acquire')
+  await returned.getByRole('button', { name: 'Save goal', exact: true }).click()
+  expect(await page.evaluate((key) => localStorage.getItem(key), GOALS_STORAGE_KEY)).not.toBe(goals)
+  expect(await stored(page)).toBe(references); expect(await progress(page)).toBe(before)
 })
 
 test('four references require explicit deletion; renaming and cancelling deletion leave progress intact', async ({ page }) => {
