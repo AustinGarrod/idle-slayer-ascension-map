@@ -220,3 +220,27 @@ test('a later explicit layout choice stays independent when transferred progress
   await expect.poll(() => saved(page)).toEqual(destination)
   await expect(page.getByRole('button', { name: 'Detailed Layout', exact: true })).toHaveAttribute('aria-pressed', 'true')
 })
+
+for (const arrival of ['startup', 'loaded', 'loading'] as const) {
+  test(`an empty transfer token at ${arrival} reports corrupt input without changing progress`, async ({ page }) => {
+    await page.addInitScript(({ key, destination }) => localStorage.setItem(key, JSON.stringify(destination)), { key: PROFILE_STORAGE_KEY, destination })
+    let releaseCatalog = () => {}
+    if (arrival === 'loading') {
+      const held = new Promise<void>((resolve) => { releaseCatalog = resolve })
+      await page.route('**/catalog.json', async (route) => { await held; await route.continue() })
+    }
+    try {
+      await page.goto(arrival === 'startup' ? './#transfer=' : './', { waitUntil: 'domcontentloaded' })
+      if (arrival === 'loaded') await expect(page.locator('.toolbar')).toBeVisible()
+      if (arrival !== 'startup') await page.evaluate(() => { location.hash = '#transfer=' })
+    } finally { releaseCatalog() }
+    const dialog = page.getByRole('dialog', { name: 'Transfer map progress', exact: true })
+    await expect(dialog.locator('.dialog-feedback')).toContainText('incomplete, corrupt or unsupported')
+    await expect(dialog.getByRole('button', { name: 'Apply transfer', exact: true })).toHaveCount(0)
+    expect(new URL(page.url()).hash).toBe('')
+    expect(await saved(page)).toEqual(destination)
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    expect(await saved(page)).toEqual(destination)
+  })
+}

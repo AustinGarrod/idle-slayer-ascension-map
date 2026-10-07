@@ -488,7 +488,7 @@ function Atlas({ catalog, transferInbox }: { catalog: Catalog; transferInbox: Pr
   const receiveCapturedTransfer = useEffectEvent((received: NonNullable<TransferCapture>) => {
     openTransfer('receive')
     if (received.error) setMessage(received.error)
-    else if (received.token) {
+    else if (received.token !== undefined) {
       const token = received.token
       delete received.token
       void receiveTransfer(token)
