@@ -107,9 +107,11 @@ With the accepted catalog now in `public/catalog.json`, regenerate wiki output f
 ```powershell
 $wikiFinalCandidatePath = Join-Path $wikiReviewRoot 'final-candidate.json'
 if (Test-Path -LiteralPath $wikiFinalCandidatePath) { throw 'Preserve the existing final candidate and choose a new output path.' }
-node scripts/extract/wiki-priorities.mjs --mode=candidate "--input=$wikiReviewRoot" "--output=$wikiFinalCandidatePath"
+$wikiAcceptedPath = Join-Path $wikiReviewRoot 'candidate.json'
+$wikiAcceptedRevision = (Get-Content -LiteralPath $wikiAcceptedPath -Raw | ConvertFrom-Json).source.revision
+node scripts/extract/wiki-priorities.mjs --mode=candidate "--revision=$wikiAcceptedRevision" "--input=$wikiReviewRoot" "--output=$wikiFinalCandidatePath"
 if ($LASTEXITCODE -ne 0) { throw 'Final wiki candidate generation failed.' }
-$wikiAcceptedHash = (Get-FileHash -LiteralPath (Join-Path $wikiReviewRoot 'candidate.json') -Algorithm SHA256).Hash
+$wikiAcceptedHash = (Get-FileHash -LiteralPath $wikiAcceptedPath -Algorithm SHA256).Hash
 $wikiFinalHash = (Get-FileHash -LiteralPath $wikiFinalCandidatePath -Algorithm SHA256).Hash
 if ($wikiFinalHash -ne $wikiAcceptedHash) { throw 'Final wiki candidate differs from accepted evidence; stop and review.' }
 ```
