@@ -759,9 +759,10 @@ test('actual application handlers count confirmed purchase and recommendation on
   await page.locator(`.react-flow__node[data-id="${catalog.startId}"]`).click()
   await expect.poll(() => count('upgrade_selected')).toBe(1)
   const other = visible.upgrades.find((upgrade) => upgrade.id !== catalog.startId)!
-  for (const upgrade of [other, firstUpgrade]) {
+  for (const [position, upgrade] of [other, firstUpgrade].entries()) {
     await page.getByRole('searchbox').fill(upgrade.title)
-    await page.locator('.search-result').filter({ hasText: upgrade.title }).first().click()
+    if (position === 1) await page.getByRole('searchbox').press('Enter')
+    else await page.locator('.search-result').filter({ hasText: upgrade.title }).first().click()
     await expect(page.locator('.details h2')).toHaveText(upgrade.title)
   }
   await expect.poll(() => count('upgrade_selected')).toBe(3)

@@ -83,6 +83,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
   const [conflict, setConflict] = useState<StoredSnapshot | null>(null)
   const [conflictReview, setConflictReview] = useState<{ version: number; snapshot: StoredSnapshot } | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
+  const [detailFocusRevision, setDetailFocusRevision] = useState(0)
   const [query, setQuery] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
   const [menu, setMenuState] = useState<Menu>(null)
@@ -116,6 +117,9 @@ function Atlas({ catalog }: { catalog: Catalog }) {
   const toastTimer = useRef<number | undefined>(undefined)
   const fileInput = useRef<HTMLInputElement>(null)
   const gameFileInput = useRef<HTMLInputElement>(null)
+  const searchInput = useRef<HTMLInputElement>(null)
+  const detailHeading = useRef<HTMLHeadingElement>(null)
+  const keyboardSearchDetails = useRef(false)
   const mapElement = useRef<HTMLElement>(null)
   const detailsElement = useRef<HTMLElement>(null)
   const atlasElement = useRef<HTMLElement>(null)
@@ -166,6 +170,12 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     failed: 'Current progress is not saved on this device. Export a backup or retry recovery.',
     conflict: 'Progress conflict. Current session is not saved on this device.',
   }[persistence]
+  useEffect(() => {
+    const heading = detailHeading.current
+    if (!keyboardSearchDetails.current || !detail || !heading) return
+    if (detailsElement.current) detailsElement.current.scrollTop = 0
+    heading.focus({ preventScroll: true })
+  }, [detail?.id, detailFocusRevision])
   useEffect(() => {
     updateAnalyticsContext({ catalog_version: catalog.gameVersion, catalog_revision: catalog.revision,
       layout: layoutMode === 'native' ? 'game' : 'web', spoilers: profile.showSpoilers,
@@ -331,14 +341,22 @@ function Atlas({ catalog }: { catalog: Catalog }) {
       else void flow.setCenter(position.x, position.y + inset, { zoom, duration })
     }))
   }
-  function center(id: string, source: SelectionSource = 'map') {
+  function center(id: string, source: SelectionSource = 'map', focusDetails = false) {
     if (!visible.ids.has(id)) return
+    keyboardSearchDetails.current = focusDetails
+    if (focusDetails) setDetailFocusRevision((revision) => revision + 1)
     if (!selected) setDetailExpanded(false)
     if (lastSelection.current !== id) trackEvent('upgrade_selected', { upgrade_id: id, source })
     lastSelection.current = id
     setSelected(id); setSearchOpen(false); moveCamera(id)
   }
-  function clearSelection() { lastSelection.current = null; setSelected(null) }
+  function clearSelection() {
+    lastSelection.current = null; setSelected(null)
+    if (keyboardSearchDetails.current) {
+      keyboardSearchDetails.current = false
+      searchInput.current?.focus({ preventScroll: true })
+    }
+  }
   function toggleSpoilers(enabled: boolean) {
     if (!change({ ...profile, showSpoilers: enabled }, enabled ? 'Spoilers shown.' : 'Spoilers hidden.')) return
     // Changing visibility must not recenter, including when a hidden selection's
@@ -541,8 +559,8 @@ function Atlas({ catalog }: { catalog: Catalog }) {
   return <main ref={atlasElement} className="atlas" aria-busy={saving}>
     <header ref={toolbarElement} className="toolbar">
       <div className="brand"><span className="brand-mark" aria-hidden="true">✦</span><div><h1>Ascension Map</h1><p>Idle Slayer · {catalog.gameVersion}</p></div></div>
-      <div className="search-box"><label className="sr-only" htmlFor="search">Search visible upgrade titles</label><span aria-hidden="true">⌕</span><input className="telemetry-private rr-block" id="search" type="search" autoComplete="off" placeholder="Find an upgrade…" value={query} onFocus={() => setSearchOpen(true)} onChange={(event) => { setQuery(event.target.value); setSearchOpen(true) }} onKeyDown={(event) => { if (event.key === 'Escape') setSearchOpen(false); if (event.key === 'Enter' && results[0]) center(results[0].id, 'search') }} />
-        {searchOpen && <div className="search-results" aria-label="Visible upgrade results"><div className="results-heading"><span>{results.length} visible results</span><button onClick={() => setSearchOpen(false)} aria-label="Close search results">×</button></div>{results.slice(0, 40).map((node) => <button className="search-result" key={node.id} onClick={() => center(node.id, 'search')}><Icon node={node} /><span>{node.title}<small>{cost(node.cost)} SP</small></span></button>)}{results.length > 40 && <p>Refine your search to see more results.</p>}{results.length === 0 && <p>No visible upgrades match.</p>}</div>}
+      <div className="search-box"><label className="sr-only" htmlFor="search">Search visible upgrade titles</label><span aria-hidden="true">⌕</span><input className="telemetry-private rr-block" id="search" ref={searchInput} type="search" autoComplete="off" placeholder="Find an upgrade…" value={query} onFocus={() => setSearchOpen(true)} onChange={(event) => { setQuery(event.target.value); setSearchOpen(true) }} onKeyDown={(event) => { if (event.key === 'Escape') setSearchOpen(false); if (event.key === 'Enter' && results[0]) { event.preventDefault(); center(results[0].id, 'search', true) } }} />
+        {searchOpen && <div className="search-results" aria-label="Visible upgrade results"><div className="results-heading"><span>{results.length} visible results</span><button onClick={() => setSearchOpen(false)} aria-label="Close search results">×</button></div>{results.slice(0, 40).map((node) => <button className="search-result" key={node.id} onClick={(event) => center(node.id, 'search', event.detail === 0)}><Icon node={node} /><span>{node.title}<small>{cost(node.cost)} SP</small></span></button>)}{results.length > 40 && <p>Refine your search to see more results.</p>}{results.length === 0 && <p>No visible upgrades match.</p>}</div>}
       </div>
       <button className="next-upgrade" onClick={() => { setSearchOpen(false); setMenu('recommendations') }}>Next upgrade</button>
       <div className="layout-control" role="group" aria-label="Map layout"><button aria-pressed={layoutMode === 'native'} onClick={() => changeLayout('native')} title="Original game positions">Game Layout</button><button aria-pressed={layoutMode === 'web'} onClick={() => changeLayout('web')} title="Readable dependency layout">Detailed Layout</button></div>
@@ -559,7 +577,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
         <div className="camera-controls"><button aria-label="Zoom out" onClick={() => { trackEvent('map_camera_used', { action: 'zoom_out', source: 'controls' }); void flow.zoomOut({ duration: reducedMotion ? 0 : 150 }) }}>−</button><button aria-label="Zoom in" onClick={() => { trackEvent('map_camera_used', { action: 'zoom_in', source: 'controls' }); void flow.zoomIn({ duration: reducedMotion ? 0 : 150 }) }}>+</button><button onClick={() => { trackEvent('map_camera_used', { action: 'return_start', source: 'controls' }); center(catalog.startId, 'start') }}>Return to start</button><button aria-label="Map navigation" aria-expanded={navigationOpen} aria-controls="pan-controls" onClick={() => { trackEvent('map_camera_used', { action: 'navigation_toggle', expanded: !navigationOpen }); setNavigationOpen(!navigationOpen) }}>↔</button></div>
         {navigationOpen && <div className="pan-controls" id="pan-controls" aria-label="Map navigation controls"><button aria-label="Pan map left" onClick={() => { trackEvent('map_camera_used', { action: 'pan', source: 'controls', direction: 'left' }); const v = flow.getViewport(); void flow.setViewport({ ...v, x: v.x + 180 }) }}>←</button><button aria-label="Pan map right" onClick={() => { trackEvent('map_camera_used', { action: 'pan', source: 'controls', direction: 'right' }); const v = flow.getViewport(); void flow.setViewport({ ...v, x: v.x - 180 }) }}>→</button><button aria-label="Pan map up" onClick={() => { trackEvent('map_camera_used', { action: 'pan', source: 'controls', direction: 'up' }); const v = flow.getViewport(); void flow.setViewport({ ...v, y: v.y + 180 }) }}>↑</button><button aria-label="Pan map down" onClick={() => { trackEvent('map_camera_used', { action: 'pan', source: 'controls', direction: 'down' }); const v = flow.getViewport(); void flow.setViewport({ ...v, y: v.y - 180 }) }}>↓</button></div>}
       </section>
-      {detail && <aside ref={detailsElement} className={`details ${detailExpanded ? 'expanded' : ''}`} aria-label="Upgrade details"><div className="detail-heading"><div className="detail-identity"><Icon node={detail} /><div><h2>{detail.title}</h2><small className="detail-cost">{cost(detail.cost)} SP</small></div></div><div className="detail-tools"><button className="detail-toggle" aria-expanded={detailExpanded} aria-controls="detail-content" onClick={() => { trackEvent('details_toggled', { expanded: !detailExpanded }); setDetailExpanded(!detailExpanded) }}>{detailExpanded ? 'Hide details' : 'Show details'}</button><button aria-label="Close upgrade details" onClick={clearSelection}>×</button></div></div><p className={`state-label ${state(detail)}`}>{state(detail) === 'pending' ? '◷ Owned · awaiting activation' : state(detail) === 'purchased' ? '✓ Purchased and active' : state(detail) === 'locked' ? '◇ Locked' : '+ Available'}</p><div className="detail-content" id="detail-content"><p className="detail-description">{detail.description}</p><dl><dt>Purchase requirements</dt><dd>{label(detail.purchase)}</dd><dt>Reveal requirements</dt><dd>{label(detail.reveal)}</dd><dt>Ultra Ascension</dt><dd>{detail.retention === 'repeat' ? 'Repeat purchase · clears on reset' : 'Ownership retained'}{detail.activation === 'after-ultra-ascension' ? ' · Astral lock' : ''}</dd></dl>
+      {detail && <aside ref={detailsElement} className={`details ${detailExpanded ? 'expanded' : ''}`} aria-label="Upgrade details"><div className="detail-heading"><div className="detail-identity"><Icon node={detail} /><div><h2 ref={detailHeading} tabIndex={-1}>{detail.title}</h2><small className="detail-cost">{cost(detail.cost)} SP</small></div></div><div className="detail-tools"><button className="detail-toggle" aria-expanded={detailExpanded} aria-controls="detail-content" onClick={() => { trackEvent('details_toggled', { expanded: !detailExpanded }); setDetailExpanded(!detailExpanded) }}>{detailExpanded ? 'Hide details' : 'Show details'}</button><button aria-label="Close upgrade details" onClick={clearSelection}>×</button></div></div><p className={`state-label ${state(detail)}`}>{state(detail) === 'pending' ? '◷ Owned · awaiting activation' : state(detail) === 'purchased' ? '✓ Purchased and active' : state(detail) === 'locked' ? '◇ Locked' : '+ Available'}</p><div className="detail-content" id="detail-content"><p className="detail-description">{detail.description}</p><dl><dt>Purchase requirements</dt><dd>{label(detail.purchase)}</dd><dt>Reveal requirements</dt><dd>{label(detail.reveal)}</dd><dt>Ultra Ascension</dt><dd>{detail.retention === 'repeat' ? 'Repeat purchase · clears on reset' : 'Ownership retained'}{detail.activation === 'after-ultra-ascension' ? ' · Astral lock' : ''}</dd></dl>
         <div className="connection-list"><section aria-label="Connected from"><h3>Connected from</h3>{incoming.length ? incoming.map((node) => <button key={node.id} onClick={() => center(node.id, 'neighbor')}><Icon node={node} /><span>{node.title}</span><span aria-hidden="true">←</span></button>) : <p>No visible incoming connections.</p>}</section><section aria-label="Leads to"><h3>Leads to</h3>{outgoing.length ? outgoing.map((node) => <button key={node.id} onClick={() => center(node.id, 'neighbor')}><Icon node={node} /><span>{node.title}</span><span aria-hidden="true">→</span></button>) : <p>No visible outgoing connections.</p>}</section><small>Connections show paths. Purchase requirements above specify AND / OR and activation gates.</small></div>
         <div className="source-notes"><h3>Sources</h3>{detail.sources.map((source, i) => <p key={i}>{source.url ? <a onClick={() => trackEvent('source_link_opened', { source: 'details', upgrade_id: detail.id, action: 'other' })} href={source.url} target="_blank" rel="noreferrer">{source.label}</a> : source.label}{source.evidence && <small>{source.evidence}</small>}</p>)}</div></div>
         <div className="detail-actions">
