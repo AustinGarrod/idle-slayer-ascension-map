@@ -20,6 +20,6 @@ for (const title of ['Soul Reaper III', 'Advanced Divinities']) {
     const expand = page.getByRole('button', { name: 'Show details', exact: true })
     if (await expand.isVisible()) await expand.click()
     const reveal = page.locator('.details dt').filter({ hasText: 'Reveal requirements' }).locator('+ dd')
-    await expect(reveal).toHaveText(`(Astral Slayer OR ${title}) AND Victor's Soul`)
+    expect(await reveal.locator('.requirement-expression').evaluate((element) => { const text = element.cloneNode(true) as HTMLElement; text.querySelectorAll('.requirement-status').forEach((status) => status.remove()); return text.textContent })).toBe(`(Astral Slayer OR ${title}) AND Victor's Soul`)
   })
 }
