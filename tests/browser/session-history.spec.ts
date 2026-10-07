@@ -199,3 +199,36 @@ for (const layout of ['Game Layout', 'Detailed Layout']) test(`${layout} preserv
   await frames()
   expect(await camera()).toEqual(before)
 })
+
+
+for (const width of [1101, 1280, 1440, 1920]) test(`${width}px action captions retain footer and map geometry through history, Undo and Redo`, async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'Phone history lives in the options dialog; the footer is desktop only.')
+    await page.setViewportSize({ width, height: 900 })
+    await page.goto('./')
+    await expect(page.locator('.react-flow__node')).not.toHaveCount(0)
+    await expect(page.locator('footer')).toBeVisible()
+    await page.evaluate(async () => { await document.fonts.ready; for (let i = 0; i < 8; i++) await new Promise<void>((resolve) => requestAnimationFrame(() => resolve())) })
+    const geometry = () => page.evaluate(() => {
+      const footer = document.querySelector('footer')!.getBoundingClientRect(), map = document.querySelector('.map')!.getBoundingClientRect()
+      return { footerHeight: footer.height, mapHeight: map.height }
+    })
+    const before = await geometry()
+    await open(page, 'Progress')
+    const progress = page.getByRole('dialog', { name: 'Your progress', exact: true })
+    await progress.getByRole('spinbutton', { name: 'Previous Ultra Ascensions', exact: true }).fill('1')
+    await progress.getByRole('button', { name: 'Review history…', exact: true }).click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Record history', exact: true }).click()
+    await expect(page.locator('.map-summary')).toContainText('Ultra Ascensions 1')
+    await expect.poll(geometry).toEqual(before)
+    await history(page, 'Undo', 'Previous ascension history')
+    await expect.poll(geometry).toEqual(before)
+    await history(page, 'Redo', 'Previous ascension history')
+    await expect.poll(geometry).toEqual(before)
+    expect(await page.locator('footer').evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true)
+    for (const button of await page.locator('footer .session-history-controls button').all()) {
+      expect(await button.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true)
+      const bounds = await button.boundingBox()
+      expect(bounds!.width).toBeGreaterThanOrEqual(44)
+      expect(bounds!.height).toBeGreaterThanOrEqual(44)
+    }
+})
