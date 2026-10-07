@@ -315,8 +315,12 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     setMenu(null); setSearchOpen(false); setComparisonInitialId(id); setComparisonOpen(true)
   }
   function openRoutes(id?: string) {
+    if (profileSession.getState().profile !== profile) return
     if (id && !visibility(catalog, profileSession.getState().profile).ids.has(id)) return
-    setMenu(null); setMessage(''); setSearchOpen(false); setRouteInitialId(id); setRoutesOpen(true)
+    invalidatePendingFiles()
+    setMenu(null); setPreviewState(null); setPurchaseTarget(null); setChoices({})
+    setConflictReview(null); setTrackingReload(null); setMessage(''); setSearchOpen(false)
+    setRouteInitialId(id); setRoutesOpen(true)
   }
   function setPreview(next: Preview | null) {
     if (next && profileSession.getState().profile !== profile) { setMessage('Progress changed. Create a fresh preview from the current session.'); return }
@@ -328,6 +332,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
   }
   function startPurchase(id: string, source: 'details' | 'recommendation' = 'details') {
     if (!visible.ids.has(id)) return
+    setRoutesOpen(false)
     setForecast(null)
     setMessage('')
     purchaseSource.current = source; purchaseEventKey.current = ''
