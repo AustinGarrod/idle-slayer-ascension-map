@@ -142,6 +142,7 @@ small { display: block; font-size: .8125rem; color: var(--muted); line-height: 1
 .camera-controls { position: absolute; bottom: 12px; left: 12px; z-index: 5; display: grid; grid-template-columns: 44px 44px minmax(90px, 1fr) 44px; gap: 4px; width: 252px; max-width: calc(100% - 24px); padding: 5px; border: 1px solid #574631; border-radius: 6px; background: #231e19f2; }
 .camera-controls button { padding: 4px; font-size: 1.25rem; }
 .camera-controls button:nth-child(3) { font-size: .75rem; }
+.camera-controls button[aria-label='Return to inspection'] { overflow-wrap: anywhere; }
 .camera-controls button[aria-expanded='true'] { color: var(--bright-gold); border-color: var(--frame); }
 .pan-controls { position: absolute; top: 12px; right: 12px; z-index: 6; display: grid; grid-template-columns: 44px 44px; gap: 4px; padding: 5px; border: 1px solid var(--frame); border-radius: 6px; background: #231e19f2; }
 .pan-controls button { padding: 0; font-size: 1.25rem; }

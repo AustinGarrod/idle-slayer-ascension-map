@@ -20,9 +20,9 @@ The wiki snapshot ranks 280 of 288 native upgrades and declares game 7.0.0; the 
 
 ## Orient and return to your upgrade
 
-Open **Map view…** on desktop, or **Map options** on a phone, then choose **Overview visible map**. The inspector temporarily closes so you can see the currently revealed tree shape. Your selected upgrade, progress and chosen layout stay unchanged. Overview tiles are small; use **Return to inspection** in the camera controls to bring the selected upgrade back at a readable size, with its details restored. With no selection, **Return to previous view** restores your earlier camera. **Refocus selected upgrade** in Map options also recovers a target after manual panning.
+Open **Map view…** on desktop, or **Map options** on a phone, then choose **Overview visible map**. The inspector temporarily closes so you can see the currently visible tree shape. Your selected upgrade, progress and chosen layout stay unchanged. Overview tiles are small; use **Return to inspection** in the camera controls to bring the selected upgrade back at a readable size, with its details restored. With no selection, **Return to previous view** restores your earlier camera. **Refocus selected upgrade** in Map options also recovers a target after manual panning.
 
-Overview uses only revealed upgrades and supports both layouts. Showing or hiding spoilers preserves your camera; request Overview again to fit the newly visible graph. Rotation, layout changes and recorded progress can update the overview fit. Ordinary inspection still offers **Return to start**. Overview and its previous camera are only remembered during the current visit.
+Overview uses only currently visible upgrades and supports both layouts. Showing or hiding spoilers preserves your camera; request Overview again to fit the newly visible graph. Rotation, layout changes and recorded progress can update the overview fit. Ordinary inspection still offers **Return to start**. Overview and its previous camera are only remembered during the current visit.
 
 ## Import Steam progress
 

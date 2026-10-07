@@ -49,5 +49,7 @@ describe('visible-only map overview', () => {
     expect(visibleOverviewViewport({ ...options, nodeWidth: 0 })).toBeNull()
     expect(visibleOverviewViewport({ ...options, area: { ...options.area, height: 0 } })).toBeNull()
     expect(visibleOverviewViewport({ ...options, area: { ...options.area, x: Infinity } })).toBeNull()
+    expect(visibleOverviewViewport({ ...options, centers: new Map([['a', { x: 1e308, y: 0 }]]), visibleIds: new Set(['a']) })).toBeNull()
+    expect(visibleOverviewViewport({ ...options, centers: new Map([['a', { x: -1e308, y: 0 }], ['b', { x: 1e308, y: 0 }]]) })).toBeNull()
   })
 })

@@ -22,8 +22,11 @@ export function visibleOverviewViewport({ centers, visibleIds, nodeWidth, nodeHe
   const maxX = Math.max(...points.map((point) => point.x)) + nodeWidth / 2
   const minY = Math.min(...points.map((point) => point.y)) - nodeHeight / 2
   const maxY = Math.max(...points.map((point) => point.y)) + nodeHeight / 2
-  const zoom = Math.min(1, area.width / (maxX - minX), area.height / (maxY - minY))
+  const width = maxX - minX, height = maxY - minY
+  if (![width, height].every((value) => Number.isFinite(value) && value > 0)) return null
+  const zoom = Math.min(1, area.width / width, area.height / height)
   if (!Number.isFinite(zoom) || zoom < OVERVIEW_MIN_ZOOM) return null
-  return { x: area.x + area.width / 2 - (minX + maxX) / 2 * zoom,
-    y: area.y + area.height / 2 - (minY + maxY) / 2 * zoom, zoom }
+  const x = area.x + area.width / 2 - (minX + width / 2) * zoom
+  const y = area.y + area.height / 2 - (minY + height / 2) * zoom
+  return [x, y].every(Number.isFinite) ? { x, y, zoom } : null
 }

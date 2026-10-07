@@ -56,6 +56,18 @@ async function prepare(page: Page, layout: string) {
   await page.getByRole('group', { name: 'Map layout', exact: true }).getByRole('button', { name: layout, exact: true }).click()
   await rendered(page)
 }
+async function holdCameraFrames(page: Page) {
+  await page.addInitScript(() => {
+    const native = window.requestAnimationFrame.bind(window)
+    const callbacks: FrameRequestCallback[] = []
+    const win = window as Window & { holdOverviewFrames?: boolean; releaseOverviewFrames?: () => void; queuedOverviewFrames?: number }
+    window.requestAnimationFrame = (callback) => {
+      if (!win.holdOverviewFrames) return native(callback)
+      callbacks.push(callback); win.queuedOverviewFrames = callbacks.length; return -callbacks.length
+    }
+    win.releaseOverviewFrames = () => { win.holdOverviewFrames = false; callbacks.splice(0).forEach((callback) => native(callback)) }
+  })
+}
 
 for (const layout of ['Game Layout', 'Detailed Layout']) {
   test(`${layout} fits visible frames and returns the same selected upgrade to inspection without changing progress or positions`, async ({ page }) => {
@@ -63,6 +75,7 @@ for (const layout of ['Game Layout', 'Detailed Layout']) {
     const detailClass = await page.locator('.details').getAttribute('class')
     const beforePositions = await positions(page), beforeProfile = await stored(page), beforeCamera = await camera(page)
     await overview(page); await fit(page)
+    await expect(page.locator('.toast')).toHaveCount(0)
     await expect(page.locator('.details')).toHaveCount(0)
     await expect(page.locator(`.react-flow__node[data-id="${start.id}"]`)).toHaveAttribute('aria-current', 'true')
     expect(await positions(page)).toEqual(beforePositions)
@@ -173,16 +186,7 @@ test('layout, rotation and external recorded progress refit only the current vis
 })
 
 test('a spoiler change cancels every queued overview fit before it can move the camera', async ({ page }) => {
-  await page.addInitScript(() => {
-    const native = window.requestAnimationFrame.bind(window)
-    const callbacks: FrameRequestCallback[] = []
-    const win = window as Window & { holdOverviewFrames?: boolean; releaseOverviewFrames?: () => void; queuedOverviewFrames?: number }
-    window.requestAnimationFrame = (callback) => {
-      if (!win.holdOverviewFrames) return native(callback)
-      callbacks.push(callback); win.queuedOverviewFrames = callbacks.length; return -callbacks.length
-    }
-    win.releaseOverviewFrames = () => { win.holdOverviewFrames = false; callbacks.splice(0).forEach((callback) => native(callback)) }
-  })
+  await holdCameraFrames(page)
   await prepare(page, 'Game Layout')
   const before = await camera(page)
   await page.evaluate(() => { (window as Window & { holdOverviewFrames?: boolean }).holdOverviewFrames = true })
@@ -194,6 +198,41 @@ test('a spoiler change cancels every queued overview fit before it can move the 
   await rendered(page)
   expect(await camera(page)).toEqual(before)
   await expect(page.locator('.react-flow__node')).toHaveCount(catalog.upgrades.length)
+})
+
+test('recorded progress refreshes a pending fit even when visible geometry has not changed', async ({ page, context }) => {
+  await holdCameraFrames(page)
+  await prepare(page, 'Game Layout')
+  const before = await camera(page)
+  await page.evaluate(() => { (window as Window & { holdOverviewFrames?: boolean }).holdOverviewFrames = true })
+  await options(page); await page.getByRole('dialog').getByRole('button', { name: 'Overview visible map', exact: true }).click()
+  const other = await context.newPage(); await other.goto(page.url())
+  await other.evaluate(({ key, profile }) => localStorage.setItem(key, JSON.stringify(profile)), {
+    key: PROFILE_STORAGE_KEY, profile: { ...initial, purchases: { [start.id]: { epoch: 0, active: true } } },
+  })
+  await expect(page.locator(`.react-flow__node[data-id="${start.id}"]`)).toHaveAttribute('aria-label', /purchased/)
+  await page.evaluate(() => (window as Window & { releaseOverviewFrames?: () => void }).releaseOverviewFrames?.())
+  await rendered(page); await fit(page)
+  expect((await camera(page)).zoom).toBeLessThan(before.zoom)
+  await expect(page.locator('.react-flow__node')).toHaveCount(visible.total)
+  await expect(page.locator('.details')).toHaveCount(0)
+})
+
+test('pointer exploration cancels a queued overview fit', async ({ page }) => {
+  await holdCameraFrames(page)
+  await prepare(page, 'Game Layout')
+  const before = await camera(page)
+  await page.evaluate(() => { (window as Window & { holdOverviewFrames?: boolean }).holdOverviewFrames = true })
+  await options(page); await page.getByRole('dialog').getByRole('button', { name: 'Overview visible map', exact: true }).click()
+  const map = await page.locator('.map').boundingBox()
+  await page.mouse.move(map!.x + map!.width - 4, map!.y + map!.height / 2)
+  await page.mouse.down(); await page.mouse.move(map!.x + map!.width - 54, map!.y + map!.height / 2, { steps: 3 }); await page.mouse.up()
+  const explored = await camera(page)
+  expect(explored).not.toEqual(before)
+  await page.evaluate(() => (window as Window & { releaseOverviewFrames?: () => void }).releaseOverviewFrames?.())
+  await rendered(page)
+  expect(await camera(page)).toEqual(explored)
+  await expect(page.locator('.map-summary')).toContainText('Visible map overview')
 })
 
 test('overview and refocus honor live reduced-motion changes', async ({ page }) => {
