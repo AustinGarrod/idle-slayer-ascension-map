@@ -14,6 +14,8 @@ The chosen design uses directed paths with arrowheads, gold dashed incoming conn
 
 The search overlay also browses all visible upgrades with an empty query and a Progress state filter. Its scrollable list has no result cap; the existing count/close header stays reachable while scrolling. Native Tab focus keeps each result title clear of that measured sticky header, including tall rows at enlarged browser text sizes. Rows pair state text and symbols with exact costs and short native effect excerpts, with stable IDs for duplicate visible titles. Available means the native purchase and reveal gates are recorded; no SP balance is inferred. Controls stay inside the on-demand overlay so the ordinary toolbar and map retain their space. Filters and search affect discovery only, and hidden upgrades never contribute rows, counts or duplicate-title hints.
 
+The exploration trail stays in an on-demand **Recent upgrades** dialog, reached through Map view/options or expanded connection details. Its newest-first list remembers at most 20 distinct inspected IDs during this visit. Visible duplicate titles include their native cost and stable ID. Selection returns through the existing inspector/camera behavior; no permanent phone control row is added. Shared visibility immediately removes hidden entries, and progress Undo remains separate.
+
 ## Native Game presentation refinement
 
 Three Game-only concepts received an independent spacing and accessibility review after feedback that the large cards changed the game's appearance and obscured its lines:

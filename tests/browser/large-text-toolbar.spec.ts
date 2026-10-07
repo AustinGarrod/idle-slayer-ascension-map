@@ -158,3 +158,31 @@ test('successive suggestion confirmation stays readable at the actual 200% brows
   await dialog.getByRole('button', { name: 'Apply and continue suggestions', exact: true }).click()
   await expect(page.getByRole('dialog', { name: 'Suggested next upgrade', exact: true }).locator('.recommendation-main')).toContainText('Soul Gatherer Bundle')
 })
+
+
+test('recent inspection controls stay usable at the actual 200% browser font', async ({ page }) => {
+  const catalog = JSON.parse(readFileSync('public/catalog.json', 'utf8')) as Catalog
+  const nodes = visibility(catalog, emptyProfile(catalog.revision)).upgrades.slice(0, 2)
+  await page.goto('./')
+  await expect(page.locator('html')).toHaveCSS('font-size', '32px')
+  for (const node of nodes) {
+    await page.getByRole('searchbox').fill(node.title)
+    await page.locator(`.search-result[data-upgrade-id="${node.id}"]`).click()
+  }
+  await page.getByRole('button', { name: 'Map options', exact: true }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Recent upgrades…', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Recent upgrades', exact: true })
+  expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true)
+  for (const row of await dialog.locator('[data-upgrade-id]').all()) {
+    await row.scrollIntoViewIfNeeded()
+    expect(await row.evaluate((element) => { const r = element.getBoundingClientRect(); return r.width >= 44 && r.height >= 44 && element.scrollWidth <= element.clientWidth + 1 })).toBe(true)
+  }
+  await page.screenshot({ path: test.info().outputPath('recent-upgrades-200-percent.png') })
+  const previous = dialog.locator(`[data-upgrade-id="${nodes[0].id}"]`)
+  await previous.focus(); await page.keyboard.press('Enter')
+  await expect(page.locator('.details h2')).toHaveText(nodes[0].title)
+  await expect(page.locator('.details h2')).toBeFocused()
+  await expect(page.getByRole('button', { name: 'Close upgrade details', exact: true })).toBeInViewport()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  expect(await page.evaluate(() => localStorage.getItem('idle-slayer-ascension-map.profile.v1'))).toBeNull()
+})
