@@ -54,6 +54,8 @@ Search length buckets are `1-3`, `4-10`, `11-30`, `31+`; result buckets are `0`,
 
 An applied event means the current in-memory map session changed after confirmation. Local storage can still fail; track that separately with `storage_error`, keep the usable session and existing recovery/export controls. Do not equate conversion counts with durable local saves. Do not emit synthetic traffic to populate reports.
 
+Cross-tab recovery uses the same bounded recovery events and storage error categories. Conflict summaries and replacement previews are replay-blocked like import/restore previews; stored text, unknown IDs and full profiles never enter their DOM or event properties. A pending profile write can be cancelled before a privacy reload, and a held write lock promptly exposes the existing export/reload/cancel choices rather than blocking opt-out.
+
 ## Private Umami setup and reports
 
 Use Chrome to inspect and configure the existing website. The board and reports remain private; do not enable website/report share links. The definitions below were configured and read back on October 5–6, 2026. Empty reports do not establish that production telemetry arrived.
