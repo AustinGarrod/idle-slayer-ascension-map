@@ -118,6 +118,11 @@ test('export refusal remains visible inside Progress with recovery controls and 
   await expect(page.getByRole('dialog').getByRole('button', { name: 'Retry saving', exact: true })).toBeVisible()
   expect(downloads).toHaveLength(0)
   expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), PROFILE_STORAGE_KEY)).toEqual(profile)
+  await page.getByRole('button', { name: 'Close dialog', exact: true }).click()
+  await page.getByRole('button', { name: 'Export backup', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('The profile exceeds the 4 MiB backup limit.')
+  await expect(page.locator('.atlas > .sr-only[role="status"]')).toHaveText('')
+  await expect(page.locator('.toast')).toHaveCount(0)
 })
 
 test('conflict and reload dialogs keep export feedback and move review into one active dialog', async ({ page, context }) => {
@@ -158,4 +163,28 @@ test('conflict and reload dialogs keep export feedback and move review into one 
   await expect(page.locator('dialog[open]')).toHaveCount(1)
   await expect(page.getByRole('dialog').locator('.dialog-feedback')).not.toContainText('Progress backup exported.')
   expect(await page.evaluate(() => localStorage.getItem('idle-slayer-ascension-map.analytics.v1'))).toBeNull()
+})
+
+test('global export success stays visible and announced beside a persistent storage warning', async ({ page }) => {
+  await page.addInitScript((key) => {
+    const native = Storage.prototype.setItem
+    Storage.prototype.setItem = function (target, value) {
+      if (target === key) throw new DOMException('Synthetic write refusal', 'QuotaExceededError')
+      native.call(this, target, value)
+    }
+  }, PROFILE_STORAGE_KEY)
+  await page.goto('./')
+  await expect(page.locator('.toolbar')).toBeVisible()
+  await page.getByRole('button', { name: 'Return to start', exact: true }).click()
+  await page.getByRole('button', { name: 'Record purchase…', exact: true }).click()
+  await page.getByRole('button', { name: 'Apply purchases', exact: true }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(page.getByRole('alert')).toContainText('Progress could not be saved on this device.')
+  const download = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Export backup', exact: true }).click()
+  expect(JSON.parse(readFileSync((await (await download).path())!, 'utf8')).purchases[catalog.startId]).toBeDefined()
+  await expect(page.locator('.atlas > .sr-only[role="status"]')).toHaveText('Progress backup exported.')
+  await expect(page.locator('.toast')).toBeVisible()
+  await expect(page.locator('.toast')).toContainText('Progress backup exported.')
+  await expect(page.getByRole('alert')).toContainText('Progress could not be saved on this device.')
 })
