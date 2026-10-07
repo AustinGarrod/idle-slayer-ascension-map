@@ -110,6 +110,35 @@ for (const layout of ['Game Layout', 'Detailed Layout']) test(`${layout} toolbar
   await expect(page.getByRole('dialog', { name: 'Suggested next upgrade', exact: true })).toBeVisible()
 })
 
+test('overview fits visible frames and keeps its return label readable at the actual 200% font', async ({ page }) => {
+  await page.goto('./')
+  await expect(page.locator('html')).toHaveCSS('font-size', '32px')
+  const settle = () => page.evaluate(async () => { await document.fonts.ready; for (let i = 0; i < 8; i++) await new Promise<void>((resolve) => requestAnimationFrame(() => resolve())) })
+  await page.getByRole('searchbox').fill('Permanent Slayer')
+  await page.getByRole('searchbox').press('Enter')
+  const original = await page.evaluate(() => localStorage.getItem('idle-slayer-ascension-map.profile.v1'))
+  for (const layout of ['Game Layout', 'Detailed Layout']) {
+    await page.getByRole('group', { name: 'Map layout', exact: true }).getByRole('button', { name: layout, exact: true }).click()
+    await page.getByRole('button', { name: 'Map options', exact: true }).click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Overview visible map', exact: true }).click()
+    await settle()
+    await expect(page.locator('.toast')).toHaveCount(0)
+    const back = page.getByRole('button', { name: 'Return to inspection', exact: true })
+    expect(await back.evaluate((button) => button.scrollWidth <= button.clientWidth + 1 && button.scrollHeight <= button.clientHeight + 1)).toBe(true)
+    expect(await page.locator('.react-flow__node').evaluateAll((nodes) => {
+      const map = document.querySelector('.map')!.getBoundingClientRect()
+      const summary = document.querySelector('.map-summary')!.getBoundingClientRect()
+      const controls = document.querySelector('.camera-controls')!.getBoundingClientRect()
+      return nodes.every((node) => { const r = node.getBoundingClientRect(); return r.left >= map.left + 11 && r.right <= map.right - 11 && r.top >= summary.bottom + 11 && r.bottom <= controls.top - 11 })
+    })).toBe(true)
+    await page.screenshot({ path: test.info().outputPath(`${layout}-overview-200-percent.png`) })
+    await back.click(); await settle()
+    await expect(page.locator('.details h2')).toHaveText('Permanent Slayer')
+    expect(await page.locator('.react-flow__node.selected').evaluate((node) => { const r = node.getBoundingClientRect(); return r.width >= 44 && r.height >= 44 })).toBe(true)
+  }
+  expect(await page.evaluate(() => localStorage.getItem('idle-slayer-ascension-map.profile.v1'))).toBe(original)
+})
+
 test('successive suggestion confirmation stays readable at the actual 200% browser font', async ({ page }) => {
   await page.goto('./')
   await expect(page.locator('html')).toHaveCSS('font-size', '32px')
