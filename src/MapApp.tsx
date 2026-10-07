@@ -16,6 +16,8 @@ import { RequirementView } from './RequirementView'
 import { exportProfileBackup, parseProfileBackup } from './domain/storage'
 import { visibleProgress } from './domain/progress-summary'
 import type { StoredSnapshot } from './domain/profile-session'
+import { historyActionLabel, type HistoryAction } from './domain/profile-history'
+import { SessionHistoryControls } from './SessionHistoryControls'
 import { useProfileSession } from './useProfileSession'
 import { Dialog, DialogFeedbackContext } from './MapDialog'
 import { Icon, nodeTypes, edgeTypes } from './UpgradeCard'
@@ -63,11 +65,11 @@ function Atlas({ catalog }: { catalog: Catalog }) {
       setPreviewState(null); setPurchaseTarget(null); setChoices({})
       setGameImport(null); setGameImportLoading(false); setGameImportError('')
       setConflictReview(null); setTrackingReload(null); setMenuState(null); setRequirementReview(null)
-      setMessage(state.conflict ? 'Saved progress changed. This session was kept for recovery.' : 'Progress updated from another tab. Previous previews and undo were cleared.')
+      setMessage(state.conflict ? 'Saved progress changed. This session was kept for recovery.' : 'Progress updated from another tab. Previous previews, Undo and Redo were cleared.')
     },
     onDispose: invalidatePendingFiles,
   })
-  const { profile, history, writable: storageWritable, error: storageError, pending: saving, persistence, conflict } = sessionState
+  const { profile, history, redoHistory, writable: storageWritable, error: storageError, pending: saving, persistence, conflict } = sessionState
   const [conflictReview, setConflictReview] = useState<{ version: number; snapshot: StoredSnapshot } | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
   const [requirementReview, setRequirementReview] = useState<{ target: string; route: RequirementRoute } | null>(null)
@@ -257,7 +259,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
   function applyPurchase(continueSuggestions = false) {
     if (purchasePlan?.kind !== 'ready' || !purchaseTarget) return
     const target = purchaseTarget, source = purchaseSource.current
-    if (!change(purchasePlan.profile, 'Purchase recorded.')) return
+    if (!change(purchasePlan.profile, 'Purchase recorded.', false, 'purchase')) return
     trackEvent('purchase_applied', { upgrade_id: target, source })
     if (source === 'recommendation') trackEvent('recommendation_purchase_applied', { upgrade_id: target })
     setPurchaseTarget(null); setChoices({})
@@ -303,9 +305,9 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     if (profileSession.getState().profile !== next) return false
     return profileSession.save()
   }
-  function change(next: Profile, announcement: string, replaceStorage = false): boolean {
+  function change(next: Profile, announcement: string, replaceStorage = false, action: HistoryAction = 'change'): boolean {
     if (profileSession.getState().profile !== profile) { setMessage('Progress changed. Try this action again using the current session.'); return false }
-    if (!profileSession.apply(next, replaceStorage)) return false
+    if (!profileSession.apply(next, replaceStorage, action)) return false
     setMessage(announcement)
     return true
   }
@@ -423,7 +425,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     }
   }
   function toggleSpoilers(enabled: boolean) {
-    if (!change({ ...profile, showSpoilers: enabled }, enabled ? 'Spoilers shown.' : 'Spoilers hidden.')) return
+    if (!change({ ...profile, showSpoilers: enabled }, enabled ? 'Spoilers shown.' : 'Spoilers hidden.', false, 'spoilers')) return
     // Changing visibility must not recenter, including when a hidden selection's
     // inspector closes and resizes the canvas. Cancel pending camera work too.
     cameraRequest.current += 1
@@ -439,6 +441,20 @@ function Atlas({ catalog }: { catalog: Catalog }) {
   function beginCameraControl() {
     cameraRequest.current += 1
     recenterOnMapResize.current = false
+  }
+  function travelHistory(direction: 'undo' | 'redo') {
+    const current = profileSession.getState()
+    const entry = (direction === 'undo' ? current.history : current.redoHistory).at(-1)
+    if (!entry || !profileSession[direction]()) return
+    invalidatePendingFiles()
+    setPreviewState(null); setPurchaseTarget(null); setChoices({})
+    setGameImport(null); setGameImportLoading(false); setGameImportError('')
+    setConflictReview(null); setTrackingReload(null)
+    if (menu === 'options') setMenu(null)
+    const restored = profileSession.getState().profile
+    if (entry.action === 'spoilers') { beginCameraControl(); void flow.setViewport(flow.getViewport()) }
+    setMessage(`${direction === 'undo' ? 'Undid' : 'Redid'} ${historyActionLabel(entry.action).toLowerCase()}. ${direction === 'undo' ? 'Earlier progress' : 'Change'} restored. Spoilers ${restored.showSpoilers ? 'shown' : 'hidden'}.`)
+    if (direction === 'undo') trackEvent('progress_undo')
   }
   function leaveOverview() { setOverviewView(false); previousOverviewViewport.current = null; pendingOverviewRequest.current = null }
   function fitOverviewCamera() {
@@ -482,9 +498,8 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     leaveOverview(); beginCameraControl(); setMessage('')
     if (previous) void flow.setViewport(previous, { duration: reducedMotion ? 0 : 220 })
   }
-  function undo() {
-    if (profileSession.undo()) { setMessage('Progress change undone.'); trackEvent('progress_undo') }
-  }
+  function undo() { travelHistory('undo') }
+  function redo() { travelHistory('redo') }
   function finishTrackingChange(enabled: boolean) {
     const result = setTrackingPreference(enabled)
     // A fragment-only navigation does not tear down the recorder's listeners.
@@ -668,7 +683,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
       trackEvent('game_import_error', { reason: 'stale' })
       return
     }
-    if (!change(gameImport.result.profile, 'Game progress imported. Undo is available.', true)) return
+    if (!change(gameImport.result.profile, 'Game progress imported. Undo is available.', true, 'game_import')) return
     trackEvent('game_import_applied')
     gameImportRequest.current++; setGameImport(null); setGameImportError(''); setMenu(null)
   }
@@ -678,7 +693,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     if (preview.sessionVersion !== current.version) { setPreviewState(null); setMessage('Progress changed while reviewing this action. Create a fresh preview.'); return }
     const applied = preview.resolution === 'saved' ? profileSession.useSaved(current.version)
       : preview.resolution === 'local' ? await profileSession.save(true, current.version)
-        : change(preview.profile, preview.operation === 'prior_ascensions' ? 'Previous Ultra Ascensions recorded. Undo is available in this session.' : 'Progress updated.', preview.replaceStorage)
+        : change(preview.profile, preview.operation === 'prior_ascensions' ? 'Previous Ultra Ascensions recorded. Undo is available in this session.' : 'Progress updated.', preview.replaceStorage, preview.operation)
     if (!applied) return
     if (preview.operation === 'prior_ascensions') trackEvent('prior_ascensions_recorded')
     else if (preview.resolution !== 'local') trackEvent(`${preview.operation}_applied`, { upgrade_id: preview.upgradeId, milestone_id: preview.milestoneId })
@@ -686,6 +701,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     setPreviewState(null)
   }
   const verified = Object.entries(catalog.verification).filter(([key]) => key !== 'evidence').every(([, value]) => value === true)
+  const historyControls = <SessionHistoryControls undoAction={history.at(-1)?.action} redoAction={redoHistory.at(-1)?.action} busy={saving} onUndo={undo} onRedo={redo} />
   const requirementReturn = requirementOrigin && <div className="requirement-return"><button onClick={returnToRequirementTarget}>Return to {requirementOrigin.title}</button><small>Review the target again to create a fresh purchase preview.</small></div>
   const recoveryControls = <>{!conflictReview && <button onClick={conflict ? reviewConflict : retryStorage}>{conflict ? 'Review progress conflict' : storageWritable ? 'Retry saving' : 'Retry recovery'}</button>}{!conflictReview && <button onClick={backup}>Export backup</button>}</>
   const feedbackContent = <>{message && message !== storageError && <p key={messageSequence}>{message}</p>}{storageError && <><p>{storageError}</p>{!conflictReview && <div className="dialog-actions">{recoveryControls}</div>}</>}</>
@@ -726,16 +742,17 @@ function Atlas({ catalog }: { catalog: Catalog }) {
         {profile.purchases[detail.id] && detail.activation === 'after-ultra-ascension' && !profile.purchases[detail.id].active && <button className="full" disabled={saving} onClick={() => previewAstralActivation(detail.id)}>Already activated…</button>}
         </div></aside>}
     </div>
-    <footer><span>Unofficial companion · {progressStatus}</span><button disabled={saving || !history.length} onClick={undo}>Undo</button><button onClick={() => setMenu('keyboard-help')}>Map help…</button><button onClick={() => setMenu('about')}>About & sources</button><button onClick={() => setMenu('privacy')}>Privacy & tracking</button></footer>
+    <footer><span>Unofficial companion · {progressStatus}</span>{historyControls}<button onClick={() => setMenu('keyboard-help')}>Map help…</button><button onClick={() => setMenu('about')}>About & sources</button><button onClick={() => setMenu('privacy')}>Privacy & tracking</button></footer>
     {!activeDialogTitle && <p className="sr-only" role="status" aria-label="Map action feedback">{message === storageError ? '' : message}</p>}{!activeDialogTitle && message !== storageError && message && toastVisible && <div className="toast" onClick={() => setMessage('')}>{message}<button aria-label="Dismiss status" onClick={() => setMessage('')}>×</button></div>}
     <input className="sr-only telemetry-private rr-block" tabIndex={-1} aria-label="Map progress JSON backup" ref={fileInput} type="file" accept="application/json,.json" onChange={(event) => { const file = event.target.files?.[0]; if (file) void restore(file); else restoreRequest.current++; event.target.value = '' }} />
     <input className="sr-only telemetry-private rr-block" tabIndex={-1} aria-label="Idle Slayer game save" ref={gameFileInput} type="file" accept=".sav" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void readGameSave(file) }} />
     {menu === 'game-import' && <Dialog title="Import game progress" close={closeGameImport}>{gameImport ? <GameSaveImportPanel catalog={catalog} currentProfile={gameImport.original} preview={gameImport.result} onApply={applyGameImport} onCancel={closeGameImport} /> : <div className="game-save-picker">{gameImportLoading ? <p role="status">Reading game save…</p> : <><p className="telemetry-private rr-block" role="alert">{gameImportError}</p><p>Choose <b>savedata.sav</b> or <b>backup.sav</b> from Idle Slayer 7.2.0 on Steam. The selected file is read locally in your browser.</p><p className="game-save-path">%USERPROFILE%\AppData\LocalLow\Pablo Leban\Idle Slayer\</p></>}<div className="dialog-actions">{!gameImportLoading && <button className="primary" onClick={chooseGameSave}>Choose game save…</button>}<button onClick={closeGameImport}>Cancel</button></div></div>}</Dialog>}
     {menu === 'recommendations' && <Dialog title="Suggested next upgrade" close={() => setMenu(null)}><RecommendationPanel catalog={catalog} recommendations={recommendations} onSelect={(id) => selectSuggestion(id)} onPurchase={(id) => selectSuggestion(id, true)} blockedUpgrade={blockedRecommendation} onReviewRequirements={reviewBlockedRecommendation} /></Dialog>}
-    {menu === 'options' && <Dialog title="Map options" close={() => setMenu(null)}><div className="map-options"><p><b>{visible.owned} / {visible.total}</b> visible upgrades owned · Ultra Ascensions {profile.epoch}<br />{profile.showSpoilers ? 'Spoilers shown' : 'Spoilers hidden'}</p><label className="spoiler-control"><input type="checkbox" disabled={saving} checked={profile.showSpoilers} onChange={(event) => toggleSpoilers(event.target.checked)} />Show spoilers</label><button onClick={showOverview} disabled={!visible.ids.size}>Overview visible map</button><button onClick={(event) => refocusSelection(event.detail === 0)} disabled={!detail}>Refocus selected upgrade</button><small>Overview fits only currently visible upgrades. Refocus returns your selection to inspection size without changing progress.</small><button onClick={() => setMenu('milestones')}>Milestones</button><button onClick={() => setMenu('progress')}>Progress</button><button disabled={saving || !history.length} onClick={() => { undo(); setMenu(null) }}>Undo</button><button onClick={() => setMenu('keyboard-help')}>Map help…</button><button onClick={() => setMenu('about')}>About & sources</button><button onClick={() => setMenu('privacy')}>Privacy & tracking</button><small>Unofficial companion · {progressStatus}</small></div></Dialog>}
-    {menu === 'milestones' && <Dialog title="Milestones" close={() => setMenu(null)}><p>Record the required item received or purchased in the game.</p>{requirementReturn}{visible.milestones.map((item) => <label className="milestone" key={item.id}><input data-requirement-milestone={item.id} type="checkbox" disabled={saving} checked={profile.milestones[item.id] === true} onChange={(event) => { if (event.target.checked) { if (change({ ...profile, milestones: { ...profile.milestones, [item.id]: true } }, 'Milestone recorded.')) trackEvent('milestone_changed', { milestone_id: item.id, recorded: true }) } else { setMenu(null); previewRemoval(item.id, true) } }} /><span>{item.title}<small>{item.description}</small></span></label>)}{!visible.milestones.length && <div><p>No milestone controls are currently revealed. Controls follow the game's reveal rules. To enter existing progress on an isolated branch, you can explicitly choose Show spoilers in Map options, then return here. Record only the required item actually received, crafted or purchased.</p><button onClick={() => setMenu('options')}>Review spoiler setting</button></div>}</Dialog>}
+    {menu === 'options' && <Dialog title="Map options" close={() => setMenu(null)}><div className="map-options"><p><b>{visible.owned} / {visible.total}</b> visible upgrades owned · Ultra Ascensions {profile.epoch}<br />{profile.showSpoilers ? 'Spoilers shown' : 'Spoilers hidden'}</p><label className="spoiler-control"><input type="checkbox" disabled={saving} checked={profile.showSpoilers} onChange={(event) => toggleSpoilers(event.target.checked)} />Show spoilers</label><button onClick={showOverview} disabled={!visible.ids.size}>Overview visible map</button><button onClick={(event) => refocusSelection(event.detail === 0)} disabled={!detail}>Refocus selected upgrade</button><small>Overview fits only currently visible upgrades. Refocus returns your selection to inspection size without changing progress.</small><button onClick={() => setMenu('milestones')}>Milestones</button><button onClick={() => setMenu('progress')}>Progress</button>{historyControls}<button onClick={() => setMenu('keyboard-help')}>Map help…</button><button onClick={() => setMenu('about')}>About & sources</button><button onClick={() => setMenu('privacy')}>Privacy & tracking</button><small>Unofficial companion · {progressStatus}</small></div></Dialog>}
+    {menu === 'milestones' && <Dialog title="Milestones" close={() => setMenu(null)}><p>Record the required item received or purchased in the game.</p>{requirementReturn}{visible.milestones.map((item) => <label className="milestone" key={item.id}><input data-requirement-milestone={item.id} type="checkbox" disabled={saving} checked={profile.milestones[item.id] === true} onChange={(event) => { if (event.target.checked) { if (change({ ...profile, milestones: { ...profile.milestones, [item.id]: true } }, 'Milestone recorded.', false, 'milestone')) trackEvent('milestone_changed', { milestone_id: item.id, recorded: true }) } else { setMenu(null); previewRemoval(item.id, true) } }} /><span>{item.title}<small>{item.description}</small></span></label>)}{!visible.milestones.length && <div><p>No milestone controls are currently revealed. Controls follow the game's reveal rules. To enter existing progress on an isolated branch, you can explicitly choose Show spoilers in Map options, then return here. Record only the required item actually received, crafted or purchased.</p><button onClick={() => setMenu('options')}>Review spoiler setting</button></div>}</Dialog>}
     {menu === 'progress' && <Dialog title="Your progress" close={() => setMenu(null)}>
       <p>One local profile. Keep a backup when changing browsers or devices.</p><button onClick={() => setMenu('keyboard-help')}>Map help…</button>{requirementReturn}
+      <section className="session-history" aria-label="Undo and redo"><h3>Undo &amp; redo</h3>{historyControls}<p>Up to 20 changes are available during this visit, including spoiler settings. Undo restores progress before the action; Redo restores the undone change. A new change clears Redo. Reloading or an external progress change clears both. Export a JSON backup to keep progress beyond this visit.</p></section>
       <div className="progress-actions">
         <button data-game-import-trigger disabled={!loaded} onClick={chooseGameSave}>Import game save…</button>
         <small>Steam 7.2.0 · Choose savedata.sav or backup.sav. A local preview appears before map progress changes.<code className="game-save-path">%USERPROFILE%\AppData\LocalLow\Pablo Leban\Idle Slayer\</code></small>
@@ -751,7 +768,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     {menu === 'keyboard-help' && <Dialog title="Map help" close={() => setMenu(null)}><MapHelpPanel onProgress={() => setMenu('progress')} onMilestones={() => setMenu('milestones')} onSpoilers={() => setMenu('options')} /><h3>Keyboard map navigation</h3><p>The map has one Tab stop for its visible upgrades. All visible upgrades remain available by keyboard.</p><ul><li>From the toolbar, Tab reaches the map shortcut. Press Enter to skip directly to camera controls, or Tab again to explore upgrades.</li><li>Arrow Right / Down browses the next upgrade; Left / Up browses the previous. Home / End jumps to the first / last visible upgrade. Browsing follows catalog order and wraps at its ends.</li><li>Enter / Space selects the focused upgrade and opens its details. Escape deselects it. Focus browsing preserves recorded progress and fixed positions.</li><li>Tab leaves upgrades for camera controls; Shift+Tab returns to the map shortcut and toolbar. Camera controls provide zoom, return to start and directional panning. Entering keyboard exploration closes the directional pan controls so upgrades remain unobscured. Use Map navigation to reopen them.</li><li>Search selection by keyboard goes directly to details. Closing those details returns to search.</li></ul><p>Screen-reader users may need their reader's interaction mode to send arrow keys to the focused upgrade. The focused upgrade announces its title, state, cost and keyboard instructions.</p></Dialog>}
     {menu === 'privacy' && <Dialog title="Privacy & tracking" close={() => setMenu(null)}><PrivacyPanel status={getTrackingStatus()} onChange={requestTrackingChange} progressStatus={progressStatus} /></Dialog>}
     {trackingReload !== null && <Dialog title="Reload with unsaved progress?" close={() => { setTrackingReload(null); setMenu('privacy') }}>
-      <p>Current progress could not be saved. Reloading may lose these changes and clears session-only undo. Export a backup first to keep this progress.</p>
+      <p>Current progress could not be saved. Reloading may lose these changes and clears session-only Undo and Redo. Export a backup first to keep this progress.</p>
       <p>Recording stops when you confirm the tracking change and reload. Cancelling keeps this session and its current tracking choice.</p>
       <div className="dialog-actions"><button className="primary" onClick={() => { if (backup()) finishTrackingChange(trackingReload) }}>Export backup and reload</button><button className="danger" onClick={() => finishTrackingChange(trackingReload)}>Reload without backup</button><button onClick={() => { setTrackingReload(null); setMenu('privacy') }}>Cancel</button></div>
     </Dialog>}
