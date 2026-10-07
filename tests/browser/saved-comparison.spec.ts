@@ -37,6 +37,63 @@ async function open(page: Page) {
 }
 const stored = (page: Page) => page.evaluate((key) => localStorage.getItem(key), COMPARISON_STORAGE_KEY)
 const progress = (page: Page) => page.evaluate((key) => localStorage.getItem(key), PROFILE_STORAGE_KEY)
+
+test('queued export uses newly adopted visibility before React commits without editing saved references', async ({ page }) => {
+  const hidden = catalog.upgrades.find((node) => !visibility(catalog, initial).ids.has(node.id))!
+  const unknown = 'unavailable-queued-export'
+  const selected = [hidden.id, catalog.startId, unknown]
+  await seed(page, { ...initial, showSpoilers: true }, selected)
+  await page.goto('./'); const dialog = await open(page)
+  const download = page.waitForEvent('download')
+  const connected = await dialog.evaluate((element, { key, next }) => {
+    const button = [...element.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent === 'Export comparison')!
+    const oldValue = localStorage.getItem(key), newValue = JSON.stringify(next)
+    localStorage.setItem(key, newValue)
+    window.dispatchEvent(new StorageEvent('storage', { key, oldValue, newValue, storageArea: localStorage, url: location.href }))
+    const connected = button.isConnected; button.click(); return connected
+  }, { key: PROFILE_STORAGE_KEY, next: initial })
+  expect(connected).toBe(true)
+  const payload = readFileSync((await (await download).path())!, 'utf8')
+  expect(JSON.parse(payload)).toEqual(makeList([catalog.startId, unknown]))
+  expect(payload).not.toContain(hidden.id)
+  await expect(dialog.locator('.saved-comparison-card[data-upgrade-id]')).toHaveCount(1)
+  await expect(dialog.locator('.saved-comparison-card')).toHaveCount(2)
+  await expect(dialog).toContainText('Unavailable catalog entry')
+  await expect(dialog).not.toContainText(hidden.title)
+  expect(await stored(page)).toBe(JSON.stringify(makeList(selected)))
+  expect(JSON.parse((await progress(page))!)).toEqual(initial)
+})
+
+for (const action of ['add', 'restore'] as const) {
+  test(`queued ${action} respects newly adopted visibility before React commits`, async ({ page }) => {
+    const hidden = catalog.upgrades.find((node) => !visibility(catalog, initial).ids.has(node.id))!
+    await seed(page, { ...initial, showSpoilers: true }, [catalog.startId])
+    await page.goto('./'); const dialog = await open(page)
+    if (action === 'add') {
+      const picker = dialog.locator('.saved-comparison-picker')
+      if (!await picker.evaluate((element) => (element as HTMLDetailsElement).open)) await picker.locator('summary').click()
+    } else {
+      await dialog.getByLabel('Upgrade comparison JSON backup', { exact: true }).setInputFiles({ name: 'comparison.json', mimeType: 'application/json', buffer: Buffer.from(exportComparison(makeList([hidden.id]))) })
+      await expect(dialog.getByRole('region', { name: 'Review comparison restore' })).toContainText(hidden.title)
+    }
+    const connected = await dialog.evaluate((element, { key, next, action, id }) => {
+      const button = action === 'add'
+        ? element.querySelector<HTMLButtonElement>(`.saved-comparison-results button[data-upgrade-id="${id}"]`)!
+        : [...element.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent === 'Replace comparison')!
+      const oldValue = localStorage.getItem(key), newValue = JSON.stringify(next)
+      localStorage.setItem(key, newValue)
+      window.dispatchEvent(new StorageEvent('storage', { key, oldValue, newValue, storageArea: localStorage, url: location.href }))
+      const connected = button.isConnected; button.click(); return connected
+    }, { key: PROFILE_STORAGE_KEY, next: initial, action, id: hidden.id })
+    expect(connected).toBe(true)
+    await expect(dialog.locator('.saved-comparison-card[data-upgrade-id]')).toHaveCount(1)
+    await expect(dialog).not.toContainText(hidden.title)
+    await expect(dialog).toContainText('Comparison saved on this device.')
+    expect(await stored(page)).toBe(JSON.stringify(makeList([catalog.startId])))
+    expect(JSON.parse((await progress(page))!)).toEqual(initial)
+  })
+}
+
 async function choose(page: Page, id: string) {
   const picker = page.locator('.saved-comparison-picker')
   if (!await picker.evaluate((element) => (element as HTMLDetailsElement).open)) await picker.locator('summary').click()
