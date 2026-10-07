@@ -13,6 +13,7 @@
     "typecheck": "tsc -b",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:tools": "node scripts/test-tools.mjs",
     "test:e2e": "playwright test",
     "validate:catalog": "vitest run src/domain/catalog.test.ts",
     "check:release": "node scripts/check-release.mjs"
