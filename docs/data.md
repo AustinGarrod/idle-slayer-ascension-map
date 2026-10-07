@@ -1,5 +1,7 @@
 # Catalog, provenance and refresh
 
+Catalog validation checks every upgrade and milestone source before rendering: a nonempty label, typed optional evidence, and an absolute HTTP(S) URL without credentials when a link is present. Native evidence-only sources remain valid. Malformed provenance enters the recoverable catalog loading error screen rather than failing when details open.
+
 The bundled catalog is the installed **Idle Slayer 7.2.0**, Steam app **1353300**,
 build **25551532**, using Unity **6000.3.14f1** and IL2CPP metadata **39**. It
 contains **288 unique native upgrades**, **318 native prerequisite links**,
