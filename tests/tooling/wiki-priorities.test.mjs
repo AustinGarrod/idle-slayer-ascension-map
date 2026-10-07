@@ -87,7 +87,7 @@ function execute(data, alter = () => {}, options = {}) {
       };
     `)
     const output = path.join(root, 'synthetic-priorities.json')
-    // No --refresh: this executes the shipped offline entry point with only local inputs.
+    // Cached fixtures use local inputs; refresh uses a preload that mocks fetch offline.
     const args = [script, `--input=${input}`]
     if (!options.defaultOutput) args.push(`--output=${output}`)
     if (options.reference) args.push('--mode=reproduce', `--reference=${reference}`)
