@@ -42,9 +42,7 @@ async function webPresentation(page: Page) {
     paths: [...document.querySelectorAll('.react-flow__edge')].map((edge) => {
       const path = edge.querySelector('.react-flow__edge-path')!
       const style = getComputedStyle(path)
-      // RF measures handle rectangles through the viewport transform. A
-      // camera resize can introduce subpixel float noise into the same route.
-      const d = path.getAttribute('d')?.replace(/[-+]?\d*\.?\d+(?:e[-+]?\d+)?/g, (number) => String(Math.round(Number(number) * 100) / 100))
+      const d = path.getAttribute('d')
       return { id: edge.getAttribute('data-id'), d, stroke: style.stroke, width: style.strokeWidth, dash: style.strokeDasharray }
     }),
   }))
@@ -207,7 +205,21 @@ test('Game switch preserves progress and spoilers and restores Web geometry and 
   await chooseLayout(page, 'Detailed Layout')
   await expect(upgradeNode(page, branch.id)).toHaveClass(/selected/)
   await expect(page.locator('.native-connection-outline')).toHaveCount(0)
-  await expect.poll(() => webPresentation(page)).toEqual(before)
+  const numbers = /[-+]?\d*\.?\d+(?:e[-+]?\d+)?/gi
+  const structure = (value: typeof before) => ({ nodes: value.nodes, paths: value.paths.map((path) => ({ ...path, d: path.d?.replace(numbers, '#') })) })
+  await expect.poll(async () => {
+    const after = await webPresentation(page)
+    // RF reads transformed handle rectangles. Compare the actual coordinate
+    // differences: rounding equality can fail on opposite sides of a boundary.
+    // Nodes, path commands, identities and styles remain exact; 0.05 world
+    // units is at most one eighth of a pixel even at the maximum map zoom.
+    const coordinatesRestored = after.paths.length === before.paths.length && after.paths.every((path, index) => {
+      const actual = path.d?.match(numbers)?.map(Number) ?? [], expected = before.paths[index].d?.match(numbers)?.map(Number) ?? []
+      return path.d !== null && before.paths[index].d !== null && actual.length === expected.length
+        && actual.every((coordinate, position) => Math.abs(coordinate - expected[position]) <= 0.05)
+    })
+    return { ...structure(after), coordinatesRestored }
+  }).toEqual({ ...structure(before), coordinatesRestored: true })
   expect(await page.evaluate((key) => localStorage.getItem(key), profileKey)).toBe(saved)
   await expect(page.locator('.map-summary')).toContainText('1 /')
   await expect(upgradeNode(page, hidden.id)).toHaveCount(0)
