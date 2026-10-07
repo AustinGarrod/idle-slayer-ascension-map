@@ -295,6 +295,10 @@ function Atlas({ catalog }: { catalog: Catalog }) {
             inset = (map.height / 2 - nodeHeight * zoom / 2 - 4) / zoom
           }
           rightOffset = camera.right - map.left + 12 + nodeWidth * zoom / 2 - map.width / 2
+        } else if (camera.top - map.top - 20 >= 44) {
+          // Fit above controls when their enlarged text leaves no room beside them.
+          zoom = Math.min(zoom, (camera.top - map.top - 20) / nodeHeight)
+          inset = (map.height / 2 - nodeHeight * zoom / 2 - 8) / zoom
         }
       }
       const duration = reducedMotion ? 0 : 220
