@@ -8,7 +8,7 @@ import { PROFILE_STORAGE_KEY } from '../../src/domain/storage'
 const catalog = JSON.parse(readFileSync('public/catalog.json', 'utf8')) as Catalog
 const rowLabel = (id: string) => {
   const node = catalog.upgrades.find((node) => node.id === id)!
-  return `${node.title} · ${BigInt(node.cost).toLocaleString('en')} SP`
+  return { id, cost: `${BigInt(node.cost).toLocaleString('en')} Slayer Points` }
 }
 
 for (const showSpoilers of [false, true]) {
@@ -36,7 +36,7 @@ for (const showSpoilers of [false, true]) {
         const expected = visibleIds(removal.removed)
         await expect(page.getByRole('dialog')).toContainText(`This clears ${expected.length} visible purchases`)
         await expect(page.getByRole('dialog').locator('li')).toHaveCount(expected.length)
-        expect(await page.getByRole('dialog').locator('li').allTextContents()).toEqual(expected.map(rowLabel))
+        expect(await page.getByRole('dialog').locator('li').evaluateAll((elements) => elements.map((element) => ({ id: element.getAttribute('data-upgrade-id'), cost: element.querySelector('[role=math]')?.getAttribute('aria-label') })))).toEqual(expected.map(rowLabel))
       } else {
         const progress = page.getByRole('button', { name: 'Progress', exact: true })
         if (!await progress.isVisible()) await page.getByRole('button', { name: 'Map options', exact: true }).click()
@@ -49,7 +49,7 @@ for (const showSpoilers of [false, true]) {
           const section = page.getByRole('dialog').locator('section').filter({ has: page.getByRole('heading', { name: `${label} (${visibleIds(ids).length})`, exact: true }) })
           await expect(section).toBeVisible()
           await expect(section.locator('li')).toHaveCount(visibleIds(ids).length)
-          expect(await section.locator('li').allTextContents()).toEqual(visibleIds(ids).map(rowLabel))
+          expect(await section.locator('li').evaluateAll((elements) => elements.map((element) => ({ id: element.getAttribute('data-upgrade-id'), cost: element.querySelector('[role=math]')?.getAttribute('aria-label') })))).toEqual(visibleIds(ids).map(rowLabel))
         }
       }
       const dialog = page.getByRole('dialog')
