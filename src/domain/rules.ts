@@ -39,9 +39,16 @@ export function normalizeTitle(title: string): string {
   return title.normalize('NFKD').replace(/[\u0300-\u036f'’‘ʼ]/g, '').toLocaleLowerCase('en').trim()
 }
 
-export function searchVisible(catalog: Catalog, profile: Profile, query: string): Upgrade[] {
+/** Titles keep priority over effect-only matches, preserving ordinary Enter selection. */
+export function searchUpgrades(upgrades: Upgrade[], query: string): Upgrade[] {
   const term = normalizeTitle(query)
-  return visibility(catalog, profile).upgrades.filter((node) => normalizeTitle(node.title).includes(term))
+  const titles = upgrades.filter((node) => normalizeTitle(node.title).includes(term))
+  const effects = upgrades.filter((node) => !normalizeTitle(node.title).includes(term) && normalizeTitle(node.description).includes(term))
+  return [...titles, ...effects]
+}
+
+export function searchVisible(catalog: Catalog, profile: Profile, query: string): Upgrade[] {
+  return searchUpgrades(visibility(catalog, profile).upgrades, query)
 }
 
 export type PurchasePlan =
