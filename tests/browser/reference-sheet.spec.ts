@@ -115,3 +115,44 @@ test('external progress cancels the preview and blocked print tabs retain the sa
   await expect(fresh.locator('iframe')).toHaveCount(0)
   await other.close()
 })
+
+for (const change of ['remove', 'clear', 'close'] as const) {
+  for (const output of ['save', 'print'] as const) {
+    test(`queued ${change} invalidates the old ${output} action before React commits`, async ({ page }) => {
+      await page.goto('./'); await expect(page.locator('.toolbar')).toBeVisible()
+      const ids = visibility(catalog, initial).upgrades.slice(0, 2).map((node) => node.id)
+      for (const id of ids) await add(page, id)
+      const dialog = await open(page)
+      await dialog.getByRole('button', { name: 'Review outgoing sheet', exact: true }).click()
+      const result = await dialog.evaluate((element, { change, output, id }) => {
+        const outputs: string[] = []
+        const originalURL = URL.createObjectURL
+        const originalOpen = window.open
+        URL.createObjectURL = (blob) => { outputs.push('download'); return originalURL(blob) }
+        window.open = () => { outputs.push('print'); return null }
+        try {
+          const buttons = [...element.querySelectorAll<HTMLButtonElement>('button')]
+          const first = change === 'remove'
+            ? buttons.find((button) => button.getAttribute('aria-label') === `Remove sheet upgrade ${id}`)
+            : change === 'close'
+              ? buttons.find((button) => button.getAttribute('aria-label') === 'Close dialog')
+              : buttons.find((button) => button.textContent === 'Clear reference selection')
+          const second = buttons.find((button) => button.textContent === (output === 'save' ? 'Save reviewed HTML' : 'Open reviewed sheet for printing'))
+          if (!first || !second) throw new Error('Expected live native change and output controls')
+          first.click()
+          const stillConnected = second.isConnected
+          second.click()
+          return { stillConnected, outputs }
+        } finally { URL.createObjectURL = originalURL; window.open = originalOpen }
+      }, { change, output, id: ids[0] })
+      expect(result.stillConnected).toBe(true)
+      expect(result.outputs).toEqual([])
+      if (change === 'close') await expect(dialog).toHaveCount(0)
+      else {
+        await expect(dialog.locator('li')).toHaveCount(change === 'remove' ? 1 : 0)
+        await expect(dialog.locator('iframe')).toHaveCount(0)
+      }
+      expect(await page.evaluate((key) => localStorage.getItem(key), PROFILE_STORAGE_KEY)).toBeNull()
+    })
+  }
+}
