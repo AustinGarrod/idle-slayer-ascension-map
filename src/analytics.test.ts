@@ -19,6 +19,10 @@ function setup(options: { url?: string; production?: boolean; preference?: strin
   if (options.nativeDisabled) stored.set('umami.disabled', '1')
   const scripts: HTMLScriptElement[] = []
   const listeners = new Map<string, ((event: unknown) => void)[]>()
+  const historyCalls = {
+    replaceState: vi.fn((_state: unknown, _title: string, next: string | URL | null | undefined) => { url = new URL(next ?? url.href, url.href) }),
+    pushState: vi.fn((_state: unknown, _title: string, next: string | URL | null | undefined) => { url = new URL(next ?? url.href, url.href) }),
+  }
   const storage = {
     getItem: vi.fn((key: string) => { if (options.storageFails) throw new Error('sensitive storage failure'); return stored.get(key) ?? null }),
     setItem: vi.fn((key: string, value: string) => { if (options.storageFails) throw new Error('sensitive write failure'); stored.set(key, value) }),
@@ -28,7 +32,7 @@ function setup(options: { url?: string; production?: boolean; preference?: strin
     localStorage: storage,
     navigator: { doNotTrack: options.dnt, globalPrivacyControl: options.gpc },
     innerWidth: 1280, innerHeight: 800,
-    history: { state: { preserve: 'state' }, replaceState: vi.fn((_state: unknown, _title: string, next: string) => { url = new URL(next) }) },
+    history: { state: { preserve: 'state' }, ...historyCalls },
     document: {
       createElement: vi.fn(() => ({ dataset: {}, onload: null, onerror: null })),
       head: { appendChild: vi.fn((script: HTMLScriptElement) => scripts.push(script)) },
@@ -44,7 +48,7 @@ function setup(options: { url?: string; production?: boolean; preference?: strin
     win.umami = tracker
     scripts[0].onload?.call(scripts[0], new Event('load'))
   }
-  return { analytics, win, scripts, tracker, storage, stored, ready, listeners }
+  return { analytics, win, scripts, tracker, storage, stored, ready, listeners, historyCalls }
 }
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks() })
 
@@ -69,13 +73,13 @@ describe('analytics activation and preference', () => {
   })
 
   it('initializes once, honors the fixed script contract, and preserves history state', () => {
-    const { analytics, scripts, win, ready } = setup()
+    const { analytics, scripts, historyCalls, ready } = setup()
     analytics.initializeAnalytics()
     analytics.initializeAnalytics()
     expect(scripts).toHaveLength(2)
     expect(scripts[0].dataset).toMatchObject({ websiteId, beforeSend: ANALYTICS_CALLBACK, performance: 'true', excludeSearch: 'true', excludeHash: 'true' })
     expect(scripts[1].dataset).toEqual({ websiteId, hostUrl: 'https://isolated.test' })
-    expect(win.history.replaceState).toHaveBeenCalledWith({ preserve: 'state' }, '', 'https://example.test/map/')
+    expect(historyCalls.replaceState).toHaveBeenCalledWith({ preserve: 'state' }, '', 'https://example.test/map/')
     expect(analytics.getTrackingStatus().active).toBe(false)
     ready()
     expect(analytics.getTrackingStatus()).toMatchObject({ enabled: true, active: true })
@@ -197,6 +201,70 @@ describe('analytics activation and preference', () => {
 })
 
 describe('analytics payload privacy', () => {
+  it.each(['pushState', 'replaceState'] as const)('cleans later %s addresses before native history receives them and preserves caller state', (method) => {
+    const { analytics, win, historyCalls } = setup()
+    analytics.initializeAnalytics()
+    const state = { preserve: method }
+    win.history[method](state, 'Ignored native title', '/map/?private=PRIVATE#PRIVATE')
+    expect(historyCalls[method]).toHaveBeenLastCalledWith(state, 'Ignored native title', 'https://example.test/map/')
+    expect(win.location.href).toBe('https://example.test/map/')
+  })
+
+  it.each(['popstate', 'hashchange'])('cleans %s addresses using the native method and retains history state', (event) => {
+    const { analytics, win, listeners, historyCalls } = setup()
+    analytics.initializeAnalytics()
+    historyCalls.pushState({}, '', '/map/?private=PRIVATE#PRIVATE')
+    listeners.get(event)?.forEach((handler) => handler({}))
+    expect(win.location.href).toBe('https://example.test/map/')
+    expect(historyCalls.replaceState).toHaveBeenLastCalledWith({ preserve: 'state' }, '', 'https://example.test/map/')
+  })
+
+  it('preserves a later opt-out URL marker and never resumes its recording when the marker is removed', () => {
+    const { analytics, win, tracker, ready } = setup()
+    analytics.initializeAnalytics()
+    ready()
+    win.history.pushState({}, '', '/map/#analytics=off')
+    expect(win.location.hash).toBe('#analytics=off')
+    expect(analytics.getTrackingStatus()).toMatchObject({ active: false, reason: 'opt-out' })
+    win.history.replaceState({}, '', '/map/')
+    expect(analytics.getTrackingStatus()).toMatchObject({ enabled: false, active: false, reason: 'reload-required' })
+    expect(tracker.getSession().cache).toBeUndefined()
+  })
+
+  it('fails closed on a later URL cleanup failure without allowing buffered replay to resume', () => {
+    const { analytics, win, listeners, historyCalls, tracker, ready } = setup()
+    analytics.initializeAnalytics()
+    ready()
+    historyCalls.pushState({}, '', '/map/#PRIVATE')
+    historyCalls.replaceState.mockImplementationOnce(() => { throw new Error('Synthetic prohibited cleanup') })
+    listeners.get('popstate')?.forEach((handler) => handler({}))
+    expect(analytics.getTrackingStatus()).toMatchObject({ enabled: false, active: false })
+    expect(tracker.getSession().cache).toBeUndefined()
+    historyCalls.replaceState({}, '', '/map/')
+    analytics.trackEvent('app_ready')
+    expect(tracker.track).not.toHaveBeenCalled()
+    expect(win.location.href).toBe('https://example.test/map/')
+  })
+
+  it('denies recorder cache immediately for a dirty live URL before navigation listeners run', () => {
+    const { analytics, win, historyCalls, tracker, ready } = setup()
+    analytics.initializeAnalytics()
+    ready()
+    historyCalls.pushState({}, '', '/map/#PRIVATE')
+    expect(tracker.getSession().cache).toBeUndefined()
+    expect(win.location.href).toBe('https://example.test/map/')
+    expect(analytics.getTrackingStatus()).toMatchObject({ enabled: false, active: false, reason: 'reload-required' })
+  })
+
+  it.each(['pushState', 'replaceState'] as const)('preserves native %s failures without replacing their exceptions', (method) => {
+    const { analytics, win, historyCalls } = setup()
+    analytics.initializeAnalytics()
+    const nativeError = new Error('Synthetic native state-cloning failure')
+    historyCalls[method].mockImplementationOnce(() => { throw nativeError })
+    expect(() => win.history[method]({}, '', '/map/#PRIVATE')).toThrow(nativeError)
+    expect(win.location.href).toBe('https://example.test/map/')
+  })
+
   it('cleans the actual URL before recorder loading while retaining only valid native campaign tokens', () => {
     const { analytics, win } = setup({ url: 'https://example.test/map/?utm_source=github&utm_medium=referral&utm_campaign=autumn&utm_content=contains%40email&utm_term=map-tree&save=PRIVATE#secret' })
     analytics.initializeAnalytics()
