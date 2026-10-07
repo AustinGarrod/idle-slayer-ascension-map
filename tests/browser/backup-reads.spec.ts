@@ -72,7 +72,7 @@ test('a cancelled newer preview ignores a late older read failure', async ({ pag
   await page.getByRole('button', { name: 'Cancel', exact: true }).click()
   await finishRead(page, 'deferred-reject.json')
   await expect(page.getByRole('dialog')).toHaveCount(0)
-  await expect(page.getByRole('status')).not.toContainText('could not be read')
+  await expect(page.getByRole('status', { name: 'Map action feedback', exact: true })).not.toContainText('could not be read')
   await unchanged(page)
 })
 
@@ -80,7 +80,7 @@ test('a newer failed read supersedes an older success without restoring either b
   await selectBackup(page, 'deferred-older.json', 1)
   await selectBackup(page, 'deferred-reject.json', 2)
   await finishRead(page, 'deferred-reject.json')
-  await expect(page.getByRole('status')).toContainText('could not be read')
+  await expect(page.getByRole('status', { name: 'Map action feedback', exact: true })).toContainText('could not be read')
   await finishRead(page, 'deferred-older.json')
   await expect(page.getByRole('dialog', { name: 'Your progress', exact: true })).toBeVisible()
   await expect(page.getByRole('dialog', { name: 'Restore progress?', exact: true })).toHaveCount(0)

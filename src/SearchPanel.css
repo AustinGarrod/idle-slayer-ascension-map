@@ -9,3 +9,7 @@
 .upgrade-discovery .discovery-identity { font-size: .75rem; }
 .upgrade-discovery .discovery-effect { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 .upgrade-discovery .discovery-list > p { margin: 14px; font-size: .875rem; color: var(--muted); }
+
+.search-box > .search-toggle { position: relative; grid-area: 1 / 1; justify-self: start; z-index: 1; width: 44px; height: 44px; padding: 0; border: 0; background: transparent; color: var(--frame); font-size: clamp(24px, 1.5rem, 32px); line-height: 1; }
+.search-box > input { padding-left: 52px; }
+.upgrade-discovery .search-result[aria-current="true"] { outline: 2px solid var(--bright-gold); outline-offset: -2px; }

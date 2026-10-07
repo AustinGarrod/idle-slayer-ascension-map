@@ -32,20 +32,25 @@ async function titleIsPainted(title: Locator): Promise<boolean> {
   })
 }
 
-async function webPresentation(page: Page) {
-  return page.evaluate(() => ({
+async function webPresentation(page: Page, sampleCounts?: number[]) {
+  return page.evaluate((sampleCounts) => ({
     nodes: [...document.querySelectorAll<HTMLElement>('.react-flow__node')].map((node) => {
       const matrix = new DOMMatrix(getComputedStyle(node).transform)
       const tile = node.querySelector<HTMLElement>('.upgrade-node')!
       return { id: node.dataset.id, x: matrix.e, y: matrix.f, width: tile.offsetWidth, height: tile.offsetHeight }
     }),
-    paths: [...document.querySelectorAll('.react-flow__edge')].map((edge) => {
-      const path = edge.querySelector('.react-flow__edge-path')!
+    paths: [...document.querySelectorAll('.react-flow__edge')].map((edge, index) => {
+      const path = edge.querySelector<SVGPathElement>('.react-flow__edge-path')!
       const style = getComputedStyle(path)
       const d = path.getAttribute('d')
-      return { id: edge.getAttribute('data-id'), d, stroke: style.stroke, width: style.strokeWidth, dash: style.strokeDasharray }
+      const length = path.getTotalLength(), count = sampleCounts?.[index] ?? Math.max(2, Math.ceil(length / 8) + 1)
+      const samples = Array.from({ length: count }, (_, position) => {
+        const point = path.getPointAtLength(length * position / (count - 1))
+        return { x: point.x, y: point.y }
+      })
+      return { id: edge.getAttribute('data-id'), d, length, samples, stroke: style.stroke, width: style.strokeWidth, dash: style.strokeDasharray }
     }),
-  }))
+  }), sampleCounts)
 }
 
 test('Game uses compact native circular tiles without changing any visible center', async ({ page }) => {
@@ -205,18 +210,20 @@ test('Game switch preserves progress and spoilers and restores Web geometry and 
   await chooseLayout(page, 'Detailed Layout')
   await expect(upgradeNode(page, branch.id)).toHaveClass(/selected/)
   await expect(page.locator('.native-connection-outline')).toHaveCount(0)
-  const numbers = /[-+]?\d*\.?\d+(?:e[-+]?\d+)?/gi
-  const structure = (value: typeof before) => ({ nodes: value.nodes, paths: value.paths.map((path) => ({ ...path, d: path.d?.replace(numbers, '#') })) })
+  const sampleCounts = before.paths.map((path) => path.samples.length)
+  const structure = (value: typeof before) => ({ nodes: value.nodes, paths: value.paths.map(({ id, stroke, width, dash }) => ({ id, stroke, width, dash })) })
   await expect.poll(async () => {
-    const after = await webPresentation(page)
-    // RF reads transformed handle rectangles. Compare the actual coordinate
-    // differences: rounding equality can fail on opposite sides of a boundary.
-    // Nodes, path commands, identities and styles remain exact; 0.05 world
-    // units is at most one eighth of a pixel even at the maximum map zoom.
+    const after = await webPresentation(page, sampleCounts)
+    // RF reads transformed handle rectangles. Tiny collinearity differences
+    // can produce equivalent Q/L syntax, so compare the actual rendered routes.
+    // Nodes, identities and styles remain exact. At most 8 units separate the
+    // reference samples; lengths and point distances must stay within 0.05
+    // world units (at most one eighth of a pixel at the maximum map zoom).
     const coordinatesRestored = after.paths.length === before.paths.length && after.paths.every((path, index) => {
-      const actual = path.d?.match(numbers)?.map(Number) ?? [], expected = before.paths[index].d?.match(numbers)?.map(Number) ?? []
-      return path.d !== null && before.paths[index].d !== null && actual.length === expected.length
-        && actual.every((coordinate, position) => Math.abs(coordinate - expected[position]) <= 0.05)
+      const expected = before.paths[index]
+      return path.d !== null && expected.d !== null && path.length > 0 && expected.length > 0
+        && Math.abs(path.length - expected.length) <= 0.05 && path.samples.length === expected.samples.length
+        && path.samples.every((point, position) => Math.hypot(point.x - expected.samples[position].x, point.y - expected.samples[position].y) <= 0.05)
     })
     return { ...structure(after), coordinatesRestored }
   }).toEqual({ ...structure(before), coordinatesRestored: true })

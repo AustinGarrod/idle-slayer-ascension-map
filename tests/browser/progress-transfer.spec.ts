@@ -46,6 +46,8 @@ test('desktop snapshot opens a mobile preview, cancels safely, then applies and 
   await page.locator('.transfer-qr').screenshot({ path: test.info().outputPath('transfer-qr.png') })
   writeFileSync(test.info().outputPath('transfer-link.txt'), link)
   const mobileContext = await browser.newContext({ viewport: { width: 320, height: 568 } })
+  const receiverErrors: string[] = []
+  mobileContext.on('page', (receiver) => receiver.on('pageerror', (error) => receiverErrors.push(error.message)))
   try {
     await mobileContext.addInitScript(({ key, layout, tracking, destination }) => {
       if (localStorage.getItem(key) === null) localStorage.setItem(key, JSON.stringify(destination))
@@ -79,7 +81,10 @@ test('desktop snapshot opens a mobile preview, cancels safely, then applies and 
     await expect(mobile.getByRole('button', { name: 'Detailed Layout', exact: true })).toHaveAttribute('aria-pressed', 'true')
     expect(requests.some((url) => url.includes('transfer=') || url.includes('v1.'))).toBe(false)
     expect(await saved(page)).toEqual(source)
-  } finally { await mobileContext.close() }
+  } finally {
+    await mobileContext.close()
+    expect(receiverErrors, 'Unhandled browser errors in the receiving context').toEqual([])
+  }
 })
 
 test('non-string layouts fail before preview or replacement in both transfer encodings', async ({ page, baseURL }) => {
