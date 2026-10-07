@@ -150,3 +150,52 @@ test('Undo cancels an outstanding JSON read so its late result cannot create a s
   await expect(page.getByRole('dialog', { name: 'Restore progress?', exact: true })).toHaveCount(0)
   expect((await stored(page)).epoch).toBe(0)
 })
+
+test('a pending Redo write disables both history directions until coordinated saving finishes', async ({ page }) => {
+  await page.addInitScript((name) => {
+    const win = window as Window & { holdHistoryWrite?: boolean; releaseHistoryWrite?: () => void }
+    const native = navigator.locks.request.bind(navigator.locks)
+    navigator.locks.request = ((requested: string, options: LockOptions, callback: (lock: unknown) => unknown) => requested === name
+      ? win.holdHistoryWrite ? new Promise<unknown>((resolve) => { win.releaseHistoryWrite = () => resolve(callback({})) }) : Promise.resolve(callback({}))
+      : native(requested, options, callback)) as typeof native
+  }, PROFILE_WRITE_LOCK)
+  await purchase(page)
+  await history(page, 'Undo', 'Purchase recording')
+  await page.evaluate(() => { (window as Window & { holdHistoryWrite?: boolean }).holdHistoryWrite = true })
+  let redo = page.locator('footer').getByRole('button', { name: 'Redo', exact: true })
+  if (!await redo.isVisible()) { await page.getByRole('button', { name: 'Map options', exact: true }).click(); redo = page.getByRole('dialog').getByRole('button', { name: 'Redo', exact: true }) }
+  await redo.click()
+  await expect(page.locator('.atlas')).toHaveAttribute('aria-busy', 'true')
+  expect((await stored(page)).purchases).toEqual({})
+  await open(page, 'Progress')
+  const progress = page.getByRole('dialog', { name: 'Your progress', exact: true })
+  await expect(progress.getByRole('button', { name: 'Undo', exact: true })).toBeDisabled()
+  await expect(progress.getByRole('button', { name: 'Redo', exact: true })).toBeDisabled()
+  await page.evaluate(() => (window as Window & { releaseHistoryWrite?: () => void }).releaseHistoryWrite?.())
+  await expect(page.locator('.atlas')).toHaveAttribute('aria-busy', 'false')
+  await expect(progress.getByRole('button', { name: 'Undo', exact: true })).toBeEnabled()
+  expect((await stored(page)).purchases[start.id].active).toBe(true)
+})
+
+for (const layout of ['Game Layout', 'Detailed Layout']) test(`${layout} preserves the viewport when Undo hides a selected spoiler and Redo reveals it`, async ({ page }) => {
+  const frames = () => page.evaluate(async () => { await document.fonts.ready; for (let count = 0; count < 8; count++) await new Promise<void>((resolve) => requestAnimationFrame(() => resolve())) })
+  const camera = () => page.locator('.react-flow__viewport').evaluate((element) => { const matrix = new DOMMatrix(getComputedStyle(element).transform); return [matrix.e, matrix.f, matrix.a] })
+  await page.goto('./')
+  await page.getByRole('group', { name: 'Map layout', exact: true }).getByRole('button', { name: layout, exact: true }).click()
+  const checkbox = page.getByRole('checkbox', { name: 'Show spoilers', exact: true })
+  if (!await checkbox.isVisible()) await page.getByRole('button', { name: 'Map options', exact: true }).click()
+  await checkbox.check()
+  const options = page.getByRole('dialog', { name: 'Map options', exact: true })
+  if (await options.isVisible()) await options.getByRole('button', { name: 'Close dialog', exact: true }).click()
+  await page.getByRole('searchbox').fill('Soul Reaper III')
+  await page.locator('.search-result').filter({ hasText: 'Soul Reaper III' }).first().click()
+  await frames()
+  const before = await camera()
+  await history(page, 'Undo', 'Spoiler setting')
+  await expect(page.locator('.details')).toHaveCount(0)
+  await frames()
+  expect(await camera()).toEqual(before)
+  await history(page, 'Redo', 'Spoiler setting')
+  await frames()
+  expect(await camera()).toEqual(before)
+})
