@@ -101,7 +101,7 @@ export function SearchPanel({ upgrades, profile, inputRef, open, onOpenChange, o
     }
   }
   function close() { cancelCandidateFocus(); setActiveId(null); inputRef.current?.focus({ preventScroll: true }); onOpenChange(false) }
-  return <div className="search-box" onKeyDown={(event) => { if (event.key === 'Escape' && !event.nativeEvent.isComposing) { event.stopPropagation(); close() } }}>
+  return <div className="search-box" onKeyDown={(event) => { if (event.key === 'Escape' && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.stopPropagation(); close() } }}>
     <label className="sr-only" htmlFor="search">Search visible upgrade titles and effects</label>
     <button type="button" className="search-toggle" aria-label="Toggle search results" aria-expanded={open} aria-controls={open ? resultsId : undefined} onClick={() => { if (open) close(); else { onOpenChange(true); inputRef.current?.focus({ preventScroll: true }) } }}><span aria-hidden="true">⌕</span></button>
     <p id={statusId} role="status" aria-label="Search result state" aria-live="polite" aria-atomic="true" className="sr-only telemetry-private rr-block">{open ? `Search results open. ${results.length} visible results${results.length ? '.' : '; no matching visible upgrades.'}` : 'Search results closed.'}</p>

@@ -124,3 +124,23 @@ test('search arrows expose a readable non-first candidate at the actual 200% bro
   await page.keyboard.press('Enter')
   await expect(page.locator('.details h2')).toHaveText(title)
 })
+
+test('successive suggestion confirmation stays readable at the actual 200% browser font', async ({ page }) => {
+  await page.goto('./')
+  await expect(page.locator('html')).toHaveCSS('font-size', '32px')
+  await page.getByRole('button', { name: 'Next upgrade', exact: true }).click()
+  await page.getByRole('dialog', { name: 'Suggested next upgrade', exact: true }).getByRole('button', { name: 'Record purchase…', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Record purchase?', exact: true })
+  expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true)
+  for (const name of ['Apply and continue suggestions', 'Apply purchases', 'Back to suggestions', 'Cancel']) {
+    const button = dialog.getByRole('button', { name, exact: true })
+    await button.scrollIntoViewIfNeeded()
+    await expect(button).toBeInViewport()
+    const box = await button.boundingBox()
+    expect(box!.width).toBeGreaterThanOrEqual(44)
+    expect(box!.height).toBeGreaterThanOrEqual(44)
+    expect(await button.evaluate((element) => element.scrollWidth <= element.clientWidth + 1 && element.scrollHeight <= element.clientHeight + 1)).toBe(true)
+  }
+  await dialog.getByRole('button', { name: 'Apply and continue suggestions', exact: true }).click()
+  await expect(page.getByRole('dialog', { name: 'Suggested next upgrade', exact: true }).locator('.recommendation-main')).toContainText('Soul Gatherer Bundle')
+})
