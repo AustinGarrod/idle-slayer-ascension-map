@@ -150,3 +150,6 @@ Keep motion brief and purposeful, such as centering a selected node. Respect red
 ## Portable reference selection
 
 A secondary action in expanded details adds an explicit visible upgrade to a four-entry visit-only sheet. Map options opens the private selection and complete outgoing document preview. Wrapped 44px controls support removal, clearing, review, saving and a separate print tab without adding a persistent map rail. The self-contained document uses readable native text, full exact costs and grouped visible requirements; it labels the excerpt limits and version. No private progress or inferred routes enter the sheet.
+## Optional player intentions
+
+Goals stay in the existing scrollable Progress dialog, with entry from expanded upgrade details. No permanent rail competes with the map or selected inspector. A compact completion selector distinguishes acquisition, activation and a repeat-purchase rebuild; full explanatory wording stays alongside it. Current visible rows pair stable ID/exact cost with status and native requirement inspection, explicit ordering and retirement controls. Goal panels, choices and recovery feedback are excluded from replay. Intentions never become actual progress or a recommended optimal build.
