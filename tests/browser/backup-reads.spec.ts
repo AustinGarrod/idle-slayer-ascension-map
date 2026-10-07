@@ -1,4 +1,6 @@
-import { expect, test, type Page } from '@playwright/test'
+import { openProgress } from './helpers/app'
+import { expect, test } from './fixtures'
+import type { Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import { emptyProfile, type Catalog } from '../../src/domain/types'
 import { PROFILE_STORAGE_KEY } from '../../src/domain/storage'
@@ -27,12 +29,6 @@ test.beforeEach(async ({ page }) => {
   await openProgress(page)
 })
 
-async function openProgress(page: Page) {
-  await expect(page.locator('.toolbar')).toBeVisible()
-  const action = page.getByRole('button', { name: 'Progress', exact: true })
-  if (!await action.isVisible()) await page.getByRole('button', { name: 'Map options', exact: true }).click()
-  await action.click()
-}
 async function selectBackup(page: Page, name: string, epoch: number) {
   await page.getByLabel('Map progress JSON backup', { exact: true }).setInputFiles({ name, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ ...emptyProfile(catalog.revision), epoch })) })
   if (name.startsWith('deferred-')) await expect.poll(() => page.evaluate((name) => typeof (window as ReadWindow).releaseBackup?.[name], name)).toBe('function')

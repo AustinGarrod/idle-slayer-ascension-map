@@ -203,7 +203,7 @@ dialog > button { margin: 6px 8px 0 0; }
 .progress-actions, .map-options { display: flex; flex-direction: column; gap: 10px; }
 .progress-actions > button, .map-options > button { text-align: left; }
 .prior-ascensions { display: flex; flex-direction: column; gap: 10px; padding: 12px 0; border-top: 1px solid #574631; border-bottom: 1px solid #574631; }
-.prior-ascensions label { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: .875rem; }
+.prior-ascensions label { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; font-size: .875rem; }
 .prior-ascensions input { width: 108px; flex: 0 0 108px; }
 .prior-ascensions input[aria-invalid="true"] { border-color: var(--bright-gold); outline: 1px solid var(--bright-gold); }
 .prior-ascensions button { text-align: left; }
@@ -468,3 +468,8 @@ dialog:has(.map-help) { overflow-wrap: anywhere; }
 .map-help-legend dd { margin: .25rem 0 0; }
 
 dialog:has(.purchase-confirm-actions) { overflow-wrap: anywhere; }
+
+/* Large browser text leaves too little width for a sticky inspector action rail. */
+@media (max-width: 15rem) {
+  .detail-actions { position: static; }
+}

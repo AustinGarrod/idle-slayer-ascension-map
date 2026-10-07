@@ -1,4 +1,6 @@
-import { expect, test, type Page } from '@playwright/test'
+import { seedProfile } from './helpers/profile'
+import { openProgress } from './helpers/app'
+import { expect, test } from './fixtures'
 import { readFileSync } from 'node:fs'
 import { emptyProfile, MAX_PROFILE_EPOCH, type Catalog } from '../../src/domain/types'
 
@@ -7,20 +9,13 @@ const ua = catalog.upgrades.find((node) => node.title === 'Ultra Ascension')!
 const astral = catalog.upgrades.find((node) => node.title === 'Land Lord')!
 const key = 'idle-slayer-ascension-map.profile.v1'
 
-async function openProgress(page: Page) {
-  await expect(page.locator('.toolbar')).toBeVisible()
-  const action = page.getByRole('button', { name: 'Progress', exact: true })
-  if (!await action.isVisible()) await page.getByRole('button', { name: 'Map options', exact: true }).click()
-  await action.click()
-}
-
 test('maximum accepted epoch refuses Ultra Ascension and remains exportable without mutation', async ({ page }) => {
   const profile = { ...emptyProfile(catalog.revision), epoch: MAX_PROFILE_EPOCH, purchases: {
     [ua.id]: { epoch: MAX_PROFILE_EPOCH, active: true },
     [astral.id]: { epoch: MAX_PROFILE_EPOCH, active: false },
     'unknown-future': { epoch: 1, active: false },
   }, milestones: { 'unknown-milestone': true as const } }
-  await page.addInitScript(({ key, profile }) => localStorage.setItem(key, JSON.stringify(profile)), { key, profile })
+  await seedProfile(page, profile)
   await page.goto('./'); await openProgress(page)
   await page.getByRole('button', { name: 'Ultra Ascend…', exact: true }).click()
   await expect(page.getByRole('dialog', { name: 'Ultra Ascend?', exact: true })).toHaveCount(0)
@@ -38,9 +33,7 @@ test('last safe Ultra Ascension saves, reloads and exports its reset without los
     [astral.id]: { epoch: MAX_PROFILE_EPOCH - 1, active: false },
     'unknown-future': { epoch: 1, active: false },
   }, milestones: { 'unknown-milestone': true as const } }
-  await page.addInitScript(({ key, profile }) => {
-    if (localStorage.getItem(key) === null) localStorage.setItem(key, JSON.stringify(profile))
-  }, { key, profile })
+  await seedProfile(page, profile, true)
   await page.goto('./'); await openProgress(page)
   await page.getByRole('button', { name: 'Ultra Ascend…', exact: true }).click()
   await expect(page.getByRole('dialog', { name: 'Ultra Ascend?', exact: true })).toContainText(`Start epoch ${MAX_PROFILE_EPOCH}`)

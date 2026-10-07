@@ -1,4 +1,6 @@
-import { expect, test, type Page } from '@playwright/test'
+import { chooseLayout, openProgress } from './helpers/app'
+import { expect, test } from './fixtures'
+import type { Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import type { Catalog, Profile } from '../../src/domain/types'
 import { emptyProfile } from '../../src/domain/types'
@@ -7,21 +9,11 @@ const catalog = JSON.parse(readFileSync('public/catalog.json', 'utf8')) as Catal
 const layoutKey = 'idle-slayer-ascension-map.layout.v1'
 const profileKey = 'idle-slayer-ascension-map.profile.v1'
 const analyticsKey = 'idle-slayer-ascension-map.analytics.v1'
-const runtimeErrors: Error[] = []
 
 test.beforeEach(async ({ page }) => {
-  runtimeErrors.length = 0
-  page.on('pageerror', (error) => runtimeErrors.push(error))
   await page.addInitScript((key) => localStorage.setItem(key, 'disabled'), analyticsKey)
   await page.route('https://analytics.garrod.house/**', (route) => route.abort())
 })
-test.afterEach(() => expect(runtimeErrors).toEqual([]))
-
-async function chooseLayout(page: Page, name: 'Game Layout' | 'Detailed Layout') {
-  const button = page.getByRole('group', { name: 'Map layout', exact: true }).getByRole('button', { name, exact: true })
-  await button.click()
-  await expect(button).toHaveAttribute('aria-pressed', 'true')
-}
 
 async function expectLayout(page: Page, name: 'Game Layout' | 'Detailed Layout') {
   const group = page.getByRole('group', { name: 'Map layout', exact: true })
@@ -29,12 +21,6 @@ async function expectLayout(page: Page, name: 'Game Layout' | 'Detailed Layout')
   await expect(group.getByRole('button', { name: name === 'Game Layout' ? 'Detailed Layout' : 'Game Layout', exact: true })).toHaveAttribute('aria-pressed', 'false')
   if (name === 'Game Layout') await expect(page.locator('.map-game')).toBeVisible()
   else await expect(page.locator('.map-game')).toHaveCount(0)
-}
-
-async function openProgress(page: Page) {
-  const button = page.getByRole('button', { name: 'Progress', exact: true })
-  if (!await button.isVisible()) await page.getByRole('button', { name: 'Map options', exact: true }).click()
-  await button.click()
 }
 
 test('fresh visits put Game Layout first and remember each user choice on reload', async ({ page }) => {

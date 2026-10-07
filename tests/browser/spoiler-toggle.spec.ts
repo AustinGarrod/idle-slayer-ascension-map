@@ -1,4 +1,5 @@
-import { expect, test, type Locator, type Page } from '@playwright/test'
+import { expect, test } from './fixtures'
+import type { Locator, Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import type { Catalog } from '../../src/domain/types'
 import { emptyProfile } from '../../src/domain/types'
@@ -12,17 +13,13 @@ const hidden = catalog.upgrades.find((upgrade) => !revealed.ids.has(upgrade.id)
   && catalog.upgrades.every((other) => other.id === upgrade.id || other.title !== upgrade.title))!
 type Camera = { x: number; y: number; zoom: number }
 type CameraObservation = { observer: MutationObserver; samples: Camera[] }
-const runtimeErrors: Error[] = []
 
 test.beforeEach(async ({ page }, info) => {
-  runtimeErrors.length = 0
-  page.on('pageerror', (error) => runtimeErrors.push(error))
   if (info.project.name === 'mobile') await page.setViewportSize({ width: 320, height: 568 })
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await page.addInitScript(() => localStorage.setItem('idle-slayer-ascension-map.analytics.v1', 'disabled'))
   await page.route('https://analytics.garrod.house/**', (route) => route.abort())
 })
-test.afterEach(() => expect(runtimeErrors).toEqual([]))
 
 async function camera(page: Page): Promise<Camera> {
   return page.locator('.react-flow__viewport').evaluate((element) => {
