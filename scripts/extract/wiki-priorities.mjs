@@ -57,6 +57,12 @@ if (!/all of the text on a wiki is licensed under the \[https:\/\/creativecommon
 const strategyPage = Object.values((await readJSON('ascension-strategy-api.json')).query.pages)[0]
 const strategyRevision = strategyPage.revisions[0]
 const fetched = await readJSON('fetch-receipt.json')
+const fetchDate = fetched?.retrievedAt
+const parsedFetchDate = typeof fetchDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(fetchDate)
+  ? Date.parse(`${fetchDate}T00:00:00.000Z`) : NaN
+if (!Number.isFinite(parsedFetchDate) || new Date(parsedFetchDate).toISOString().slice(0, 10) !== fetchDate) {
+  throw new Error('Fetch receipt must contain a valid YYYY-MM-DD calendar date')
+}
 const catalogText = await readFile('public/catalog.json', 'utf8')
 const catalog = JSON.parse(catalogText)
 const byId = new Map(catalog.upgrades.map((node) => [node.id, node]))

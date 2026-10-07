@@ -1,6 +1,6 @@
 // Entirely invented wiki/API and catalog fixture; never downloads source text.
 import assert from 'node:assert/strict'
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -102,6 +102,8 @@ function execute(data, alter = () => {}, options = {}) {
       referenceUnchanged: !options.reference || readFileSync(reference, 'utf8') === options.reference,
       requests: options.refresh ? JSON.parse(readFileSync(fetchLog, 'utf8')) : [],
       trackedUnchanged: readFileSync(trackedSnapshot, 'utf8') === trackedBytes,
+      outputExists: existsSync(actualOutput),
+      receiptExists: existsSync(actualOutput + '.reproduction-receipt.json'),
     }
   } finally {
     // Only this known mkdtemp child under the OS temp root is removed.
@@ -227,4 +229,22 @@ test('fresh pinned reproduction requests all reviewed revision IDs and records t
   assert.ok(urls.every((url) => !url.searchParams.has('titles')))
   assert.match(result.receipt.sourceFetchedAt, /^\d{4}-\d{2}-\d{2}$/)
   assert.equal(result.receipt.originalSnapshotRetrievedAt, '2000-01-01')
+})
+
+test('both modes reject missing or invalid actual fetch dates before writing output or receipts', () => {
+  const reference = execute(fixture()).outputText
+  for (const retrievedAt of [undefined, null, 20000101, 'not-a-date', '2001-02-29', '2000-02-30', '2000-13-01', '2000-01-01T00:00:00Z', ' 2000-01-01']) {
+    for (const options of [{}, { reference }]) {
+      const result = execute(fixture(), (files) => { files['fetch-receipt.json'] = { retrievedAt } }, options)
+      assert.notEqual(result.status, 0)
+      assert.match(result.stderr, /valid YYYY-MM-DD calendar date/)
+      assert.equal(result.outputExists, false)
+      assert.equal(result.receiptExists, false)
+      assert.equal(result.referenceUnchanged, true)
+    }
+  }
+  const leap = execute(fixture(), (files) => { files['fetch-receipt.json'].retrievedAt = '2000-02-29' }, { reference })
+  assert.equal(leap.status, 0, leap.stderr)
+  assert.equal(leap.receipt.sourceFetchedAt, '2000-02-29')
+  assert.equal(leap.outputText, reference)
 })
