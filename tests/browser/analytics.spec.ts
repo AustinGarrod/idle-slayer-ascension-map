@@ -1301,7 +1301,9 @@ for (const tracking of ['enabled', 'disabled'] as const) {
         await expect.poll(() => new URL(page.url()).hash).toBe('')
       } else if (outcome === 'navigate away') {
         await page.evaluate(() => { location.hash = '#elsewhere' })
-        await expect.poll(() => new URL(page.url()).hash).toBe(tracking === 'enabled' ? '' : '#elsewhere')
+        // Public-reference startup now cleans arbitrary addresses regardless
+        // of tracking preference; cancellation must survive that cleanup.
+        await expect.poll(() => new URL(page.url()).hash).toBe('')
       }
       releaseCatalog()
       await expect(page.locator('.toolbar')).toBeVisible()
