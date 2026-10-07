@@ -81,7 +81,7 @@ test('recommendation dialog filters spoilers and owned pending locks with source
   for (const card of await dialog.locator('.recommendation-card').all()) {
     const id = (await card.getAttribute('data-upgrade-id'))!
     const upgrade = catalog.upgrades.find((node) => node.id === id)!
-    await expect(card).toContainText(`${BigInt(upgrade.cost).toLocaleString('en')} SP`)
+    await expect(card.getByRole('math')).toHaveAccessibleName(`${BigInt(upgrade.cost).toLocaleString('en')} Slayer Points`)
   }
 })
 

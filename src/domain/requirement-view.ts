@@ -1,4 +1,5 @@
 import { satisfies, type visibility } from './rules'
+import { presentCost } from './cost-presentation'
 import type { Profile, Requirement, Upgrade } from './types'
 
 export type RequirementRoute = { kind: 'upgrade' | 'milestone'; id: string } | { kind: 'history' }
@@ -26,7 +27,7 @@ export function visibleRequirement(requirement: Requirement, profile: Profile, v
       const upgrade = visible.upgrades.find((node) => node.id === requirement.id)
       if (!upgrade) return null
       return { kind: 'leaf', label: `${upgrade.title}${requirement.kind === 'active' ? ' (active)' : ''}`, satisfied: satisfies(requirement, profile),
-        route: { kind: 'upgrade', id: upgrade.id }, identity: `${upgrade.title} · ${BigInt(upgrade.cost).toLocaleString('en')} SP` }
+        route: { kind: 'upgrade', id: upgrade.id }, identity: `${upgrade.title} · ${presentCost(upgrade.cost).exact} SP` }
     }
     case 'milestone': {
       const milestone = visible.milestones.find((item) => item.id === requirement.id)

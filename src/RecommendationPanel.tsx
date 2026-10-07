@@ -1,4 +1,5 @@
 import { useId } from 'react'
+import { SPCost } from './SPCost'
 import type { UpgradeRecommendation, UpgradeRecommendations } from './domain/recommendations'
 import type { Catalog, Upgrade } from './domain/types'
 import { source as wikiSource } from './data/wiki-priorities.json'
@@ -24,7 +25,7 @@ function RecommendationCard({ suggestion, primary, onSelect, onPurchase }: {
   return <article className={`recommendation-card${primary ? ' recommendation-main' : ''}`} data-upgrade-id={upgrade.id}>
     <div className="recommendation-heading">
       <img className="upgrade-icon" src={`${import.meta.env.BASE_URL}${upgrade.icon}`} alt="" />
-      <div>{title}<small className="recommendation-cost">{BigInt(upgrade.cost).toLocaleString('en')} SP</small></div>
+      <div>{title}</div><small className="recommendation-cost"><SPCost value={upgrade.cost} /></small>
     </div>
     <p className="recommendation-status">Prerequisites recorded</p>
     <small className="recommendation-basis">{suggestion.basis === 'wiki' ? `Wiki priority · ${suggestion.tier}` : 'Catalog fallback'}</small>

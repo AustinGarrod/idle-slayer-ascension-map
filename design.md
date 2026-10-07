@@ -16,6 +16,8 @@ The search overlay also browses all visible upgrades with an empty query and a P
 
 ## Native Game presentation refinement
 
+Large SP costs use an exact coefficient and visible power of ten instead of an ambiguous suffix. Full grouped values remain available to assistive technology and in titles. The inspector gives cost its own readable header row; expanded details show the complete value with breaks only between comma groups, a stable ID and copy/manual-copy controls. Cost notation changes neither native values nor eligibility.
+
 Three Game-only concepts received an independent spacing and accessibility review after feedback that the large cards changed the game's appearance and obscured its lines:
 
 1. **Native icon frames — selected:** use the reviewed 100×100 circular frame and 64×64 icon proportions, with transient hover/focus titles and selection details. Native straight lines follow the actual center-to-center angle and end at the circle boundary. The review found this preserves recognizable branches and clears all card overlaps without moving a native coordinate. The starting zoom is 0.6; selection uses 0.85, giving 60 px and 85 px targets while showing more surrounding branches.
