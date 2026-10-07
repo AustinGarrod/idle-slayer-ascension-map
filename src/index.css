@@ -212,6 +212,20 @@ dialog > button { margin: 6px 8px 0 0; }
 .milestone > input { margin-top: 3px; }
 .milestone > span { min-width: 0; font-size: .9375rem; line-height: 1.5; }
 .milestone small { margin-top: 4px; }
+.requirement-view { margin-bottom: 12px; }
+.requirement-expression { line-height: 2; overflow-wrap: anywhere; }
+.requirement-leaf { display: inline-flex; flex-direction: column; vertical-align: middle; max-width: 100%; margin: 3px 0; }
+.requirement-leaf > button { min-width: 0; padding: 8px; text-align: left; font-size: inherit; overflow-wrap: anywhere; }
+.requirement-status { margin-top: 2px; font-size: .75rem; line-height: 1.5; }
+.requirement-satisfied { color: var(--complete); }
+.requirement-missing { color: var(--bright-gold); }
+.requirement-operator { color: var(--muted); font-weight: bold; }
+.requirement-guidance { margin-top: 8px; font-size: .75rem; line-height: 1.5; }
+.requirement-return { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.requirement-return > button { overflow-wrap: anywhere; text-align: left; }
+.requirement-return > small { font-size: .75rem; line-height: 1.5; }
+.recommendation-empty button { width: 100%; text-align: left; overflow-wrap: anywhere; }
+.recommendation-empty small { margin-top: 8px; }
 .loading { width: min(640px, calc(100% - 32px)); margin: 15svh auto; padding: 24px; border: 1px solid var(--frame); background: var(--surface); }
 .loading h1 { color: var(--bright-gold); font-size: .875rem; line-height: 1.8; }
 .loading p { color: var(--muted); }
