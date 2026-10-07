@@ -424,3 +424,6 @@ dialog:has(.game-save-import-panel) .dialog-heading { position: sticky; top: -20
 .tracking-status { padding: 10px 12px; border: 1px solid #79603b; border-radius: 4px; background: var(--raised); }
 dialog:has(.privacy-panel) { scroll-padding-top: 76px; }
 dialog:has(.privacy-panel) .dialog-heading { position: sticky; top: -20px; z-index: 1; margin-left: -20px; margin-right: -20px; padding-left: 20px; padding-right: 20px; background: var(--surface); box-shadow: 0 12px var(--surface); }
+
+/* Every suggestion still uses one explicit purchase confirmation. */
+.purchase-confirm-actions > button { flex: 1 1 140px; font-size: .875rem; overflow-wrap: anywhere; }

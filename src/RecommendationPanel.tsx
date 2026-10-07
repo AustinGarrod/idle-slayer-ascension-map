@@ -28,11 +28,11 @@ function RecommendationCard({ suggestion, primary, onSelect, onPurchase }: {
     </div>
     <p className="recommendation-status">Prerequisites recorded</p>
     <small className="recommendation-basis">{suggestion.basis === 'wiki' ? `Wiki priority · ${suggestion.tier}` : 'Catalog fallback'}</small>
-    {primary && <p className="recommendation-effect"><strong>Benefit:</strong> {upgrade.description}</p>}
+    <p className="recommendation-effect"><strong>Benefit:</strong> {upgrade.description}</p>
     {suggestion.activationNote && <p className="recommendation-activation">{suggestion.activationNote}</p>}
     <div className="recommendation-actions">
       <button aria-label={primary ? 'Show on map' : `Show ${upgrade.title} on map`} onClick={() => onSelect(upgrade.id)}>Show on map</button>
-      {primary && <button className="primary" onClick={() => onPurchase(upgrade.id)}>Record purchase…</button>}
+      <button className="primary" aria-label={primary ? 'Record purchase…' : `Record ${upgrade.title} purchase…`} onClick={() => onPurchase(upgrade.id)}>Record purchase…</button>
     </div>
     <p className="recommendation-reason">{suggestion.reason}</p>
     {suggestion.source && <a className="recommendation-source" onClick={() => trackEvent('source_link_opened', { source: 'recommendation', action: 'wiki', upgrade_id: upgrade.id })} href={suggestion.source.url} target="_blank" rel="noreferrer">{suggestion.source.label}</a>}
@@ -45,6 +45,7 @@ export function RecommendationPanel({ catalog, recommendations, onSelect, onPurc
   const alternatives = remaining.slice(0, 2)
   return <div className="recommendation-panel">
     <p className="recommendation-context">{recommendations.status === 'wiki' ? `Wiki guide ${wikiSource.gameVersion} priorities · ` : ''}Native costs and requirements: game {catalog.gameVersion}.</p>
+    {primary && <p className="recommendation-context">Compare any suggestion, then review its purchase. Apply and continue suggestions returns here after that single confirmation; each next purchase needs its own review.</p>}
     {primary ? <>
       <RecommendationCard suggestion={primary} primary onSelect={onSelect} onPurchase={onPurchase} />
       {alternatives.length > 0 && <section className="recommendation-alternatives" aria-labelledby={alternativesId}>
