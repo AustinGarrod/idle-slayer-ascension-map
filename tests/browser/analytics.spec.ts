@@ -1046,3 +1046,25 @@ test('unsaved progress opt-out preserves cancellation and exports current memory
   expect(capture.scriptRequests).toEqual([])
   expect(capture.unexpected).toEqual([])
 })
+
+test('continuing the final eligible suggestion reports the fresh all-owned reason once', async ({ page, context, baseURL }) => {
+  const origin = new URL(baseURL!).origin
+  const capture = await installLocalRoutes(context, origin, { recorderBody: '' })
+  await serveIsolatedApplication(context, origin)
+  const profile = { ...initial, purchases: Object.fromEntries(catalog.upgrades.filter((upgrade) => upgrade.id !== catalog.startId).map((upgrade) => [upgrade.id, { epoch: 0, active: true }])) }
+  await page.addInitScript(({ key, profile }) => localStorage.setItem(key, JSON.stringify(profile)), { key: profileKey, profile })
+  await page.goto(`${origin}${appFixturePath}`)
+  await expect(page.locator('.toolbar')).toBeVisible()
+  await waitForActive(page)
+  const reasons = () => capture.submissions.filter((submission) => submission.type === 'event' && submission.payload.name === 'recommendations_viewed').map((submission) => (submission.payload.data as Record<string, unknown>).reason)
+  await page.getByRole('button', { name: 'Next upgrade', exact: true }).click()
+  const suggestions = page.getByRole('dialog', { name: 'Suggested next upgrade', exact: true })
+  await expect(suggestions.locator('.recommendation-main')).toHaveAttribute('data-upgrade-id', catalog.startId)
+  await expect.poll(reasons).toEqual(['wiki'])
+  await suggestions.getByRole('button', { name: 'Record purchase…', exact: true }).click()
+  await page.getByRole('dialog', { name: 'Record purchase?', exact: true }).getByRole('button', { name: 'Apply and continue suggestions', exact: true }).click()
+  await expect(suggestions).toContainText('Every visible upgrade is already recorded as owned')
+  await expect.poll(reasons).toEqual(['wiki', 'all-owned'])
+  expect(capture.submissions.filter((submission) => submission.payload.name === 'recommendation_purchase_applied')).toHaveLength(1)
+  expect(capture.unexpected).toEqual([])
+})
