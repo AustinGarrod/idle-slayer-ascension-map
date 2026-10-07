@@ -514,6 +514,33 @@ test('opt-out stops recorder sends and reload never restarts scripts', async ({ 
   expect(capture.unexpected).toEqual([])
 })
 
+test('offline activity is never uploaded after reconnection and fresh online reload can resume tracking', async ({ page, context, baseURL }) => {
+  const origin = new URL(baseURL!).origin
+  const capture = await installLocalRoutes(context, origin)
+  await page.goto(`${origin}${fixturePath}`); await injectHarness(page); await initializeHarness(page); await waitForActive(page)
+  await expect.poll(() => capture.submissions.some((item) => item.type === 'record')).toBe(true)
+  const preference = await page.evaluate((key) => localStorage.getItem(key), preferenceKey)
+  const marker = 'SENTINEL-offline-period-replay-95623'
+  await context.setOffline(true)
+  await expect.poll(() => page.evaluate(() => (window as unknown as { analyticsHarness: { getTrackingStatus: () => { active: boolean; reason: string } } }).analyticsHarness.getTrackingStatus())).toMatchObject({ active: false, reason: 'reload-required' })
+  await page.evaluate((marker) => {
+    const node = document.createElement('p'); node.id = 'offline-proof'; node.textContent = marker; document.body.appendChild(node)
+    ;(window as unknown as { analyticsHarness: { trackEvent: (name: string) => void } }).analyticsHarness.trackEvent('backup_download_requested')
+  }, marker)
+  await context.setOffline(false)
+  await page.locator('#public-action').click()
+  await page.waitForTimeout(6000)
+  expect(JSON.stringify(replayEvents(capture))).not.toContain(marker)
+  expect(capture.submissions.some((item) => item.type === 'event' && item.payload.name === 'backup_download_requested')).toBe(false)
+  expect(await page.evaluate(() => (window as unknown as { umami: { getSession: () => { cache?: string } } }).umami.getSession().cache)).toBeUndefined()
+  expect(await page.evaluate((key) => localStorage.getItem(key), preferenceKey)).toBe(preference)
+  const beforeReload = capture.submissions.length
+  await page.reload(); await injectHarness(page); await initializeHarness(page); await waitForActive(page)
+  await expect.poll(() => capture.submissions.slice(beforeReload).some((item) => item.type === 'record')).toBe(true)
+  expect(JSON.stringify(replayEvents(capture))).not.toContain(marker)
+  expect(capture.unexpected).toEqual([])
+})
+
 test('cross-tab opt-out never uploads disabled-period replay activity after another tab enables tracking', async ({ page, context, baseURL }) => {
   const origin = new URL(baseURL!).origin
   const capture = await installLocalRoutes(context, origin)
