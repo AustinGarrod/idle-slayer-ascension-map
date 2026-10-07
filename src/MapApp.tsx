@@ -9,6 +9,7 @@ import { planAstralActivation, planPurchase, planRemoval, planUltraAscension, re
 import { upgradeState } from './domain/discovery'
 import { SearchPanel } from './SearchPanel'
 import { formatRequirement } from './domain/requirement-label'
+import { OVERVIEW_MIN_ZOOM, visibleOverviewViewport, type OverviewViewport } from './domain/map-overview'
 import { requirementReviewTarget } from './domain/requirement-view'
 import type { RequirementRoute } from './domain/requirement-view'
 import { RequirementView } from './RequirementView'
@@ -88,6 +89,8 @@ function Atlas({ catalog }: { catalog: Catalog }) {
   const [layoutMode, setLayoutMode] = useState(() => loadLayoutPreference(() => window.localStorage))
   const [detailExpanded, setDetailExpanded] = useState(false)
   const [navigationOpen, setNavigationOpen] = useState(false)
+  const [overviewView, setOverviewView] = useState(false)
+  const previousOverviewViewport = useRef<OverviewViewport | null>(null)
   const [preview, setPreviewState] = useState<Preview | null>(null)
   const [trackingReload, setTrackingReload] = useState<boolean | null>(null)
   const [purchaseTarget, setPurchaseTarget] = useState<string | null>(null)
@@ -97,6 +100,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
   const keyboardSelection = useRef(false)
   const cameraStart = useRef<{ x: number; y: number; zoom: number } | null>(null)
   const cameraRequest = useRef(0)
+  const pendingOverviewRequest = useRef<number | null>(null)
   const recenterOnMapResize = useRef(true)
   const previousSelectionPosition = useRef<{ id: string; mode: 'native' | 'web'; x: number; y: number; progress: string } | null>(null)
   const appReadyReported = useRef(false)
@@ -173,6 +177,9 @@ function Atlas({ catalog }: { catalog: Catalog }) {
   }, [detail?.id])
   const visibleGraphKey = JSON.stringify([visible.upgrades.map((node) => node.id), visible.connections])
   const layout = useMemo(() => createMapLayout({ mode: layoutMode, upgrades: visible.upgrades, connections: visible.connections }), [catalog, layoutMode, visibleGraphKey])
+  const latestOverviewLayout = useRef(layout)
+  latestOverviewLayout.current = layout
+  const previousOverviewProgress = useRef({ progress: layoutProgress, layout })
   const incoming = visible.connections.filter((edge) => edge.to === detail?.id).map((edge) => index.get(edge.from)!)
   const outgoing = visible.connections.filter((edge) => edge.from === detail?.id).map((edge) => index.get(edge.to)!)
   const related = new Set([...incoming, ...outgoing].map((node) => node.id))
@@ -375,6 +382,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
   }
   function center(id: string, source: SelectionSource = 'map', focusDetails = false) {
     if (!visible.ids.has(id)) return
+    leaveOverview()
     keyboardSearchDetails.current = focusDetails
     if (focusDetails) setDetailFocusRevision((revision) => revision + 1)
     if (!selected) setDetailExpanded(false)
@@ -383,6 +391,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     setGraphFocus(id); setSelected(id); setSearchOpen(false); moveCamera(id)
   }
   function focusGraphUpgrade(id: string) {
+    leaveOverview()
     const node = Array.from(mapElement.current?.querySelectorAll<HTMLElement>('.react-flow__node') ?? []).find((element) => element.dataset.id === id)
     setNavigationOpen(false)
     node?.focus({ preventScroll: true })
@@ -433,6 +442,48 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     cameraRequest.current += 1
     recenterOnMapResize.current = false
   }
+  function leaveOverview() { setOverviewView(false); previousOverviewViewport.current = null; pendingOverviewRequest.current = null }
+  function fitOverviewCamera() {
+    const request = ++cameraRequest.current
+    pendingOverviewRequest.current = request
+    recenterOnMapResize.current = true
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+      if (pendingOverviewRequest.current === request) pendingOverviewRequest.current = null
+      if (request !== cameraRequest.current || profile !== currentProfile.current || layout !== latestOverviewLayout.current) return
+      const map = mapElement.current?.getBoundingClientRect()
+      if (!map) return
+      const controls = mapElement.current?.querySelector('.camera-controls')?.getBoundingClientRect()
+      const summary = mapElement.current?.querySelector('.map-summary')?.getBoundingClientRect()
+      const top = summary ? summary.bottom - map.top + 12 : 12
+      const bottom = controls ? controls.top - map.top - 12 : map.height - 12
+      const viewport = visibleOverviewViewport({ centers: layout.centers, visibleIds: visible.ids, nodeWidth, nodeHeight,
+        area: { x: 12, y: top, width: map.width - 24, height: bottom - top } })
+      if (!viewport) { leaveOverview(); setMessage('The map needs more room for an overview. Resize the view and try again.'); return }
+      void flow.setViewport(viewport, { duration: motionPreference.matches ? 0 : 220 })
+    }))
+  }
+  function showOverview() {
+    if (!visible.ids.size) return
+    if (!overviewView) previousOverviewViewport.current = flow.getViewport()
+    setMenu(null); setSearchOpen(false); setNavigationOpen(false); setOverviewView(true)
+    fitOverviewCamera()
+    setMessage(detail ? 'Visible map overview. Return to inspection for readable upgrade details.' : 'Visible map overview. Return to your previous view or select an upgrade to inspect it.')
+    // The persistent map caption explains this view; avoid covering it on phones.
+    setToastVisible(false)
+  }
+  function refocusSelection(focusDetails = false) {
+    if (!detail) return
+    setMenu(null); setSearchOpen(false); setNavigationOpen(false); leaveOverview()
+    setMessage('')
+    if (focusDetails) { keyboardSearchDetails.current = true; setDetailFocusRevision((revision) => revision + 1) }
+    moveCamera(detail.id)
+  }
+  function returnFromOverview(focusDetails = false) {
+    if (detail) { refocusSelection(focusDetails); return }
+    const previous = previousOverviewViewport.current
+    leaveOverview(); beginCameraControl(); setMessage('')
+    if (previous) void flow.setViewport(previous, { duration: reducedMotion ? 0 : 220 })
+  }
   function undo() {
     if (profileSession.undo()) { setMessage('Progress change undone.'); trackEvent('progress_undo') }
   }
@@ -453,7 +504,9 @@ function Atlas({ catalog }: { catalog: Catalog }) {
   }
   const recenterCamera = useEffectEvent(() => {
     const focused = graphHasFocus.current && visible.ids.has(graphFocus) ? graphFocus : null
-    if (loaded) moveCamera(focused ?? detail?.id ?? catalog.startId, focused || detail ? selectionZoom : startZoom)
+    if (!loaded) return
+    if (overviewView) fitOverviewCamera()
+    else moveCamera(focused ?? detail?.id ?? catalog.startId, focused || detail ? selectionZoom : startZoom)
   })
   const resizeMapCamera = useEffectEvent(() => {
     if (recenterOnMapResize.current) recenterCamera()
@@ -467,7 +520,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     previousSelectionPosition.current = detail && position ? {
       id: detail.id, mode: layoutMode, x: position.x, y: position.y, progress: layoutProgress,
     } : null
-    if (layoutMode !== 'web' || !detail || !position || !previous || previous.id !== detail.id || previous.mode !== layoutMode
+    if (overviewView || layoutMode !== 'web' || !detail || !position || !previous || previous.id !== detail.id || previous.mode !== layoutMode
       || previous.progress === layoutProgress || (previous.x === position.x && previous.y === position.y)) return
     followProgressSelection()
   }, [detail?.id, layoutMode, layout, layoutProgress])
@@ -488,10 +541,18 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     observer.observe(mapElement.current)
     return () => observer.disconnect()
   }, [loaded])
+  useEffect(() => {
+    const previous = previousOverviewProgress.current
+    previousOverviewProgress.current = { progress: layoutProgress, layout }
+    // Preserve exploration when recorded progress leaves the visible geometry
+    // unchanged. A pending fit still needs a current profile snapshot.
+    if (overviewView && previous.progress !== layoutProgress
+      && (previous.layout !== layout || pendingOverviewRequest.current === cameraRequest.current)) fitOverviewCamera()
+  }, [layoutProgress, layout])
   const state = (node: Upgrade) => upgradeState(node, profile)
   const nodes: UpgradeNode[] = visible.upgrades.map((node) => ({ id: node.id, type: 'upgrade', position: layout.centers.get(node.id)!,
     data: { upgrade: node, state: state(node) }, selected: selected === node.id,
-    className: detail && node.id !== detail.id ? related.has(node.id) ? 'node-related' : 'node-muted' : '',
+    className: !overviewView && detail && node.id !== detail.id ? related.has(node.id) ? 'node-related' : 'node-muted' : '',
     ariaLabel: `${node.title}, ${state(node)}, ${cost(node.cost)} Slayer Points`, width: nodeWidth, height: nodeHeight,
     domAttributes: { tabIndex: node.id === graphTabStop ? 0 : -1, 'aria-current': selected === node.id ? 'true' : undefined },
     ...(gameLayout ? { zIndex: 2 } : {}) }))
@@ -501,7 +562,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     const horizontal = Math.abs(dx) > Math.abs(dy)
     const sourceHandle = layoutMode === 'web' ? 'right-out' : horizontal ? dx > 0 ? 'right-out' : 'left-out' : dy > 0 ? 'bottom-out' : 'top-out'
     const targetHandle = layoutMode === 'web' ? 'left-in' : horizontal ? dx > 0 ? 'left-in' : 'right-in' : dy > 0 ? 'top-in' : 'bottom-in'
-    const direction = edge.to === detail?.id ? 'incoming' : edge.from === detail?.id ? 'outgoing' : null
+    const direction = overviewView ? null : edge.to === detail?.id ? 'incoming' : edge.from === detail?.id ? 'outgoing' : null
     const color = direction === 'incoming' ? '#f1d79b' : gameLayout
       ? direction === 'outgoing' || satisfies({ kind: 'owned', id: edge.from }, profile) ? '#ff00be' : '#7d7d7d'
       : '#b860af'
@@ -637,29 +698,29 @@ function Atlas({ catalog }: { catalog: Catalog }) {
       <button className="next-upgrade" onClick={() => { setSearchOpen(false); setMenu('recommendations') }}>Next upgrade</button>
       <div className="layout-control" role="group" aria-label="Map layout"><button aria-pressed={layoutMode === 'native'} onClick={() => changeLayout('native')} title="Original game positions">Game Layout</button><button aria-pressed={layoutMode === 'web'} onClick={() => changeLayout('web')} title="Readable dependency layout">Detailed Layout</button></div>
       <label className="spoiler-control desktop-action"><input type="checkbox" disabled={saving} checked={profile.showSpoilers} onChange={(event) => toggleSpoilers(event.target.checked)} />Show spoilers</label>
-      <button className="desktop-action" onClick={() => setMenu('milestones')}>Milestones</button><button className="desktop-action" onClick={() => setMenu('progress')}>Progress</button>
+      <button className="desktop-action" onClick={() => setMenu('milestones')}>Milestones</button><button className="desktop-action" onClick={() => setMenu('progress')}>Progress</button><button className="desktop-action" onClick={() => { setSearchOpen(false); setMenu('options') }}>Map view…</button>
       <button className="mobile-options" aria-label="Map options" onClick={() => { setSearchOpen(false); setMenu('options') }}>☰</button>
     </header>
     {storageError && !activeDialogTitle && <div className="notice telemetry-private rr-block" role="alert">{storageError} {recoveryControls}</div>}
     {!verified && <div className="notice">Local preview · Catalog verification is incomplete. Publication is gated.</div>}
-    <div ref={workspaceElement} className={`workspace ${detail ? 'has-details' : ''} ${detailExpanded ? 'details-expanded' : ''} ${navigationOpen ? 'navigation-open' : ''}`}>
+    <div ref={workspaceElement} className={`workspace ${detail && !overviewView ? 'has-details' : ''} ${detailExpanded ? 'details-expanded' : ''} ${navigationOpen ? 'navigation-open' : ''}`}>
       <section ref={mapElement} className={`map ${gameLayout ? 'map-game' : ''}`} aria-label="Ascension tree" onKeyDownCapture={navigateGraph}
         onFocusCapture={(event) => {
           const node = event.target instanceof HTMLElement ? event.target.closest<HTMLElement>('.react-flow__node') : null
           const id = node?.dataset.id
           if (!id || !visible.ids.has(id)) return
           graphHasFocus.current = true; keyboardSearchDetails.current = false; setGraphFocus(id); setSearchOpen(false)
-          if (node.matches(':focus-visible')) { setNavigationOpen(false); moveCamera(id) }
+          if (node.matches(':focus-visible')) { leaveOverview(); setNavigationOpen(false); moveCamera(id) }
         }} onBlurCapture={(event) => {
           if (!(event.relatedTarget instanceof HTMLElement) || !event.relatedTarget.closest('.react-flow__node')) graphHasFocus.current = false
         }}>
         <div className="map-keyboard-entry"><button aria-describedby="map-keyboard-help" onClick={() => cameraEntry.current?.focus({ preventScroll: true })}>Skip upgrades to camera controls</button><small id="map-keyboard-help">{graphKeyboardHelp}</small></div>
-        {loaded && <ReactFlow<UpgradeNode> nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} elevateEdgesOnSelect={!gameLayout} nodeOrigin={[0.5, 0.5]} autoPanOnNodeFocus={false} nodesDraggable={false} nodesConnectable={false} edgesReconnectable={false} deleteKeyCode={null} selectionKeyCode={null} multiSelectionKeyCode={null} minZoom={0.15} maxZoom={2.5} defaultViewport={{ x: 0, y: 0, zoom: 0.7 }} onInit={(instance) => { const start = layout.centers.get(catalog.startId); if (start) void instance.setCenter(start.x, start.y, { zoom: startZoom }) }} onNodesChange={(changes) => { const selection = changes.find((entry) => entry.type === 'select' && entry.selected); if (selection?.type === 'select') { if (keyboardSelection.current && selection.id !== selected) center(selection.id, 'keyboard'); keyboardSelection.current = false } else if (changes.some((entry) => entry.type === 'select' && !entry.selected && entry.id === selected)) clearSelection() }} onNodeClick={(_, node) => { keyboardSelection.current = false; center(node.id) }} onMoveStart={(event, viewport) => { if (event) cameraStart.current = viewport }} onMoveEnd={(event, viewport) => { const start = cameraStart.current; cameraStart.current = null; if (event && start) { const pan = start.x !== viewport.x || start.y !== viewport.y; const zoom = start.zoom !== viewport.zoom; if (pan || zoom) trackEvent('map_camera_used', { action: pan && zoom ? 'pan_zoom' : zoom ? 'zoom' : 'pan', source: 'pointer' }) } }} onPaneClick={() => setSearchOpen(false)} ariaLabelConfig={{ 'node.a11yDescription.default': graphKeyboardHelp, 'node.a11yDescription.keyboardDisabled': graphKeyboardHelp }}><Background color="#514432" gap={32} size={1} /></ReactFlow>}
-        <div className="map-summary"><span><b>{visible.owned}</b> / {visible.total} visible upgrades owned</span><span>Ultra Ascensions {profile.epoch} · {profile.showSpoilers ? 'Spoilers shown' : 'Spoilers hidden'}</span><span className="connection-hint">{detail ? 'Dashed: connected from · Solid: leads to' : layoutMode === 'web' ? 'Prerequisite → upgrade · Select to trace connections' : 'Grey: unowned prerequisite · Magenta: owned · Select to trace'}</span></div>
-        <div className="camera-controls" role="group" aria-label="Map camera controls"><button ref={cameraEntry} aria-label="Zoom out" onClick={() => { beginCameraControl(); trackEvent('map_camera_used', { action: 'zoom_out', source: 'controls' }); void flow.zoomOut({ duration: reducedMotion ? 0 : 150 }) }}>−</button><button aria-label="Zoom in" onClick={() => { beginCameraControl(); trackEvent('map_camera_used', { action: 'zoom_in', source: 'controls' }); void flow.zoomIn({ duration: reducedMotion ? 0 : 150 }) }}>+</button><button onClick={() => { trackEvent('map_camera_used', { action: 'return_start', source: 'controls' }); center(catalog.startId, 'start') }}>Return to start</button><button aria-label="Map navigation" aria-expanded={navigationOpen} aria-controls="pan-controls" onClick={() => { trackEvent('map_camera_used', { action: 'navigation_toggle', expanded: !navigationOpen }); setNavigationOpen(!navigationOpen) }}>↔</button></div>
+        {loaded && <ReactFlow<UpgradeNode> nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} elevateEdgesOnSelect={!gameLayout} nodeOrigin={[0.5, 0.5]} autoPanOnNodeFocus={false} nodesDraggable={false} nodesConnectable={false} edgesReconnectable={false} deleteKeyCode={null} selectionKeyCode={null} multiSelectionKeyCode={null} minZoom={overviewView ? OVERVIEW_MIN_ZOOM : 0.15} maxZoom={2.5} defaultViewport={{ x: 0, y: 0, zoom: 0.7 }} onInit={(instance) => { const start = layout.centers.get(catalog.startId); if (start) void instance.setCenter(start.x, start.y, { zoom: startZoom }) }} onNodesChange={(changes) => { const selection = changes.find((entry) => entry.type === 'select' && entry.selected); if (selection?.type === 'select') { if (keyboardSelection.current && selection.id !== selected) center(selection.id, 'keyboard'); keyboardSelection.current = false } else if (changes.some((entry) => entry.type === 'select' && !entry.selected && entry.id === selected)) clearSelection() }} onNodeClick={(_, node) => { keyboardSelection.current = false; center(node.id) }} onMoveStart={(event, viewport) => { if (event) { if (overviewView) beginCameraControl(); cameraStart.current = viewport } }} onMoveEnd={(event, viewport) => { const start = cameraStart.current; cameraStart.current = null; if (event && start) { const pan = start.x !== viewport.x || start.y !== viewport.y; const zoom = start.zoom !== viewport.zoom; if (pan || zoom) trackEvent('map_camera_used', { action: pan && zoom ? 'pan_zoom' : zoom ? 'zoom' : 'pan', source: 'pointer' }) } }} onPaneClick={() => setSearchOpen(false)} ariaLabelConfig={{ 'node.a11yDescription.default': graphKeyboardHelp, 'node.a11yDescription.keyboardDisabled': graphKeyboardHelp }}><Background color="#514432" gap={32} size={1} /></ReactFlow>}
+        <div className="map-summary">{overviewView ? <><b>Visible map overview</b><span>{detail ? 'Return to inspection to read upgrade details.' : 'Return to your previous view or select an upgrade.'}</span></> : <><span><b>{visible.owned}</b> / {visible.total} visible upgrades owned</span><span>Ultra Ascensions {profile.epoch} · {profile.showSpoilers ? 'Spoilers shown' : 'Spoilers hidden'}</span><span className="connection-hint">{detail ? 'Dashed: connected from · Solid: leads to' : layoutMode === 'web' ? 'Prerequisite → upgrade · Select to trace connections' : 'Grey: unowned prerequisite · Magenta: owned · Select to trace'}</span></>}</div>
+        <div className="camera-controls" role="group" aria-label="Map camera controls"><button ref={cameraEntry} aria-label="Zoom out" onClick={() => { beginCameraControl(); trackEvent('map_camera_used', { action: 'zoom_out', source: 'controls' }); void flow.zoomOut({ duration: reducedMotion ? 0 : 150 }) }}>−</button><button aria-label="Zoom in" onClick={() => { beginCameraControl(); trackEvent('map_camera_used', { action: 'zoom_in', source: 'controls' }); void flow.zoomIn({ duration: reducedMotion ? 0 : 150 }) }}>+</button><button aria-label={overviewView ? detail ? "Return to inspection" : "Return to previous view" : "Return to start"} onClick={(event) => { if (overviewView) returnFromOverview(event.detail === 0); else { trackEvent('map_camera_used', { action: 'return_start', source: 'controls' }); center(catalog.startId, 'start') } }}>{overviewView ? detail ? 'Return to inspection' : 'Return to view' : 'Return to start'}</button><button aria-label="Map navigation" aria-expanded={navigationOpen} aria-controls="pan-controls" onClick={() => { trackEvent('map_camera_used', { action: 'navigation_toggle', expanded: !navigationOpen }); setNavigationOpen(!navigationOpen) }}>↔</button></div>
         {navigationOpen && <div className="pan-controls" id="pan-controls" aria-label="Map navigation controls"><button aria-label="Pan map left" onClick={() => { beginCameraControl(); trackEvent('map_camera_used', { action: 'pan', source: 'controls', direction: 'left' }); const v = flow.getViewport(); void flow.setViewport({ ...v, x: v.x + 180 }) }}>←</button><button aria-label="Pan map right" onClick={() => { beginCameraControl(); trackEvent('map_camera_used', { action: 'pan', source: 'controls', direction: 'right' }); const v = flow.getViewport(); void flow.setViewport({ ...v, x: v.x - 180 }) }}>→</button><button aria-label="Pan map up" onClick={() => { beginCameraControl(); trackEvent('map_camera_used', { action: 'pan', source: 'controls', direction: 'up' }); const v = flow.getViewport(); void flow.setViewport({ ...v, y: v.y + 180 }) }}>↑</button><button aria-label="Pan map down" onClick={() => { beginCameraControl(); trackEvent('map_camera_used', { action: 'pan', source: 'controls', direction: 'down' }); const v = flow.getViewport(); void flow.setViewport({ ...v, y: v.y - 180 }) }}>↓</button></div>}
       </section>
-      {detail && <aside ref={detailsElement} className={`details ${detailExpanded ? 'expanded' : ''}`} aria-label="Upgrade details"><div className="detail-heading"><div className="detail-identity"><Icon node={detail} /><div><h2 ref={detailHeading} tabIndex={-1}>{detail.title}</h2><small className="detail-cost">{cost(detail.cost)} SP</small></div></div><div className="detail-tools"><button className="detail-toggle" aria-expanded={detailExpanded} aria-controls="detail-content" onClick={() => { trackEvent('details_toggled', { expanded: !detailExpanded }); setDetailExpanded(!detailExpanded) }}>{detailExpanded ? 'Hide details' : 'Show details'}</button><button aria-label="Close upgrade details" onClick={clearSelection}>×</button></div></div><p className={`state-label ${state(detail)}`}>{state(detail) === 'pending' ? '◷ Owned · awaiting activation' : state(detail) === 'purchased' ? '✓ Purchased and active' : state(detail) === 'locked' ? '◇ Locked' : '+ Available'}</p><div className="detail-content" id="detail-content"><p className="detail-description">{detail.description}</p>{requirementReturn}<dl><dt>Progression intention</dt><dd><button onClick={() => { setGoalTarget(detail.id); setMenu('progress') }}>Set progression goal…</button><small>Remember a target without recording a purchase.</small></dd><dt>Purchase requirements</dt><dd><RequirementView requirement={detail.purchase} profile={profile} visible={visible} onReview={(route) => reviewRequirement(route, detail.id)} /></dd><dt>Reveal requirements</dt><dd><RequirementView requirement={detail.reveal} profile={profile} visible={visible} onReview={(route) => reviewRequirement(route, detail.id)} /></dd><dt>Ultra Ascension</dt><dd>{detail.retention === 'repeat' ? retainedOnReset.has(detail.id) ? 'Existing purchase · retained by Astral progress on reset' : profile.purchases[detail.id] ? 'Repeat purchase · clears on reset' : 'Repeat purchase · not currently owned' : 'Ownership retained'}{detail.activation === 'after-ultra-ascension' ? ' · Astral lock' : ''}</dd></dl>
+      {detail && !overviewView && <aside ref={detailsElement} className={`details ${detailExpanded ? 'expanded' : ''}`} aria-label="Upgrade details"><div className="detail-heading"><div className="detail-identity"><Icon node={detail} /><div><h2 ref={detailHeading} tabIndex={-1}>{detail.title}</h2><small className="detail-cost">{cost(detail.cost)} SP</small></div></div><div className="detail-tools"><button className="detail-toggle" aria-expanded={detailExpanded} aria-controls="detail-content" onClick={() => { trackEvent('details_toggled', { expanded: !detailExpanded }); setDetailExpanded(!detailExpanded) }}>{detailExpanded ? 'Hide details' : 'Show details'}</button><button aria-label="Close upgrade details" onClick={clearSelection}>×</button></div></div><p className={`state-label ${state(detail)}`}>{state(detail) === 'pending' ? '◷ Owned · awaiting activation' : state(detail) === 'purchased' ? '✓ Purchased and active' : state(detail) === 'locked' ? '◇ Locked' : '+ Available'}</p><div className="detail-content" id="detail-content"><p className="detail-description">{detail.description}</p>{requirementReturn}<dl><dt>Progression intention</dt><dd><button onClick={() => { setGoalTarget(detail.id); setMenu('progress') }}>Set progression goal…</button><small>Remember a target without recording a purchase.</small></dd><dt>Purchase requirements</dt><dd><RequirementView requirement={detail.purchase} profile={profile} visible={visible} onReview={(route) => reviewRequirement(route, detail.id)} /></dd><dt>Reveal requirements</dt><dd><RequirementView requirement={detail.reveal} profile={profile} visible={visible} onReview={(route) => reviewRequirement(route, detail.id)} /></dd><dt>Ultra Ascension</dt><dd>{detail.retention === 'repeat' ? retainedOnReset.has(detail.id) ? 'Existing purchase · retained by Astral progress on reset' : profile.purchases[detail.id] ? 'Repeat purchase · clears on reset' : 'Repeat purchase · not currently owned' : 'Ownership retained'}{detail.activation === 'after-ultra-ascension' ? ' · Astral lock' : ''}</dd></dl>
         <div className="connection-list"><section aria-label="Connected from"><h3>Connected from</h3>{incoming.length ? incoming.map((node) => <button key={node.id} onClick={() => center(node.id, 'neighbor')}><Icon node={node} /><span>{node.title}</span><span aria-hidden="true">←</span></button>) : <p>No visible incoming connections.</p>}</section><section aria-label="Leads to"><h3>Leads to</h3>{outgoing.length ? outgoing.map((node) => <button key={node.id} onClick={() => center(node.id, 'neighbor')}><Icon node={node} /><span>{node.title}</span><span aria-hidden="true">→</span></button>) : <p>No visible outgoing connections.</p>}</section><small>Connections show paths. Purchase requirements above specify AND / OR and activation gates.</small></div>
         <div className="source-notes"><h3>Sources</h3>{detail.sources.map((source, i) => <p key={i}>{source.url ? <a onClick={() => trackEvent('source_link_opened', { source: 'details', upgrade_id: detail.id, action: 'other' })} href={source.url} target="_blank" rel="noreferrer">{source.label}</a> : source.label}{source.evidence && <small>{source.evidence}</small>}</p>)}</div></div>
         <div className="detail-actions">
@@ -673,7 +734,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     <input className="sr-only telemetry-private rr-block" tabIndex={-1} aria-label="Idle Slayer game save" ref={gameFileInput} type="file" accept=".sav" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void readGameSave(file) }} />
     {menu === 'game-import' && <Dialog title="Import game progress" close={closeGameImport}>{gameImport ? <GameSaveImportPanel catalog={catalog} currentProfile={gameImport.original} preview={gameImport.result} onApply={applyGameImport} onCancel={closeGameImport} /> : <div className="game-save-picker">{gameImportLoading ? <p role="status">Reading game save…</p> : <><p className="telemetry-private rr-block" role="alert">{gameImportError}</p><p>Choose <b>savedata.sav</b> or <b>backup.sav</b> from Idle Slayer 7.2.0 on Steam. The selected file is read locally in your browser.</p><p className="game-save-path">%USERPROFILE%\AppData\LocalLow\Pablo Leban\Idle Slayer\</p></>}<div className="dialog-actions">{!gameImportLoading && <button className="primary" onClick={chooseGameSave}>Choose game save…</button>}<button onClick={closeGameImport}>Cancel</button></div></div>}</Dialog>}
     {menu === 'recommendations' && <Dialog title="Suggested next upgrade" close={() => setMenu(null)}><RecommendationPanel catalog={catalog} recommendations={recommendations} onSelect={(id) => selectSuggestion(id)} onPurchase={(id) => selectSuggestion(id, true)} blockedUpgrade={blockedRecommendation} onReviewRequirements={reviewBlockedRecommendation} /></Dialog>}
-    {menu === 'options' && <Dialog title="Map options" close={() => setMenu(null)}><div className="map-options"><p><b>{visible.owned} / {visible.total}</b> visible upgrades owned · Ultra Ascensions {profile.epoch}<br />{profile.showSpoilers ? 'Spoilers shown' : 'Spoilers hidden'}</p><label className="spoiler-control"><input type="checkbox" disabled={saving} checked={profile.showSpoilers} onChange={(event) => toggleSpoilers(event.target.checked)} />Show spoilers</label><button onClick={() => setMenu('milestones')}>Milestones</button><button onClick={() => setMenu('progress')}>Progress</button><button disabled={saving || !history.length} onClick={() => { undo(); setMenu(null) }}>Undo</button><button onClick={() => setMenu('keyboard-help')}>Map help…</button><button onClick={() => setMenu('about')}>About & sources</button><button onClick={() => setMenu('privacy')}>Privacy & tracking</button><small>Unofficial companion · {progressStatus}</small></div></Dialog>}
+    {menu === 'options' && <Dialog title="Map options" close={() => setMenu(null)}><div className="map-options"><p><b>{visible.owned} / {visible.total}</b> visible upgrades owned · Ultra Ascensions {profile.epoch}<br />{profile.showSpoilers ? 'Spoilers shown' : 'Spoilers hidden'}</p><label className="spoiler-control"><input type="checkbox" disabled={saving} checked={profile.showSpoilers} onChange={(event) => toggleSpoilers(event.target.checked)} />Show spoilers</label><button onClick={showOverview} disabled={!visible.ids.size}>Overview visible map</button><button onClick={(event) => refocusSelection(event.detail === 0)} disabled={!detail}>Refocus selected upgrade</button><small>Overview fits only currently visible upgrades. Refocus returns your selection to inspection size without changing progress.</small><button onClick={() => setMenu('milestones')}>Milestones</button><button onClick={() => setMenu('progress')}>Progress</button><button disabled={saving || !history.length} onClick={() => { undo(); setMenu(null) }}>Undo</button><button onClick={() => setMenu('keyboard-help')}>Map help…</button><button onClick={() => setMenu('about')}>About & sources</button><button onClick={() => setMenu('privacy')}>Privacy & tracking</button><small>Unofficial companion · {progressStatus}</small></div></Dialog>}
     {menu === 'milestones' && <Dialog title="Milestones" close={() => setMenu(null)}><p>Record the required item received or purchased in the game.</p>{requirementReturn}{visible.milestones.map((item) => <label className="milestone" key={item.id}><input data-requirement-milestone={item.id} type="checkbox" disabled={saving} checked={profile.milestones[item.id] === true} onChange={(event) => { if (event.target.checked) { if (change({ ...profile, milestones: { ...profile.milestones, [item.id]: true } }, 'Milestone recorded.')) trackEvent('milestone_changed', { milestone_id: item.id, recorded: true }) } else { setMenu(null); previewRemoval(item.id, true) } }} /><span>{item.title}<small>{item.description}</small></span></label>)}{!visible.milestones.length && <div><p>No milestone controls are currently revealed. Controls follow the game's reveal rules. To enter existing progress on an isolated branch, you can explicitly choose Show spoilers in Map options, then return here. Record only the required item actually received, crafted or purchased.</p><button onClick={() => setMenu('options')}>Review spoiler setting</button></div>}</Dialog>}
     {menu === 'progress' && <Dialog title="Your progress" close={() => setMenu(null)}>
       <p>One local profile. Keep a backup when changing browsers or devices.</p><button onClick={() => setMenu('keyboard-help')}>Map help…</button>{requirementReturn}
