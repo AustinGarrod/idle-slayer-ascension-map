@@ -12,6 +12,8 @@ Recordings can include ordinary visible map progress: purchased/available/pendin
 
 Catalog startup failures display fixed public wording with a retry action. Parser excerpts and catalog-validation details are never stored in React state or displayed; `catalog_error` retains only its bounded `network` or `validation` category. The fixed loading/error screen can appear in recordings.
 
+The disclosure and keyboard-accessible **Privacy & tracking** control remain available while the catalog is loading, stalled or unavailable. Opening the control and cross-tab preference changes refresh its controller status. Changing tracking from startup reloads without editing the existing stored map profile, because no map editing session has initialized yet. Once the map is loaded, its existing save/export/cancel protection still applies before a tracking reload.
+
 Standard collection also includes page visits, sanitized referral/campaign information, browser/device information, approximate location when available and bounded performance measurements. These service/session dimensions are separate from the application's allowlisted custom event properties below.
 
 Replay exclusions block DOM contents, not every interaction measurement. Umami still records coarse click and scroll coordinates for heatmaps, including over excluded elements. Moderate masking is not a promise that ordinary rendered progress is private. Do not weaken the explicit exclusions when adjusting replay fidelity.

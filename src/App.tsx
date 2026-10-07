@@ -2,11 +2,21 @@ import { useEffect, useState } from 'react'
 import type { Catalog } from './domain/types'
 import MapApp from './MapApp'
 import { catalogErrors } from './domain/catalog'
-import { trackEvent } from './analytics'
+import { ANALYTICS_PREFERENCE_KEY, getTrackingStatus, setTrackingPreference, trackEvent } from './analytics'
+import { PrivacyPanel, trackingDisclosure } from './PrivacyPanel'
 
 export default function App() {
   const [catalog, setCatalog] = useState<Catalog | null>(null)
   const [loadFailed, setLoadFailed] = useState(false)
+  const [trackingStatus, setTrackingStatus] = useState(getTrackingStatus)
+  useEffect(() => {
+    if (catalog) return
+    const refreshTracking = (event: StorageEvent) => {
+      if (event.key === null || event.key === ANALYTICS_PREFERENCE_KEY || event.key === 'umami.disabled') setTrackingStatus(getTrackingStatus())
+    }
+    window.addEventListener('storage', refreshTracking)
+    return () => window.removeEventListener('storage', refreshTracking)
+  }, [catalog])
   useEffect(() => {
     const controller = new AbortController()
     let failure: 'network' | 'validation' = 'network'
@@ -17,5 +27,18 @@ export default function App() {
     return () => controller.abort()
   }, [])
   if (catalog) return <MapApp catalog={catalog} />
-  return <main className="loading"><h1>Ascension Map</h1><p role="status">{loadFailed ? 'The verified game catalog could not be loaded. Please try again.' : 'Loading the native Ascension tree…'}</p>{loadFailed && <button onClick={() => window.location.reload()}>Try again</button>}</main>
+  return <main className="loading">
+    <h1>Ascension Map</h1>
+    <p role="status">{loadFailed ? 'The verified game catalog could not be loaded. Please try again.' : 'Loading the native Ascension tree…'}</p>
+    {loadFailed && <button onClick={() => window.location.reload()}>Try again</button>}
+    <p className="startup-disclosure">{trackingDisclosure}</p>
+    <details className="startup-privacy" onToggle={(event) => { if (event.currentTarget.open) setTrackingStatus(getTrackingStatus()) }}>
+      <summary>Privacy & tracking</summary>
+      <PrivacyPanel status={trackingStatus} onChange={(enabled) => {
+        const { reloadURL } = setTrackingPreference(enabled)
+        window.history.replaceState(window.history.state, '', reloadURL)
+        window.location.reload()
+      }} />
+    </details>
+  </main>
 }
