@@ -10,6 +10,12 @@ const node = (page: Page, id: string) => page.locator(`.react-flow__node[data-id
 async function focusedId(page: Page) {
   return page.evaluate(() => (document.activeElement as HTMLElement)?.dataset.id)
 }
+async function cameraPosition(page: Page) {
+  return page.locator('.react-flow__viewport').evaluate((element) => {
+    const matrix = new DOMMatrix(getComputedStyle(element).transform)
+    return { x: matrix.e, y: matrix.f }
+  })
+}
 async function openAction(page: Page, name: string) {
   const action = page.getByRole('button', { name, exact: true })
   if (!await action.isVisible()) await page.getByRole('button', { name: 'Map options', exact: true }).click()
@@ -129,6 +135,71 @@ for (const layout of ['Game Layout', 'Detailed Layout'] as const) {
     expect(await focusedId(page)).toBe(visibility(catalog, emptyProfile(catalog.revision)).upgrades[0].id)
     await expect(page.locator('.map')).not.toContainText(hidden.title)
   })
+
+  for (const viewport of [{ width: 375, height: 350 }, { width: 320, height: 350 }, { width: 320, height: 568 }]) {
+    test(`${layout} keeps keyboard upgrades and directional controls usable with expanded details at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+      await page.setViewportSize(viewport); await page.goto('./')
+      await page.getByRole('group', { name: 'Map layout' }).getByRole('button', { name: layout, exact: true }).click()
+      await page.getByRole('button', { name: 'Return to start', exact: true }).click()
+      await page.getByRole('button', { name: 'Show details', exact: true }).click()
+      const navigation = page.getByRole('button', { name: 'Map navigation', exact: true })
+      await navigation.click()
+      await expect(page.locator('.pan-controls')).toBeVisible()
+      await page.keyboard.press('Tab')
+      const panLeft = page.getByRole('button', { name: 'Pan map left', exact: true })
+      await expect(panLeft).toBeFocused()
+      await page.keyboard.press('Enter')
+      await page.getByRole('button', { name: 'Skip upgrades to camera controls', exact: true }).focus()
+      await page.keyboard.press('Tab'); await page.keyboard.press('End')
+      const last = visibility(catalog, emptyProfile(catalog.revision)).upgrades.at(-1)!
+      await expect(node(page, last.id)).toBeFocused()
+      await expect(navigation).toHaveAttribute('aria-expanded', 'false')
+      await expect(page.locator('.pan-controls')).toHaveCount(0)
+      await frameVisible(page, last.id)
+      await expect.poll(() => node(page, last.id).evaluate((element) => {
+        const box = element.getBoundingClientRect()
+        return box.width >= 44 && box.height >= 44 && ![...document.querySelectorAll('.camera-controls, .pan-controls, .react-flow__attribution')].some((control) => {
+          const overlay = control.getBoundingClientRect()
+          return box.left < overlay.right && box.right > overlay.left && box.top < overlay.bottom && box.bottom > overlay.top
+        })
+      })).toBe(true)
+      let tabs = 0
+      do { await page.keyboard.press('Tab'); tabs++ } while (tabs < 6 && !await navigation.evaluate((element) => element === document.activeElement))
+      await expect(navigation).toBeFocused(); expect(tabs).toBeLessThanOrEqual(5)
+      await page.keyboard.press('Enter')
+      await expect(page.locator('.pan-controls')).toBeVisible()
+      await page.keyboard.press('Tab'); await expect(panLeft).toBeFocused()
+      // Navigation changes the canvas reservation; read a settled DOM baseline.
+      await page.evaluate(async () => { for (let frame = 0; frame < 4; frame++) await new Promise<void>((resolve) => requestAnimationFrame(() => resolve())) })
+      for (const direction of ['left', 'right', 'up', 'down']) {
+        const control = page.getByRole('button', { name: `Pan map ${direction}`, exact: true })
+        await expect(control).toBeFocused()
+        await expect(control).toBeInViewport()
+        expect(await control.evaluate((element) => {
+          const box = element.getBoundingClientRect()
+          return box.width >= 44 && box.height >= 44 && element.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2))
+        })).toBe(true)
+        const before = await cameraPosition(page)
+        await page.keyboard.press('Enter')
+        await page.evaluate(async () => { for (let frame = 0; frame < 4; frame++) await new Promise<void>((resolve) => requestAnimationFrame(() => resolve())) })
+        const expected = { x: before.x + (direction === 'left' ? 180 : direction === 'right' ? -180 : 0), y: before.y + (direction === 'up' ? 180 : direction === 'down' ? -180 : 0) }
+        await expect.poll(async () => {
+          const after = await cameraPosition(page)
+          return Math.abs(after.x - expected.x) < .1 && Math.abs(after.y - expected.y) < .1
+        }).toBe(true)
+        await page.keyboard.press('Tab')
+      }
+      for (const name of ['Hide details', 'Close upgrade details', 'Record purchase…']) {
+        const control = page.getByRole('button', { name, exact: true })
+        await control.scrollIntoViewIfNeeded()
+        await expect(control).toBeInViewport()
+        expect(await control.evaluate((element) => {
+          const box = element.getBoundingClientRect()
+          return box.width >= 44 && box.height >= 44 && element.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2))
+        })).toBe(true)
+      }
+    })
+  }
 }
 
 test('keyboard help is discoverable in responsive menus and restores its trigger focus', async ({ page }) => {
