@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test } from './fixtures'
+import type { Page } from '@playwright/test'
 
 type Viewport = { x: number; y: number; zoom: number }
 type MotionProof = { before: Viewport; frames: Viewport[]; after: Viewport }
