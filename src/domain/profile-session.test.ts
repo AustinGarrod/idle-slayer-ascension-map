@@ -59,6 +59,16 @@ describe('coordinated profile persistence', () => {
     expect(JSON.parse(f.stored()!)).toEqual(profile('local'))
   })
 
+  it('rejects saved input that cannot be portably exported while retaining its raw saved bytes', () => {
+    const incoming = emptyProfile('fixture')
+    for (let index = 0; index < 65_000; index++) incoming.purchases[`future-${index}`] = { epoch: 0, active: false }
+    const compact = JSON.stringify(incoming)
+    const f = fixture(compact)
+    expect(f.session.getState()).toMatchObject({ profile: emptyProfile('fixture'), persistence: 'failed', writable: false, errorKind: 'too-large' })
+    expect(f.stored()).toBe(compact)
+    expect(f.storage.setItem).not.toHaveBeenCalled()
+  })
+
   it('persists only inside the named exclusive lock and preserves the portable schema', async () => {
     let held = false
     const locks: ProfileLocks = { request: async (name, options, callback) => {
