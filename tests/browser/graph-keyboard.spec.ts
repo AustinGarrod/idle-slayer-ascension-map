@@ -7,8 +7,11 @@ const catalog = JSON.parse(readFileSync('public/catalog.json', 'utf8')) as Catal
 const key = 'idle-slayer-ascension-map.profile.v1'
 const hidden = catalog.upgrades.find((upgrade) => upgrade.title === 'Astral Slayer')!
 const node = (page: Page, id: string) => page.locator(`.react-flow__node[data-id="${id}"]`)
-async function focusedId(page: Page) {
-  return page.evaluate(() => (document.activeElement as HTMLElement)?.dataset.id)
+async function expectGraphFocus(page: Page, id: string) {
+  await expect.poll(() => page.evaluate(() => {
+    const focused = document.activeElement as HTMLElement | null
+    return { id: focused?.dataset.id, tabIndex: focused?.getAttribute('tabindex'), tabStops: document.querySelectorAll('.react-flow__node[tabindex="0"]').length }
+  })).toEqual({ id, tabIndex: '0', tabStops: 1 })
 }
 async function cameraPosition(page: Page) {
   return page.locator('.react-flow__viewport').evaluate((element) => {
@@ -109,32 +112,57 @@ for (const layout of ['Game Layout', 'Detailed Layout'] as const) {
     })
   }
 
-  for (const spoilers of [false, true]) test(`${layout} makes every ${spoilers ? 'spoiler-visible' : 'default-visible'} upgrade keyboard reachable and restores the visible focus universe`, async ({ page }) => {
-    test.setTimeout(90_000)
+  for (const spoilers of [false, true]) {
+    const visible = visibility(catalog, { ...emptyProfile(catalog.revision), showSpoilers: spoilers })
+    // Four bounded ranges cover the reviewed 288-node tree. Each also enters
+    // from its predecessor and exits to its successor using real arrow keys.
+    const chunkSize = 72
+    for (let start = 0; start < visible.upgrades.length; start += chunkSize) {
+      const end = Math.min(start + chunkSize, visible.upgrades.length)
+      test(`${layout} keyboard traverses every ${spoilers ? 'spoiler-visible' : 'default-visible'} upgrade ${start + 1}-${end} of ${visible.upgrades.length}`, async ({ page }) => {
+        test.setTimeout(90_000)
+        await page.goto('./')
+        await page.getByRole('group', { name: 'Map layout' }).getByRole('button', { name: layout, exact: true }).click()
+        if (spoilers) await showSpoilers(page, true)
+        await expect(page.locator('.react-flow__node')).toHaveCount(visible.upgrades.length)
+        await page.getByRole('button', { name: 'Skip upgrades to camera controls', exact: true }).focus()
+        await page.keyboard.press('Tab'); await page.keyboard.press('Home')
+        await expectGraphFocus(page, visible.upgrades[0].id)
+        if (start === 0) {
+          await page.keyboard.press('ArrowLeft')
+          await expectGraphFocus(page, visible.upgrades.at(-1)!.id)
+          await page.keyboard.press('ArrowRight')
+        } else {
+          await node(page, visible.upgrades[start - 1].id).focus()
+          await expectGraphFocus(page, visible.upgrades[start - 1].id)
+          await page.keyboard.press('ArrowRight')
+        }
+        for (const upgrade of visible.upgrades.slice(start, end)) {
+          await expectGraphFocus(page, upgrade.id)
+          await page.keyboard.press('ArrowRight')
+        }
+        await expectGraphFocus(page, visible.upgrades[end % visible.upgrades.length].id)
+      })
+    }
+  }
+
+  test(`${layout} restores the visible focus universe after hiding a focused spoiler`, async ({ page }) => {
     await page.goto('./')
     await page.getByRole('group', { name: 'Map layout' }).getByRole('button', { name: layout, exact: true }).click()
-    const shortcut = page.getByRole('button', { name: 'Skip upgrades to camera controls', exact: true })
-    if (spoilers) await showSpoilers(page, true)
-    const visible = visibility(catalog, { ...emptyProfile(catalog.revision), showSpoilers: spoilers })
-    await expect(page.locator('.react-flow__node')).toHaveCount(visible.upgrades.length)
-    await shortcut.focus(); await page.keyboard.press('Tab'); await page.keyboard.press('Home')
-    for (const upgrade of visible.upgrades) {
-      await expect.poll(() => page.evaluate(() => {
-        const focused = document.activeElement as HTMLElement | null
-        return { id: focused?.dataset.id, tabIndex: focused?.getAttribute('tabindex') }
-      })).toEqual({ id: upgrade.id, tabIndex: '0' })
-      await page.keyboard.press('ArrowRight')
-    }
-    expect(await focusedId(page)).toBe(visible.upgrades[0].id)
-    await expect(page.locator('.react-flow__node[tabindex="0"]')).toHaveCount(1)
-    if (spoilers) {
-      await node(page, hidden.id).focus()
-      await showSpoilers(page, false)
-    }
     await expect(node(page, hidden.id)).toHaveCount(0)
     await expect(page.locator('.react-flow__node[tabindex="0"]')).toHaveCount(1)
-    await shortcut.focus(); await page.keyboard.press('Tab')
-    expect(await focusedId(page)).toBe(visibility(catalog, emptyProfile(catalog.revision)).upgrades[0].id)
+    await showSpoilers(page, true)
+    await expect(page.locator('.react-flow__node')).toHaveCount(catalog.upgrades.length)
+    await node(page, hidden.id).focus()
+    await expectGraphFocus(page, hidden.id)
+    await showSpoilers(page, false)
+    await expect(node(page, hidden.id)).toHaveCount(0)
+    const visible = visibility(catalog, emptyProfile(catalog.revision))
+    await expect(page.locator('.react-flow__node')).toHaveCount(visible.upgrades.length)
+    await expect(page.locator('.react-flow__node[tabindex="0"]')).toHaveCount(1)
+    await page.getByRole('button', { name: 'Skip upgrades to camera controls', exact: true }).focus()
+    await page.keyboard.press('Tab')
+    await expectGraphFocus(page, visible.upgrades[0].id)
     await expect(page.locator('.map')).not.toContainText(hidden.title)
   })
 
