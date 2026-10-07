@@ -425,6 +425,9 @@ dialog:has(.game-save-import-panel) .dialog-heading { position: sticky; top: -20
 dialog:has(.privacy-panel) { scroll-padding-top: 76px; }
 dialog:has(.privacy-panel) .dialog-heading { position: sticky; top: -20px; z-index: 1; margin-left: -20px; margin-right: -20px; padding-left: 20px; padding-right: 20px; background: var(--surface); box-shadow: 0 12px var(--surface); }
 
+/* Every suggestion still uses one explicit purchase confirmation. */
+.purchase-confirm-actions > button { flex: 1 1 140px; font-size: .875rem; overflow-wrap: anywhere; }
+
 /* Replacement details stay private, bounded and within the existing dialog. */
 dialog:has(.progress-comparison) { overflow-wrap: anywhere; }
 .progress-comparison { min-width: 0; margin: 16px 0; font-size: .875rem; line-height: 1.6; overflow-wrap: anywhere; }
@@ -465,3 +468,4 @@ dialog:has(.map-help) { overflow-wrap: anywhere; }
 .goal-list li, .goal-choice, .goal-recovery { margin: 16px 0; border: 1px solid #574631; border-radius: 5px; padding: 12px; }
 .goals-panel button { font-size: .8125rem; overflow-wrap: anywhere; }
 .goals-panel .dialog-actions button { flex: 1 1 9rem; }
+dialog:has(.purchase-confirm-actions) { overflow-wrap: anywhere; }
