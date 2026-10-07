@@ -1,6 +1,6 @@
 import { useId } from 'react'
 import type { GameSaveImportPreview } from './domain/game-save-import'
-import { visibility } from './domain/rules'
+import { visibleProgress } from './domain/progress-summary'
 import type { Catalog, Profile } from './domain/types'
 
 interface GameSaveImportPanelProps {
@@ -11,22 +11,11 @@ interface GameSaveImportPanelProps {
   onCancel: () => void
 }
 
-function visibleProgress(catalog: Catalog, profile: Profile) {
-  const visible = visibility(catalog, profile)
-  const ownedLocks = visible.upgrades.filter((upgrade) => upgrade.activation === 'after-ultra-ascension' && Object.hasOwn(profile.purchases, upgrade.id))
-  return {
-    owned: visible.owned,
-    activeLocks: ownedLocks.filter((upgrade) => profile.purchases[upgrade.id].active).length,
-    pendingLocks: ownedLocks.filter((upgrade) => !profile.purchases[upgrade.id].active).length,
-    milestones: visible.milestones.filter((milestone) => profile.milestones[milestone.id] === true).length,
-  }
-}
-
 export function GameSaveImportPanel({ catalog, currentProfile, preview, onApply, onCancel }: GameSaveImportPanelProps) {
   const scopeId = useId()
   const notesId = useId()
-  const current = visibleProgress(catalog, currentProfile)
-  const incoming = visibleProgress(catalog, preview.profile)
+  const current = visibleProgress(catalog, currentProfile, currentProfile.showSpoilers)
+  const incoming = visibleProgress(catalog, preview.profile, currentProfile.showSpoilers)
   const rows = [
     { label: 'Ultra Ascensions', current: currentProfile.epoch, incoming: preview.profile.epoch },
     { label: 'Owned upgrades', current: current.owned, incoming: incoming.owned },
