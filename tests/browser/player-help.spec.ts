@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test } from './fixtures'
+import type { Page } from '@playwright/test'
 
 const profileKey = 'idle-slayer-ascension-map.profile.v1'
 async function openHelp(page: Page) {

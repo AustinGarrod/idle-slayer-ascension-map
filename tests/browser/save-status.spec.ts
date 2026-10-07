@@ -1,4 +1,6 @@
-import { expect, test, type Page } from '@playwright/test'
+import { denyProfileWrites as denyWrites } from './helpers/profile'
+import { openAction, purchaseStart } from './helpers/app'
+import { expect, test } from './fixtures'
 import { readFileSync } from 'node:fs'
 import type { Catalog } from '../../src/domain/types'
 import { emptyProfile } from '../../src/domain/types'
@@ -9,30 +11,6 @@ const catalog = JSON.parse(readFileSync('public/catalog.json', 'utf8')) as Catal
 const savedText = 'Current progress is saved on this device.'
 const failedText = 'Current progress is not saved on this device. Export a backup or retry recovery.'
 type SaveWindow = Window & { denyProfileWrites?: boolean; denyProfileReads?: boolean; releaseProfileSave?: () => void }
-
-async function openAction(page: Page, name: string) {
-  await expect(page.locator('.toolbar')).toBeVisible()
-  const action = page.getByRole('button', { name, exact: true })
-  if (!await action.isVisible()) await page.getByRole('button', { name: 'Map options', exact: true }).click()
-  await action.click()
-}
-async function purchaseStart(page: Page) {
-  await expect(page.locator('.toolbar')).toBeVisible()
-  await page.getByRole('button', { name: 'Return to start', exact: true }).click()
-  await page.getByRole('button', { name: 'Record purchase…', exact: true }).click()
-  await page.getByRole('button', { name: 'Apply purchases', exact: true }).click()
-}
-async function denyWrites(page: Page) {
-  await page.addInitScript((key) => {
-    const win = window as SaveWindow
-    win.denyProfileWrites = true
-    const native = Storage.prototype.setItem
-    Storage.prototype.setItem = function (target, value) {
-      if (target === key && win.denyProfileWrites) throw new DOMException('Synthetic quota refusal', 'QuotaExceededError')
-      native.call(this, target, value)
-    }
-  }, PROFILE_STORAGE_KEY)
-}
 
 test('failed writes have truthful footer, options, About and Privacy messages and retry recovers', async ({ page }) => {
   await denyWrites(page)
