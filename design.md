@@ -167,6 +167,13 @@ Public reference copying belongs to expanded upgrade details. Its optional manua
 ## Portable reference selection
 
 A secondary action in expanded details adds an explicit visible upgrade to a four-entry visit-only sheet. Map options opens the private selection and complete outgoing document preview. Wrapped 44px controls support removal, clearing, review, saving and a separate print tab without adding a persistent map rail. The self-contained document uses readable native text, full exact costs and grouped visible requirements; it labels the excerpt limits and version. No private progress or inferred routes enter the sheet.
+
+## Optional forward impact
+
+A private single-event analysis stays in the existing independently scrolling dialog. Entry lives after the main Purchase actions in expanded details, or beside an unrecorded visible item in Milestones. Compact details hide the auxiliary action until expanded, retaining the ordinary Purchase keyboard path and useful map space. Native before/after gate states, stable IDs and exact costs distinguish affected upgrades; optional requirement explanations preserve visible AND/OR grouping. Rows expand in batches and text wraps at enlarged browser defaults. Opening or closing analysis changes no progress, selection or camera, and another menu, preview or external progress change invalidates it.
+
 ## Optional player intentions
+
+Prerequisite-route comparison stays in an optional native dialog, with its inspector entry after the purchase controls and hidden alongside compact detail content. Four current-visible target slots, completion modes and explicit item assumptions precede bounded route cards. OR alternatives, shared IDs, recorded requirements and blockers remain textual; no permanent rail or purchase action is added. All inputs, choices, route annotations and feedback are replay-blocked. Native Tab keeps picker titles clear of the measured dialog heading, including tall cost/ID rows with enlarged text.
 
 Goals stay in the existing scrollable Progress dialog, with entry from expanded upgrade details. No permanent rail competes with the map or selected inspector. A compact completion selector distinguishes acquisition, activation and a repeat-purchase rebuild; full explanatory wording stays alongside it. Current visible rows pair stable ID/exact cost with status and native requirement inspection, explicit ordering and retirement controls. Goal panels, choices and recovery feedback are excluded from replay. Intentions never become actual progress or a recommended optimal build.

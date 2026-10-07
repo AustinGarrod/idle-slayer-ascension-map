@@ -18,6 +18,14 @@ Keyboard exploration uses one graph Tab stop. Arrow Right/Down browses the next 
 
 The wiki snapshot ranks 280 of 288 native upgrades and declares game 7.0.0; the catalog remains authoritative for 7.2.0 costs and gates. When no eligible upgrade has a wiki rank, suggestions explicitly use a native-cost **Catalog fallback**. General guide order does not account for SP balance, total USP, gear or personal play style. [Recommendation provenance and refresh](wiki-recommendations.md) documents source revisions, identity mapping, eight unranked upgrades and licensing. The site bundles this data locally and makes no wiki requests.
 
+## Analyze one proposed event
+
+Expand an upgrade’s details and choose **Analyze forward impact…**, or open Milestones and choose **Analyze item receipt…** beside an unrecorded visible item. The purchase must already meet native purchase and reveal requirements; a blocked proposal reports the constraint rather than filling prerequisites. A milestone proposal assumes only the required item actually received/crafted/purchased, without inventing its acquisition path.
+
+The private dialog compares before/after purchase and reveal gates, lists newly eligible purchases, explains still-blocked alternatives and separates OR paths that were already eligible. Native rules supply the relationships even where there is no map edge. No further eligible upgrade is assumed purchased, and nothing changes progress, goals or visit-only Undo/Redo. Astral Lock purchases remain awaiting activation; this is not an activation forecast, history correction or Ultra Ascension roadmap.
+
+Default rows, counts and requirement explanations use the currently visible map. Only explicit **Show spoilers** allows hypothetical new reveal identities/counts; newly revealed does not always mean eligible to purchase. Results follow catalog order and make no affordability or optimal-choice claim. Analysis closes when recorded progress changes or another dialog/recovery action opens. Return to details or Milestones to continue ordinary inspection.
+
 ## Orient and return to your upgrade
 
 Open **Map view…** on desktop, or **Map options** on a phone, then choose **Overview visible map**. The inspector temporarily closes so you can see the currently visible tree shape. Your selected upgrade, progress and chosen layout stay unchanged. Overview tiles are small; use **Return to inspection** in the camera controls to bring the selected upgrade back at a readable size, with its details restored. With no selection, **Return to previous view** restores your earlier camera. **Refocus selected upgrade** in Map options also recovers a target after manual panning.
@@ -81,6 +89,10 @@ Inspect a visible upgrade, expand its details and choose Add to reference sheet.
 
 The file freezes reviewed catalog facts and sources; it follows your current spoiler setting before output. Requirements are visible excerpts, not complete routes or eligibility proof. No ownership, milestones, UA count, notes, connections or layout are exported. Hidden selections are pruned and Undo cannot restore them to the sheet. Changes that alter the output invalidate its preview. Reload starts an empty selection. Game content retains its own attribution; no wiki guide ordering is included.
 ## Goals and recurring rebuild intentions
+
+For a visible upgrade, expand details and use **Compare prerequisite routes…**, or open it from Map view/options to choose several targets. Acquisition ends at ownership; activation also requires the effect, and rebuild uses actual current repeat ownership. Saved visible goals can supply these modes without changing the goal list. Compare the displayed OR alternatives and shared work, then mark an intended route for this open comparison. Nothing is purchased or recorded, and closing discards that comparison's selections.
+
+Exact catalog totals include the target and count shared missing purchases once. An explicit received/purchased item assumption makes a route conditional; verify that item in the game separately. Pending Astrals remain inactive, a tree purchase never invents previous Ultra Ascension history, and unrevealed or bounded partial paths withhold full totals. Partial subtotals cover only shown purchases. The displayed set is bounded and is not an optimal build, an SP balance or a future-UA plan.
 
 Expand an upgrade's details and choose **Set progression goal…**. Choose **Acquire**, **Activate**, or **Rebuild** for a repeat purchase, then **Save goal**. This saves an intention, never a purchase, prerequisite, external item or Astral activation. Review goals in **Progress**, inspect their native requirements, move visible goals higher/lower in priority, or deliberately retire one. Up to twenty stable-ID targets can be retained; duplicate titles remain separate IDs.
 

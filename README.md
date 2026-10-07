@@ -15,7 +15,11 @@ A free, unofficial companion for Idle Slayer: explore the Ascension tree, record
 
 **Goals:** in expanded upgrade details, **Set progression goal…** records an acquisition, activation or recurring rebuild intention without purchasing anything. Review and reorder visible goals in **Progress**. Intentions stay in separate browser storage and are not included in progress JSON backups; reset, import and Undo only recompute their status.
 
+**Compare prerequisite routes…** in Map view/options or expanded details compares up to four visible targets, including copied goal completion modes. It shows transitive purchase/reveal alternatives, distinct shared work and exact catalog SP sums. Choose an intended route and explicit external-item assumptions for reference only; blocked, hidden or bounded partial paths withhold full totals. This open comparison never edits progress or saved goals and does not stage a future reset.
+
 Use **Map view…** on desktop or **Map options → Overview visible map** on phones to orient within the visible tree. **Return to inspection** or **Refocus selected upgrade** brings back your current target without changing progress.
+
+**Forward impact:** expanded upgrade details offer **Analyze forward impact…**, and unrecorded visible Milestones offer **Analyze item receipt…**. This private, read-only dialog evaluates one currently valid purchase or item receipt using native purchase and reveal gates. It never fills prerequisites or purchases the newly eligible upgrades. Default rows and counts use only the current visible map; hypothetical reveal identities appear only while Show spoilers is enabled. Pending Astral purchases stay pending, and affordability is not inferred.
 
 **Progress → Progress checkpoints…** keeps up to four named, read-only snapshots for comparing recorded ownership, Astral activation, milestones and the UA counter. Both sides use your current map's revealed entries. Checkpoints use separate local storage and a separate JSON export/restore; they never replace active progress or change Undo/Redo. Only uniquely matching operations in this visit's bounded history can explain a difference; portable and prior-visit snapshots establish state, not a game activity log.
 

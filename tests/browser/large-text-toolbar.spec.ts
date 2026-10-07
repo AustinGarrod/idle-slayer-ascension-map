@@ -4,7 +4,7 @@ import { dirname, join, resolve } from 'node:path'
 import { readFileSync } from 'node:fs'
 import type { Catalog } from '../../src/domain/types'
 import { emptyProfile } from '../../src/domain/types'
-import { visibility } from '../../src/domain/rules'
+import { planPurchase, visibility } from '../../src/domain/rules'
 import { tabThroughDiscovery } from './helpers/discovery-focus'
 
 const test = base.extend({
@@ -34,6 +34,51 @@ const test = base.extend({
       expect(errors, 'Unhandled browser errors during this large-text scenario').toEqual([])
     }
   },
+})
+
+test('single-event forward impact wraps every text line and preserves native controls at the actual 200% font', async ({ page }) => {
+  const catalog = JSON.parse(readFileSync('public/catalog.json', 'utf8')) as Catalog
+  const bundle = catalog.upgrades.find((upgrade) => upgrade.title === 'Soul Gatherer Bundle')!
+  const portals = catalog.upgrades.find((upgrade) => upgrade.title === 'Portals')!
+  const plan = planPurchase(catalog, emptyProfile(catalog.revision), bundle.id)
+  if (plan.kind !== 'ready') throw new Error('Expected an ordinary native purchase path for font fixture')
+  await page.addInitScript((profile) => localStorage.setItem('idle-slayer-ascension-map.profile.v1', JSON.stringify(profile)), plan.profile)
+  await page.goto('./')
+  await expect(page.locator('html')).toHaveCSS('font-size', '32px')
+  await page.getByRole('searchbox').fill('Portals')
+  await page.locator(`.search-result[data-upgrade-id="${portals.id}"]`).click()
+  const toggle = page.getByRole('button', { name: 'Show details', exact: true })
+  if (await toggle.isVisible()) await toggle.click()
+  const stored = await page.evaluate(() => localStorage.getItem('idle-slayer-ascension-map.profile.v1'))
+  await page.getByRole('button', { name: 'Analyze forward impact…', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Forward impact', exact: true })
+  await expect(dialog).toBeVisible()
+  expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true)
+  for (const summary of await dialog.locator('summary').all()) await summary.click()
+  expect(await dialog.evaluate((element) => {
+    const bounds = element.getBoundingClientRect()
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+    while (walker.nextNode()) {
+      const text = walker.currentNode
+      if (!text.textContent?.trim()) continue
+      const range = document.createRange(); range.selectNodeContents(text)
+      for (const rect of range.getClientRects()) if (rect.width && (rect.left < bounds.left || rect.right > bounds.right)) return false
+    }
+    return true
+  })).toBe(true)
+  const close = dialog.getByRole('button', { name: 'Return to details', exact: true })
+  await close.scrollIntoViewIfNeeded()
+  const box = await close.boundingBox()
+  expect(box!.height).toBeGreaterThanOrEqual(44)
+  expect(await close.evaluate((element) => { const r = element.getBoundingClientRect(); return element.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)) })).toBe(true)
+  await page.screenshot({ path: test.info().outputPath('forward-impact-native-32.png') })
+  await close.focus(); await page.keyboard.press('Shift+Tab')
+  await expect(dialog.locator('summary').last()).toBeFocused()
+  await page.keyboard.press('Tab')
+  await expect(close).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  expect(await page.evaluate(() => localStorage.getItem('idle-slayer-ascension-map.profile.v1'))).toBe(stored)
 })
 
 test('optional map help remains readable and actionable at the actual 200% font', async ({ page }) => {
