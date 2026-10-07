@@ -123,7 +123,9 @@ test('cancelled asynchronous reads cannot reopen or apply a stale preview', asyn
   await page.addInitScript(() => {
     const originalRead = File.prototype.arrayBuffer
     File.prototype.arrayBuffer = async function () {
-      await new Promise((resolve) => setTimeout(resolve, 300))
+      // Hold the read until the native cancellation click, rather than racing
+      // a 300ms clock with unrelated browser/CPU work.
+      await new Promise<void>((resolve) => { (window as unknown as { releaseFixtureRead: () => void }).releaseFixtureRead = resolve })
       ;(window as unknown as { fixtureReadComplete: boolean }).fixtureReadComplete = true
       return originalRead.call(this)
     }
@@ -136,6 +138,7 @@ test('cancelled asynchronous reads cannot reopen or apply a stale preview', asyn
   await expect(readingStatus).toHaveText('Reading game save…')
   await expect(dialog.locator('.dialog-feedback')).toHaveText('')
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
+  await page.evaluate(() => (window as unknown as { releaseFixtureRead: () => void }).releaseFixtureRead())
   await expect.poll(() => page.evaluate(() => (window as unknown as { fixtureReadComplete: boolean }).fixtureReadComplete)).toBe(true)
   await expect(dialog).toHaveCount(0)
   await expect(page.getByRole('dialog', { name: 'Your progress', exact: true })).toBeVisible()
