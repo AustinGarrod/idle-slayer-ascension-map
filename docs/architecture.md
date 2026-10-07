@@ -32,6 +32,8 @@ Recording prior Ultra Ascensions enters existing history without applying a rese
 
 The version 1 profile continues to accept nonnegative safe-integer epochs through `Number.MAX_SAFE_INTEGER`. Ultra Ascension refuses an increment at that limit before producing a preview, activating locks or clearing purchases. The previous epoch can still advance to the maximum and remain saveable/exportable. Manual history entry and native import retain their existing 1,000,000 entry bound.
 
+Removal and Ultra Ascension previews filter both counts and listed rows through the current shared visibility result. Their unconditional explanation states that confirmation applies to the entire profile; hidden ownership counts, titles and conditional existence are not disclosed. The complete planned profile still supplies every actual change.
+
 ## Storage and migration
 
 `storage.ts` stores version 1 at `idle-slayer-ascension-map.profile.v1`. It validates exact fields, safe IDs, booleans, and nonnegative integer purchase epochs bounded by the profile epoch. Backups have a 4 MiB limit and validate before a restore preview. Catalog migration changes the revision while cloning and retaining every known/unknown purchase and milestone. No earlier profile schema exists; unsupported versions are rejected. Future schema changes need explicit migrations and round-trip/malformed-input tests.

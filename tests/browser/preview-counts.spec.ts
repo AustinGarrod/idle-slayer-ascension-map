@@ -1,0 +1,62 @@
+import { expect, test } from '@playwright/test'
+import { readFileSync } from 'node:fs'
+import type { Catalog } from '../../src/domain/types'
+import { emptyProfile } from '../../src/domain/types'
+import { planRemoval, planUltraAscension, visibility } from '../../src/domain/rules'
+import { PROFILE_STORAGE_KEY } from '../../src/domain/storage'
+
+const catalog = JSON.parse(readFileSync('public/catalog.json', 'utf8')) as Catalog
+const rowLabel = (id: string) => {
+  const node = catalog.upgrades.find((node) => node.id === id)!
+  return `${node.title} · ${BigInt(node.cost).toLocaleString('en')} SP`
+}
+
+for (const showSpoilers of [false, true]) {
+  for (const operation of ['removal', 'reset'] as const) {
+    test(`${operation} preview counts and rows share visibility with spoilers ${showSpoilers ? 'shown' : 'hidden'}`, async ({ page }) => {
+      const profile = emptyProfile(catalog.revision)
+      profile.showSpoilers = showSpoilers
+      for (const node of catalog.upgrades) profile.purchases[node.id] = { epoch: 0, active: node.activation === 'immediate' }
+      // Synthetic supported ownership with explicit missing milestones, never player data.
+      const visible = visibility(catalog, profile)
+      const visibleIds = (ids: string[]) => ids.filter((id) => visible.ids.has(id))
+      const removal = planRemoval(catalog, profile, catalog.startId)
+      const reset = planUltraAscension(catalog, profile)!
+      expect(reset).not.toBeNull()
+      if (!showSpoilers) {
+        expect(visibleIds(removal.removed).length).toBeLessThan(removal.removed.length)
+        expect(visibleIds(reset.cleared).length).toBeLessThan(reset.cleared.length)
+      }
+      await page.addInitScript(({ key, profile }) => localStorage.setItem(key, JSON.stringify(profile)), { key: PROFILE_STORAGE_KEY, profile })
+      await page.goto('./')
+      await expect(page.locator('.toolbar')).toBeVisible()
+      if (operation === 'removal') {
+        await page.getByRole('button', { name: 'Return to start', exact: true }).click()
+        await page.getByRole('button', { name: 'Remove purchase…', exact: true }).click()
+        const expected = visibleIds(removal.removed)
+        await expect(page.getByRole('dialog')).toContainText(`This clears ${expected.length} visible purchases`)
+        await expect(page.getByRole('dialog').locator('li')).toHaveCount(expected.length)
+        expect(await page.getByRole('dialog').locator('li').allTextContents()).toEqual(expected.map(rowLabel))
+      } else {
+        const progress = page.getByRole('button', { name: 'Progress', exact: true })
+        if (!await progress.isVisible()) await page.getByRole('button', { name: 'Map options', exact: true }).click()
+        await progress.click()
+        await page.getByRole('button', { name: 'Ultra Ascend…', exact: true }).click()
+        const groups = [
+          ['Repeat purchases cleared', reset.cleared], ['Astral locks activated', reset.activated], ['Purchased grant targets retained', reset.granted],
+        ] as const
+        for (const [label, ids] of groups) {
+          const section = page.getByRole('dialog').locator('section').filter({ has: page.getByRole('heading', { name: `${label} (${visibleIds(ids).length})`, exact: true }) })
+          await expect(section).toBeVisible()
+          await expect(section.locator('li')).toHaveCount(visibleIds(ids).length)
+          expect(await section.locator('li').allTextContents()).toEqual(visibleIds(ids).map(rowLabel))
+        }
+      }
+      const dialog = page.getByRole('dialog')
+      await expect(dialog).toContainText('The change applies to the entire profile. Lists and counts show only currently visible upgrades.')
+      await page.getByRole('button', { name: 'Apply changes', exact: true }).click()
+      const expected = operation === 'removal' ? removal.profile : reset.profile
+      await expect.poll(() => page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), PROFILE_STORAGE_KEY)).toEqual(expected)
+    })
+  }
+}
