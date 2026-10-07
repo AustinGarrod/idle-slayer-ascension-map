@@ -19,6 +19,7 @@ const officialScripts = Object.fromEntries(['script.js', 'recorder.js'].map((nam
 }))
 const websiteId = '11111111-2222-4333-8444-555555555555'
 const preferenceKey = 'idle-slayer-ascension-map.analytics.v1'
+const comparisonKey = 'idle-slayer-ascension-map.comparison.v1'
 const profileKey = 'idle-slayer-ascension-map.profile.v1'
 const fixturePath = '/__analytics-fixture/'
 const appFixturePath = '/__analytics-app/'
@@ -38,6 +39,46 @@ const secrets = {
 const publicMarker = 'PUBLIC-replay-proof-42816'
 let harnessPromise: Promise<string> | undefined
 let applicationPromise: Promise<Map<string, { body: Buffer | string; contentType: string }>> | undefined
+
+test('saved comparison contents stay blocked in real recorder snapshots and mutations without new event payloads', async ({ page, context, baseURL }) => {
+  const origin = new URL(baseURL!).origin
+  let releaseRecorder!: () => void
+  const recorderReady = new Promise<void>((resolve) => { releaseRecorder = resolve })
+  const capture = await installLocalRoutes(context, origin, { recorderReady })
+  await serveIsolatedApplication(context, origin)
+  const privateQuery = 'PRIVATE_COMPARISON_QUERY_87654', privateSnapshot = 'PRIVATE_COMPARISON_SNAPSHOT_87654', privateMutation = 'PRIVATE_COMPARISON_MUTATION_87654'
+  const unknown = 'PRIVATE_COMPARISON_UNAVAILABLE_87654', publicSnapshot = 'PUBLIC_COMPARISON_SNAPSHOT_87654', publicMutation = 'PUBLIC_COMPARISON_MUTATION_87654'
+  await page.addInitScript(({ key, ids }) => localStorage.setItem(key, JSON.stringify({ kind: 'upgrade-comparison', version: 1, ids })), { key: comparisonKey, ids: [catalog.startId, unknown] })
+  await page.goto(`${origin}${appFixturePath}`)
+  await expect(page.locator('.toolbar')).toBeVisible()
+  const mobile = page.getByRole('button', { name: 'Map options', exact: true })
+  await (await mobile.isVisible() ? mobile : page.getByRole('button', { name: 'Map view…', exact: true })).click()
+  await page.getByRole('button', { name: 'Saved upgrade comparison…', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Saved upgrade comparison', exact: true })
+  await expect(dialog.locator('.saved-comparison')).toHaveClass(/telemetry-private rr-block/)
+  await page.evaluate(({ publicSnapshot, privateSnapshot }) => {
+    const node = document.createElement('p'); node.id = 'comparison-public-proof'; node.textContent = publicSnapshot
+    document.querySelector('dialog[open]')!.appendChild(node)
+    const privateNode = document.createElement('p'); privateNode.id = 'comparison-private-proof'; privateNode.textContent = privateSnapshot
+    document.querySelector('.saved-comparison')!.appendChild(privateNode)
+  }, { publicSnapshot, privateSnapshot })
+  await waitForActive(page); releaseRecorder()
+  const snapshot = await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 2 && JSON.stringify(event).includes(publicSnapshot)))
+  expect(blockedReplayNodes(snapshot).some((node) => node.attributes.class.includes('saved-comparison') && !node.childNodes?.length)).toBe(true)
+  await dialog.locator('.saved-comparison-picker summary').click()
+  await dialog.getByRole('searchbox', { name: 'Find a visible upgrade', exact: true }).fill(privateQuery)
+  await page.locator('#comparison-private-proof').evaluate((node, marker) => { node.textContent = marker }, privateMutation)
+  await page.locator('#comparison-public-proof').evaluate((node, marker) => { node.textContent = marker }, publicMutation)
+  await page.locator('#comparison-public-proof').click()
+  const events = await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 3 && JSON.stringify(event).includes(publicMutation)))
+  const evidence = JSON.stringify({ submissions: capture.submissions, replay: events })
+  for (const marker of [privateQuery, privateSnapshot, privateMutation, unknown]) expect(evidence).not.toContain(marker)
+  await dialog.locator(`article[data-upgrade-id="${catalog.startId}"]`).getByRole('button', { name: 'Show on map', exact: true }).click()
+  await expect(page.locator('.details h2')).toHaveText(firstUpgrade.title)
+  expect(capture.submissions.filter((submission) => submission.type === 'event' && submission.payload.name === 'upgrade_selected')).toHaveLength(0)
+  expect(capture.submissions.filter((submission) => submission.type === 'event').some((submission) => /comparison/.test(JSON.stringify(submission.payload)))).toBe(false)
+  expect(capture.unexpected).toEqual([])
+})
 
 function applicationAssets() {
   applicationPromise ??= (async () => {

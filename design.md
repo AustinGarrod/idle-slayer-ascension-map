@@ -38,6 +38,12 @@ Overview is an on-demand camera mode, reached through Map options or the compact
 
 This adds no permanent minimap, camera button or phone panel. The four existing camera targets keep their footprint. Overview leaves room below its caption and above camera controls, fits only current shared visible frames, and uses the current reduced-motion preference. Refocus restores the existing useful node scale and responsive inspection insets. Spoiler changes retain the exact camera instead of widening or resetting the view automatically.
 
+## Saved upgrade comparison
+
+Saved upgrade comparison is a separate optional reference dialog, reached from Map options or Compare this upgrade in expanded details. It holds four deliberately selected visible upgrades across owned, pending, blocked and available states. Two columns at roomy desktop widths become a single readable column on narrow or enlarged-text views. Each card keeps native benefit, exact cost, state, separate purchase/reveal gates, activation and retention alongside source/version context. Stable IDs distinguish same-title entries. Existing Show on map and requirement-review routes permit inspection without a purchase action in the comparison.
+
+An inline full-list picker searches visible titles/effects. At capacity the player explicitly chooses the entry to replace, or removes it; hidden references do not consume displayed capacity or disclose counts. Missing IDs show a generic unavailable card. Export, restore and storage-conflict recovery remain local/private, visibly separate from progress backup and Undo. The native dialog and single scroll surface keep controls reachable with ordinary and actual enlarged browser text; card/picker buttons wrap with at least 44px targets. No permanent rail, notes, winner, goals, stacked benefit or SP balance is added.
+
 ## Next-upgrade guidance
 
 Three presentations were independently reviewed for the wiki-based suggestion feature:
