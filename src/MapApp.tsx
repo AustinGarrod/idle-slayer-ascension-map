@@ -33,6 +33,14 @@ import { MAX_GAME_SAVE_BYTES } from './domain/save-codec'
 import { GameSaveImportPanel } from './GameSaveImportPanel'
 import { planPriorAscensions } from './domain/prior-ascensions'
 import { PriorAscensionsForm } from './PriorAscensionsForm'
+import { decodeProgressTransfer, encodeProgressTransfer, progressTransferLink } from './domain/progress-transfer'
+import type { TransferCapture } from './domain/progress-transfer'
+import type { ProgressTransferInbox } from './progress-transfer-inbox'
+import { createTransferQr } from './domain/transfer-qr'
+import type { TransferQrResult } from './domain/transfer-qr'
+import type { MapLayoutMode } from './domain/map-layout'
+import { ProgressTransferPanel } from './ProgressTransferPanel'
+import type { TransferPreview } from './ProgressTransferPanel'
 import { analyticsPosition, getTrackingStatus, setTrackingPreference, trackEvent, updateAnalyticsContext } from './analytics'
 import type { AnalyticsOperation } from './analytics'
 import { PrivacyPanel, trackingDisclosure } from './PrivacyPanel'
@@ -59,15 +67,15 @@ import { ForwardImpactPanel } from './ForwardImpactPanel'
 import type { HypotheticalEvent } from './domain/forward-impact'
 
 type Preview = { operation: AnalyticsOperation | 'prior_ascensions'; title: string; text: string; profile: Profile; changes?: string[]; groups?: { label: string; ids: string[] }[]; replaceStorage?: boolean; upgradeId?: string; milestoneId?: string; sessionVersion?: number; resolution?: 'saved' | 'local'; comparison?: Omit<ProgressComparisonProps, 'catalog'> }
-type Menu = 'options' | 'progress' | 'milestones' | 'about' | 'recommendations' | 'game-import' | 'privacy' | 'keyboard-help' | 'reference-sheet' | null
+type Menu = 'options' | 'progress' | 'milestones' | 'about' | 'recommendations' | 'game-import' | 'privacy' | 'keyboard-help' | 'reference-sheet' | 'transfer' | null
 type SelectionSource = 'map' | 'search' | 'neighbor' | 'recommendation' | 'start' | 'keyboard' | 'reference'
-const menuTitles: Record<Exclude<Menu, null>, string> = { options: 'Map options', progress: 'Your progress', milestones: 'Milestones', about: 'About this map', recommendations: 'Suggested next upgrade', 'game-import': 'Import game progress', privacy: 'Privacy & tracking', 'keyboard-help': 'Map help', 'reference-sheet': 'Upgrade reference sheet' }
+const menuTitles: Record<Exclude<Menu, null>, string> = { options: 'Map options', progress: 'Your progress', milestones: 'Milestones', about: 'About this map', recommendations: 'Suggested next upgrade', 'game-import': 'Import game progress', privacy: 'Privacy & tracking', 'keyboard-help': 'Map help', 'reference-sheet': 'Upgrade reference sheet', transfer: 'Transfer map progress' }
 const graphKeyboardHelp = 'Arrow Right or Down: next visible upgrade. Arrow Left or Up: previous. Home or End: first or last. Enter or Space: select. Escape: deselect. Tab: leave upgrades for camera controls. Shift+Tab: return to the map shortcut. Upgrades are browsed in catalog order; tree positions stay fixed. Directional pan controls close during keyboard exploration.'
 
 const wikiPriorities = { schemaVersion, source: wikiSource, rows: wikiRows }
 const cost = (value: string) => presentCost(value).exact
 
-function Atlas({ catalog }: { catalog: Catalog }) {
+function Atlas({ catalog, transferInbox }: { catalog: Catalog; transferInbox: ProgressTransferInbox }) {
   const { session: profileSession, state: sessionState, loaded } = useProfileSession(catalog.revision, {
     onState: (state) => { currentProfile.current = state.profile },
     onErrorChange: (state, recovered) => {
@@ -78,6 +86,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     onBeforeInitialize: syncAnalyticsContext,
     onExternalChange: (state) => {
       invalidatePendingFiles()
+      setTransferBusy(false); setTransferGenerated(null); setTransferPreview(null); transferLayoutUndo.current = new WeakMap()
       setPreviewState(null); setPurchaseTarget(null); setChoices({})
       setGameImport(null); setGameImportLoading(false); setGameImportError('')
       setConflictReview(null); setTrackingReload(null); setMenuState(null); setRequirementReview(null)
@@ -129,6 +138,12 @@ function Atlas({ catalog }: { catalog: Catalog }) {
   const [gameImport, setGameImport] = useState<{ result: GameSaveImportPreview; original: Profile } | null>(null)
   const [gameImportError, setGameImportError] = useState('')
   const [gameImportLoading, setGameImportLoading] = useState(false)
+  const [transferMode, setTransferMode] = useState<'send' | 'receive'>('send')
+  const [transferBusy, setTransferBusy] = useState(false)
+  const [transferGenerated, setTransferGenerated] = useState<{ link: string; qr: TransferQrResult } | null>(null)
+  const [transferPreview, setTransferPreview] = useState<TransferPreview | null>(null)
+  const transferRequest = useRef(0)
+  const transferLayoutUndo = useRef(new WeakMap<Profile, { before: MapLayoutMode; after: MapLayoutMode }>())
   const gameImportRequest = useRef(0)
   const restoreRequest = useRef(0)
   const trackingChangeRequest = useRef(0)
@@ -180,9 +195,15 @@ function Atlas({ catalog }: { catalog: Catalog }) {
       atlas.style.setProperty('--map-navigation-reserve', available < 400 ? '130px' : '230px')
     }
     measure()
-    const observer = new ResizeObserver(measure)
+    // Updating reserved space inside resize delivery can synchronously resize
+    // the observed workspace again. Defer that layout write to the next frame.
+    let pendingFrame: number | undefined
+    const observer = new ResizeObserver(() => {
+      if (pendingFrame !== undefined) return
+      pendingFrame = window.requestAnimationFrame(() => { pendingFrame = undefined; measure() })
+    })
     observer.observe(toolbar); observer.observe(workspace)
-    return () => observer.disconnect()
+    return () => { observer.disconnect(); if (pendingFrame !== undefined) window.cancelAnimationFrame(pendingFrame) }
   }, [])
   const flow = useReactFlow<UpgradeNode>()
   const motionPreference = useMemo(() => window.matchMedia('(prefers-reduced-motion: reduce)'), [])
@@ -252,7 +273,8 @@ function Atlas({ catalog }: { catalog: Catalog }) {
   const previousOverviewProgress = useRef({ progress: layoutProgress, layout })
   const incoming = visible.connections.filter((edge) => edge.to === detail?.id).map((edge) => index.get(edge.from)!)
   const outgoing = visible.connections.filter((edge) => edge.from === detail?.id).map((edge) => index.get(edge.to)!)
-  const related = new Set([...incoming, ...outgoing].map((node) => node.id))
+  const related = useMemo(() => new Set(visible.connections.flatMap((edge) =>
+    edge.to === detail?.id ? [edge.from] : edge.from === detail?.id ? [edge.to] : [])), [visible.connections, detail?.id])
   const purchasePlan = purchaseTarget ? planPurchase(catalog, profile, purchaseTarget, choices) : null
   const activeDialogTitle = preview?.title
     ?? (purchasePlan && purchaseTarget ? purchasePlan.kind === 'choice' ? 'Choose a prerequisite path' : purchasePlan.kind === 'blocked' ? 'Explicit progress required' : 'Record purchase?' : null)
@@ -310,6 +332,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     const previous = menuRef.current
     if (next === previous) return
     if (previous === 'progress') restoreRequest.current++
+    if (previous === 'transfer' && next !== 'transfer') { transferRequest.current++; setTransferBusy(false); setTransferPreview(null); setTransferGenerated(null) }
     if (next) setMessage('')
     if (previous === 'privacy' && next !== 'privacy') trackingChangeRequest.current++
     if (previous && previous !== 'reference-sheet') trackEvent('panel_closed', { panel: previous })
@@ -430,6 +453,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     gameImportRequest.current++
     restoreRequest.current++
     trackingChangeRequest.current++
+    transferRequest.current++
   }
   function reviewConflict() {
     setMessage('')
@@ -572,10 +596,13 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     void flow.setViewport(flow.getViewport())
     trackEvent('spoilers_changed', { enabled })
   }
-  function changeLayout(mode: 'native' | 'web') {
+  function changeLayout(mode: 'native' | 'web', manualChoice = true) {
+    if (manualChoice) transferLayoutUndo.current = new WeakMap()
     if (mode !== layoutMode) trackEvent('map_layout_changed', { layout: mode === 'native' ? 'game' : 'web' })
     setLayoutMode(mode)
-    if (!saveLayoutPreference(mode, () => window.localStorage)) setMessage('Layout selected for this visit. Your browser could not save the layout preference.')
+    const saved = saveLayoutPreference(mode, () => window.localStorage)
+    if (!saved) setMessage('Layout selected for this visit. Your browser could not save the layout preference.')
+    return saved
   }
   function beginCameraControl() {
     cameraRequest.current += 1
@@ -584,6 +611,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
   function travelHistory(direction: 'undo' | 'redo') {
     const current = profileSession.getState()
     const entry = (direction === 'undo' ? current.history : current.redoHistory).at(-1)
+    const transferredLayout = transferLayoutUndo.current.get(direction === 'undo' ? current.profile : entry?.profile ?? current.profile)
     if (!entry || !profileSession[direction]()) return
     invalidatePendingFiles()
     setPreviewState(null); setPurchaseTarget(null); setChoices({})
@@ -591,8 +619,10 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     setConflictReview(null); setTrackingReload(null)
     if (menu === 'options') setMenu(null)
     const restored = profileSession.getState().profile
+    const layoutSaved = !transferredLayout || layoutMode !== (direction === 'undo' ? transferredLayout.after : transferredLayout.before)
+      || changeLayout(direction === 'undo' ? transferredLayout.before : transferredLayout.after, false)
     if (entry.action === 'spoilers') { beginCameraControl(); void flow.setViewport(flow.getViewport()) }
-    setMessage(`${direction === 'undo' ? 'Undid' : 'Redid'} ${historyActionLabel(entry.action).toLowerCase()}. ${direction === 'undo' ? 'Earlier progress' : 'Change'} restored. Spoilers ${restored.showSpoilers ? 'shown' : 'hidden'}.`)
+    setMessage(`${direction === 'undo' ? 'Undid' : 'Redid'} ${historyActionLabel(entry.action).toLowerCase()}. ${direction === 'undo' ? 'Earlier progress' : 'Change'} restored. Spoilers ${restored.showSpoilers ? 'shown' : 'hidden'}.${layoutSaved ? '' : ' Restored layout applies to this visit; your browser could not save it.'}`)
     if (direction === 'undo') trackEvent('progress_undo')
   }
   function leaveOverview() { setOverviewView(false); previousOverviewViewport.current = null; pendingOverviewRequest.current = null }
@@ -639,6 +669,72 @@ function Atlas({ catalog }: { catalog: Catalog }) {
   }
   function undo() { travelHistory('undo') }
   function redo() { travelHistory('redo') }
+  function openTransfer(mode: 'send' | 'receive') {
+    // An arriving link replaces the active interaction, never its progress.
+    // Invalidate async work before it can reopen a superseded preview or reload.
+    invalidatePendingFiles()
+    profileSession.cancelPending()
+    setRoutesOpen(false); setRoadmap(null); setForecast(null); setRecentOpen(false)
+    setCheckpointsOpen(false); setComparisonOpen(false); setRequirementReview(null); setSearchOpen(false)
+    setPreview(null); cancelPurchase(); setChoices({}); setConflictReview(null); setTrackingReload(null)
+    setGameImport(null); setGameImportLoading(false); setGameImportError('')
+    transferRequest.current++; setTransferBusy(false); setTransferGenerated(null); setTransferPreview(null)
+    setMessage('')
+    setTransferMode(mode); setMenu('transfer')
+  }
+  function closeTransfer() {
+    transferRequest.current++; setTransferBusy(false); setTransferGenerated(null); setTransferPreview(null); setMenu(null)
+  }
+  async function generateTransfer() {
+    const request = ++transferRequest.current, original = currentProfile.current
+    setMessage(''); setTransferBusy(true); setTransferGenerated(null)
+    const result = await encodeProgressTransfer(catalog, original, layoutMode)
+    if (request !== transferRequest.current) return
+    setTransferBusy(false)
+    if (currentProfile.current !== original) { setMessage('Progress changed while creating this snapshot. Create a fresh transfer.'); return }
+    if (!result.ok) { setMessage(result.error); return }
+    const link = progressTransferLink(result.token, window.location.origin, import.meta.env.BASE_URL)
+    setTransferGenerated({ link, qr: createTransferQr(link) })
+  }
+  async function receiveTransfer(input: string) {
+    const request = ++transferRequest.current, original = currentProfile.current
+    setMessage(''); setTransferBusy(true); setTransferPreview(null)
+    const result = await decodeProgressTransfer(input, catalog.revision)
+    if (request !== transferRequest.current) return
+    setTransferBusy(false)
+    if (currentProfile.current !== original) { setMessage('Progress changed while reading this transfer. Paste it again for a fresh preview.'); return }
+    if (!result.ok) { setMessage(result.error); return }
+    setTransferPreview({ profile: result.profile, layout: result.layout, original })
+  }
+  function applyTransfer() {
+    if (!transferPreview) return
+    if (currentProfile.current !== transferPreview.original) { setTransferPreview(null); setMessage('Progress changed while reviewing this transfer. Paste it again for a fresh preview.'); return }
+    if (!change(transferPreview.profile, 'Map progress transferred. Undo is available in this session.', true, 'transfer')) return
+    transferLayoutUndo.current.set(transferPreview.profile, { before: layoutMode, after: transferPreview.layout })
+    changeLayout(transferPreview.layout, false)
+    closeTransfer()
+  }
+  const receiveCapturedTransfer = useEffectEvent((received: NonNullable<TransferCapture>) => {
+    openTransfer('receive')
+    if (received.error) setMessage(received.error)
+    else if (received.token !== undefined) {
+      const token = received.token
+      delete received.token
+      void receiveTransfer(token)
+    }
+  })
+  const deliverTransferArrival = useEffectEvent(() => {
+    const arrival = transferInbox.take()
+    if (!arrival) return
+    if (arrival.capture) receiveCapturedTransfer(arrival.capture)
+    else if (menu === 'transfer') closeTransfer()
+  })
+  useEffect(() => {
+    if (!loaded) return
+    const unsubscribe = transferInbox.subscribe(deliverTransferArrival)
+    deliverTransferArrival()
+    return unsubscribe
+  }, [loaded, transferInbox])
   function finishTrackingChange(enabled: boolean) {
     const result = setTrackingPreference(enabled)
     // A fragment-only navigation does not tear down the recorder's listeners.
@@ -702,12 +798,13 @@ function Atlas({ catalog }: { catalog: Catalog }) {
       && (previous.layout !== layout || pendingOverviewRequest.current === cameraRequest.current)) fitOverviewCamera()
   }, [layoutProgress, layout])
   const state = (node: Upgrade) => upgradeState(node, profile)
-  const nodes: UpgradeNode[] = visible.upgrades.map((node) => ({ id: node.id, type: 'upgrade', position: layout.centers.get(node.id)!,
+  // Unrelated modal/feedback state must not reset React Flow's measured nodes.
+  const nodes = useMemo<UpgradeNode[]>(() => visible.upgrades.map((node) => ({ id: node.id, type: 'upgrade', position: layout.centers.get(node.id)!,
     data: { upgrade: node, state: state(node) }, selected: selected === node.id,
     className: !overviewView && detail && node.id !== detail.id ? related.has(node.id) ? 'node-related' : 'node-muted' : '',
     ariaLabel: `${node.title}, ${state(node)}, ${cost(node.cost)} Slayer Points`, width: nodeWidth, height: nodeHeight,
     domAttributes: { tabIndex: node.id === graphTabStop ? 0 : -1, 'aria-current': selected === node.id ? 'true' : undefined },
-    ...(gameLayout ? { zIndex: 2 } : {}) }))
+    ...(gameLayout ? { zIndex: 2 } : {}) })), [visible.upgrades, profile, selected, overviewView, detail?.id, related, layout, nodeWidth, nodeHeight, graphTabStop, gameLayout])
   const edges = visible.connections.map((edge) => {
     const from = layout.centers.get(edge.from)!, to = layout.centers.get(edge.to)!
     const dx = to.x - from.x, dy = to.y - from.y
@@ -794,6 +891,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     window.requestAnimationFrame(() => document.querySelector<HTMLElement>('[data-game-import-trigger]')?.focus({ preventScroll: true }))
   }
   async function readGameSave(file: File) {
+    if (menu !== 'progress' && menu !== 'game-import') return
     const request = ++gameImportRequest.current
     setGameImport(null); setGameImportError(''); setGameImportLoading(true); setMenu('game-import')
     let bytes: Uint8Array
@@ -907,6 +1005,8 @@ function Atlas({ catalog }: { catalog: Catalog }) {
         <button data-game-import-trigger disabled={!loaded} onClick={chooseGameSave}>Import game save…</button>
         <small>Steam 7.2.0 · Choose savedata.sav or backup.sav. A local preview appears before map progress changes.<code className="game-save-path">%USERPROFILE%\AppData\LocalLow\Pablo Leban\Idle Slayer\</code></small>
         <button onClick={backup}>Export JSON backup</button>
+        <button disabled={!loaded || saving} onClick={() => openTransfer('send')}>Transfer to another device…</button>
+        <button disabled={!loaded || saving} onClick={() => openTransfer('receive')}>Receive transfer…</button>
         <button onClick={() => { restoreRequest.current++; fileInput.current?.click() }}>Restore JSON backup…</button>
         <button onClick={ultra}>Ultra Ascend…</button>
         <small>Preview a new reset: clear repeat purchases, activate eligible Astral locks and retain permanent ownership and milestones.</small>
@@ -914,6 +1014,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
         <button className="danger" onClick={() => { setMenu(null); setPreview({ operation: 'clear', title: 'Clear all progress?', text: 'Clear every purchase, milestone and unknown ID, and return to zero Ultra Ascensions with spoilers hidden. You can undo this change in this session.', profile: emptyProfile(catalog.revision), replaceStorage: true }) }}>Clear all progress…</button>
       </div>
     <GoalsPanel catalog={catalog} profile={profile} targetId={goalTarget} intentions={intentions} onInspect={(id) => { setMenu(null); center(id, 'neighbor') }} /></Dialog>}
+    {menu === 'transfer' && <Dialog title="Transfer map progress" close={closeTransfer}><ProgressTransferPanel catalog={catalog} profile={profile} layout={layoutMode} mode={transferMode} busy={transferBusy || saving} generated={transferGenerated} preview={transferPreview} onGenerate={() => { void generateTransfer() }} onReceive={(input) => { void receiveTransfer(input) }} onApply={applyTransfer} onCancel={closeTransfer} onBackup={backup} /></Dialog>}
     {menu === 'about' && <Dialog title="About this map" close={() => setMenu(null)}><p>Unofficial Idle Slayer companion. Game assets belong to their respective rights holders. Application code and asset attribution are documented separately.</p><p>Game {catalog.gameVersion} · Steam build {catalog.steamBuild}<br />Catalog {catalog.revision}</p><p>All map data and icons are bundled locally. No account or application backend is required.</p><p className="progress-save-status">{progressStatus}</p><p>{trackingDisclosure}</p><button onClick={() => setMenu('keyboard-help')}>Map help…</button><button onClick={() => setMenu('privacy')}>Privacy & tracking</button><a onClick={() => trackEvent('source_link_opened', { source: 'about', action: 'github' })} href="https://github.com/AustinGarrod/idle-slayer-ascension-map">Source and extraction documentation</a><a className="software-license-link" target="_blank" rel="noreferrer" onClick={() => trackEvent('source_link_opened', { source: 'about', action: 'license' })} href={`${import.meta.env.BASE_URL}licenses/index.html`}>Bundled software licenses</a></Dialog>}
     {menu === 'keyboard-help' && <Dialog title="Map help" close={() => setMenu(null)}><MapHelpPanel onProgress={() => setMenu('progress')} onMilestones={() => setMenu('milestones')} onSpoilers={() => setMenu('options')} /><h3>Keyboard map navigation</h3><p>The map has one Tab stop for its visible upgrades. All visible upgrades remain available by keyboard.</p><ul><li>From the toolbar, Tab reaches the map shortcut. Press Enter to skip directly to camera controls, or Tab again to explore upgrades.</li><li>Arrow Right / Down browses the next upgrade; Left / Up browses the previous. Home / End jumps to the first / last visible upgrade. Browsing follows catalog order and wraps at its ends.</li><li>Enter / Space selects the focused upgrade and opens its details. Escape deselects it. Focus browsing preserves recorded progress and fixed positions.</li><li>Tab leaves upgrades for camera controls; Shift+Tab returns to the map shortcut and toolbar. Camera controls provide zoom, return to start and directional panning. Entering keyboard exploration closes the directional pan controls so upgrades remain unobscured. Use Map navigation to reopen them.</li><li>Search selection by keyboard goes directly to details. Closing those details returns to search.</li></ul><p>Screen-reader users may need their reader's interaction mode to send arrow keys to the focused upgrade. The focused upgrade announces its title, state, cost and keyboard instructions.</p></Dialog>}
     {menu === 'privacy' && <Dialog title="Privacy & tracking" close={() => setMenu(null)}><PrivacyPanel status={getTrackingStatus()} onChange={requestTrackingChange} progressStatus={progressStatus} /></Dialog>}
@@ -928,6 +1029,6 @@ function Atlas({ catalog }: { catalog: Catalog }) {
   </main></DialogFeedbackContext.Provider>
 }
 
-export default function MapApp({ catalog }: { catalog: Catalog }) {
-  return <ReactFlowProvider><Atlas catalog={catalog} /></ReactFlowProvider>
+export default function MapApp({ catalog, transferInbox }: { catalog: Catalog; transferInbox: ProgressTransferInbox }) {
+  return <ReactFlowProvider><Atlas catalog={catalog} transferInbox={transferInbox} /></ReactFlowProvider>
 }

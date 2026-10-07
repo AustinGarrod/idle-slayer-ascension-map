@@ -4,7 +4,7 @@ const labels = {
   milestone: 'Milestone recording', milestone_removal: 'Milestone removal',
   astral_activation: 'Astral activation', ultra_ascension: 'Ultra Ascension',
   prior_ascensions: 'Previous ascension history', clear: 'Clear progress', restore: 'JSON restore',
-  game_import: 'Game save import', recovery: 'Progress recovery', spoilers: 'Spoiler setting',
+  game_import: 'Game save import', transfer: 'Progress transfer', recovery: 'Progress recovery', spoilers: 'Spoiler setting',
 } as const
 
 export type HistoryAction = keyof typeof labels

@@ -197,6 +197,19 @@
       ]
     },
     {
+      "name": "qrcode-generator",
+      "version": "2.0.4",
+      "license": "MIT",
+      "inclusion": "module",
+      "notices": [
+        {
+          "source": "LICENSE",
+          "file": "qrcode-generator-MIT.txt",
+          "sha256": "3a850fa5f08101db6f40676c2786e10bd2cd5fff7b12ffdf1e0c434d4e49d90c"
+        }
+      ]
+    },
+    {
       "name": "react",
       "version": "19.2.8",
       "license": "MIT",

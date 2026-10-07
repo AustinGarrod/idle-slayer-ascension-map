@@ -597,6 +597,7 @@ __metadata:
     "@types/react-dom": "npm:19.2.7"
     "@vitejs/plugin-react": "npm:6.1.1"
     "@xyflow/react": "npm:12.12.0"
+    qrcode-generator: "patch:qrcode-generator@npm%3A2.0.4#~/.yarn/patches/qrcode-generator-npm-2.0.4-763b3d6a6b.patch"
     react: "npm:19.2.8"
     react-dom: "npm:19.2.8"
     typescript: "npm:6.0.2"
@@ -853,6 +854,20 @@ __metadata:
   version: 7.0.0
   resolution: "proc-log@npm:7.0.0"
   checksum: 10c0/b89c2d862604f35fec795477b0c7e376feab3ba0d4f4d291c4e959567442697cf451ac557d0623c1cc38af45a78128b983410f397a10c5d3a67f76c33de4754b
+  languageName: node
+  linkType: hard
+
+"qrcode-generator@npm:2.0.4":
+  version: 2.0.4
+  resolution: "qrcode-generator@npm:2.0.4"
+  checksum: 10c0/52dc3894bda6afecf09cb36aba9c181f3c4641fcbeac40c2af05d68da1383e3a1c7354bd3dc8c5e2a199d2e62314bbdec8cb4fbbd00bcfda40de56bb36bfdb17
+  languageName: node
+  linkType: hard
+
+"qrcode-generator@patch:qrcode-generator@npm%3A2.0.4#~/.yarn/patches/qrcode-generator-npm-2.0.4-763b3d6a6b.patch":
+  version: 2.0.4
+  resolution: "qrcode-generator@patch:qrcode-generator@npm%3A2.0.4#~/.yarn/patches/qrcode-generator-npm-2.0.4-763b3d6a6b.patch::version=2.0.4&hash=43298c"
+  checksum: 10c0/63b04c7fdacb5c5d5482387f5787eb19998deea671164e9d75bdd51138e65f804336af6ca6d8a72225b58881ab6eccc9132a9a56ba3baa9d4abef399d0372af1
   languageName: node
   linkType: hard
 

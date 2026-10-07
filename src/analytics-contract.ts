@@ -32,7 +32,7 @@ function phasedContracts<const Operations extends Record<string, PropertyRules>>
     phases.map((phase) => [`${operation}_${phase}`, properties]))) as PhasedContracts<Operations>
 }
 
-const panels = ['options', 'progress', 'milestones', 'about', 'recommendations', 'game-import', 'privacy', 'keyboard-help'] as const
+const panels = ['options', 'progress', 'milestones', 'about', 'recommendations', 'game-import', 'privacy', 'keyboard-help', 'transfer'] as const
 const profileReasons = ['invalid-json', 'invalid-profile', 'too-large', 'storage-read', 'storage-write'] as const
 const backupReasons = [...profileReasons, 'size', 'read'] as const
 const positions = [1, 2, 3] as const

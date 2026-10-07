@@ -11,6 +11,7 @@ import type { Catalog } from '../../src/domain/types'
 import { emptyProfile } from '../../src/domain/types'
 import { visibility } from '../../src/domain/rules'
 import { encodeGameSaveFixture, nativeSaveFixture } from '../fixtures/game-save'
+import { encodeProgressTransfer, progressTransferLink } from '../../src/domain/progress-transfer'
 import { CHECKPOINT_STORAGE_KEY, emptyCheckpoints, exportCheckpoints } from '../../src/domain/checkpoints'
 
 const fixtureRoot = 'tests/fixtures/umami-3.4.0'
@@ -1208,6 +1209,137 @@ test('unsaved progress opt-out preserves cancellation and exports current memory
   expect(capture.unexpected).toEqual([])
 })
 
+
+test('real recorder excludes transfer URL payloads, QR contents, links and replacement previews', async ({ page, context, baseURL }) => {
+  const origin = new URL(baseURL!).origin
+  let releaseRecorder!: () => void
+  const recorderReady = new Promise<void>((resolve) => { releaseRecorder = resolve })
+  const marker = 'SENTINEL-private-transfer-progress-27591'
+  const outgoing = { ...initial, purchases: { [marker]: { epoch: 0, active: false } } }
+  const incoming = { ...initial, epoch: 314159, purchases: { [marker]: { epoch: 2, active: false }, [catalog.startId]: { epoch: 314159, active: true } } }
+  const encoded = await encodeProgressTransfer(catalog, incoming, 'web')
+  if (!encoded.ok) throw new Error(encoded.error)
+  const link = progressTransferLink(encoded.token, origin, appFixturePath)
+  const capture = await installLocalRoutes(context, origin, { recorderReady })
+  await serveIsolatedApplication(context, origin)
+  await page.addInitScript(({ key, outgoing }) => localStorage.setItem(key, JSON.stringify(outgoing)), { key: profileKey, outgoing })
+  await page.goto(link)
+  await waitForActive(page)
+  const dialog = page.getByRole('dialog', { name: 'Transfer map progress', exact: true })
+  await expect(dialog.getByRole('heading', { name: 'Review transfer', exact: true })).toBeVisible()
+  expect(new URL(page.url()).hash).toBe('')
+  await expect(dialog).not.toContainText(marker)
+  const snapshotProof = 'TRANSFER-public-snapshot-proof-42816'
+  await dialog.evaluate((element, proof) => {
+    const publicNode = document.createElement('p'); publicNode.textContent = proof; element.appendChild(publicNode)
+  }, snapshotProof)
+  releaseRecorder()
+  const snapshot = await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 2 && JSON.stringify(event).includes(snapshotProof)))
+  expect(blockedReplayNodes(snapshot).some((node) => node.attributes.class.includes('progress-transfer') && !(node.childNodes?.length))).toBe(true)
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
+  await openProgress(page)
+  await page.getByRole('button', { name: 'Transfer to another device…', exact: true }).click()
+  await page.getByRole('button', { name: 'Create transfer snapshot', exact: true }).click()
+  await expect(page.getByRole('img', { name: 'Progress transfer QR code', exact: true })).toBeVisible()
+  const generatedLink = await page.getByRole('textbox', { name: 'Private transfer link', exact: true }).inputValue()
+  await page.evaluate((proof) => {
+    const button = document.createElement('button'); button.id = 'transfer-public-replay-proof'; button.textContent = proof
+    document.querySelector('dialog')!.appendChild(button)
+  }, publicMarker)
+  await page.locator('#transfer-public-replay-proof').click()
+  const events = await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 3 && JSON.stringify(event).includes(publicMarker)))
+  const evidence = JSON.stringify({ submissions: capture.submissions, replay: events })
+  for (const privateValue of [marker, encoded.token, generatedLink, '314159']) expect(evidence).not.toContain(privateValue)
+  expect(capture.unexpected).toEqual([])
+})
+
+test('transfer URL cleanup failure prevents tracker and recorder startup', async ({ page, context, baseURL }) => {
+  const origin = new URL(baseURL!).origin
+  const encoded = await encodeProgressTransfer(catalog, initial, 'native')
+  if (!encoded.ok) throw new Error(encoded.error)
+  const capture = await installLocalRoutes(context, origin)
+  await serveIsolatedApplication(context, origin)
+  await page.addInitScript(() => { history.replaceState = () => { throw new DOMException('Synthetic blocked transfer URL cleanup', 'SecurityError') } })
+  await page.goto(progressTransferLink(encoded.token, origin, appFixturePath))
+  await expect(page.getByRole('dialog').locator('.dialog-feedback')).toContainText('Tracking was kept off')
+  expect(capture.scriptRequests).toEqual([])
+  expect(capture.submissions).toEqual([])
+  expect(capture.unexpected).toEqual([])
+})
+
+for (const tracking of ['enabled', 'disabled'] as const) {
+  for (const outcome of ['valid', 'malformed', 'navigate away'] as const) {
+    test(`deferred catalog receives only the latest transfer ${outcome} with tracking ${tracking}`, async ({ page, context, baseURL }) => {
+      const origin = new URL(baseURL!).origin
+      const marker = 'SENTINEL-delayed-transfer-profile-61928'
+      const destination = { ...initial, epoch: 2, purchases: { [catalog.startId]: { epoch: 2, active: true } } }
+      const incoming = { ...initial, epoch: 7, purchases: { [catalog.startId]: { epoch: 7, active: true }, [marker]: { epoch: 3, active: false } } }
+      const older = await encodeProgressTransfer(catalog, { ...incoming, epoch: 8 }, 'native')
+      const latest = await encodeProgressTransfer(catalog, incoming, 'web')
+      if (!older.ok || !latest.ok) throw new Error('Synthetic delayed-transfer fixture failed')
+      const capture = await installLocalRoutes(context, origin)
+      await serveIsolatedApplication(context, origin)
+      let releaseCatalog!: () => void
+      const catalogReady = new Promise<void>((resolve) => { releaseCatalog = resolve })
+      await context.route(`${origin}${appFixturePath}catalog.json`, async (route) => {
+        await catalogReady
+        await route.fulfill({ json: catalog })
+      })
+      await page.addInitScript(({ preferenceKey, profileKey, tracking, destination }) => {
+        localStorage.setItem(preferenceKey, tracking); localStorage.setItem(profileKey, JSON.stringify(destination))
+      }, { preferenceKey, profileKey, tracking, destination })
+      const requests: { url: string; referrer: string | undefined }[] = []
+      page.on('request', (request) => requests.push({ url: request.url(), referrer: request.headers().referer }))
+      await page.goto(outcome === 'valid' ? `${origin}${appFixturePath}` : progressTransferLink(older.token, origin, appFixturePath))
+      await expect(page.getByRole('status')).toHaveText('Loading the native Ascension tree…')
+      expect(new URL(page.url()).hash).toBe('')
+      if (tracking === 'enabled') {
+        await waitForActive(page)
+        await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 2))
+      }
+      // Exercise supersession before either the catalog or Atlas exists. The
+      // early listener must run ahead of the production URL sanitizer.
+      for (const hash of ['#transfer=v1.invalid', `#transfer=${latest.token}`]) {
+        await page.evaluate((value) => { location.hash = value }, hash)
+        await expect.poll(() => new URL(page.url()).hash).toBe('')
+        await expect(page.getByRole('dialog')).toHaveCount(0)
+      }
+      if (outcome === 'malformed') {
+        await page.evaluate(() => { location.hash = '#transfer=v1.invalid' })
+        await expect.poll(() => new URL(page.url()).hash).toBe('')
+      } else if (outcome === 'navigate away') {
+        await page.evaluate(() => { location.hash = '#elsewhere' })
+        // Public-reference startup now cleans arbitrary addresses regardless
+        // of tracking preference; cancellation must survive that cleanup.
+        await expect.poll(() => new URL(page.url()).hash).toBe('')
+      }
+      releaseCatalog()
+      await expect(page.locator('.toolbar')).toBeVisible()
+      const receiver = page.getByRole('dialog', { name: 'Transfer map progress', exact: true })
+      if (outcome === 'navigate away') {
+        await expect(page.getByRole('dialog')).toHaveCount(0)
+      } else {
+        await expect(receiver).toBeVisible()
+        await expect(page.getByRole('dialog')).toHaveCount(1)
+        if (outcome === 'valid') {
+          await expect(receiver.getByRole('heading', { name: 'Review transfer', exact: true })).toBeFocused()
+          await expect(receiver.getByRole('row', { name: 'Ultra Ascensions 2 7', exact: true })).toBeVisible()
+        } else {
+          await expect(receiver.locator('.dialog-feedback')).toContainText('incomplete, corrupt or unsupported')
+          await expect(receiver.getByRole('button', { name: 'Apply transfer', exact: true })).toHaveCount(0)
+        }
+        await receiver.getByRole('button', { name: 'Cancel', exact: true }).click()
+        await expect(page.getByRole('dialog')).toHaveCount(0)
+      }
+      expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), profileKey)).toEqual(destination)
+      expect(await page.evaluate((key) => localStorage.getItem(key), preferenceKey)).toBe(tracking)
+      const evidence = JSON.stringify({ submissions: capture.submissions, replay: replayEvents(capture), requests })
+      for (const secret of [marker, older.token, latest.token, 'transfer=']) expect(evidence).not.toContain(secret)
+      if (tracking === 'disabled') { expect(capture.scriptRequests).toEqual([]); expect(capture.submissions).toEqual([]) }
+      expect(capture.unexpected).toEqual([])
+    })
+  }
+}
 test('continuing the final eligible suggestion reports the fresh all-owned reason once', async ({ page, context, baseURL }) => {
   const origin = new URL(baseURL!).origin
   const capture = await installLocalRoutes(context, origin, { recorderBody: '' })
