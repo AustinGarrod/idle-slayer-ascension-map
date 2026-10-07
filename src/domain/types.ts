@@ -41,6 +41,7 @@ export interface Catalog {
   upgrades: Upgrade[]
   milestones: Milestone[]
   connections: { from: string; to: string }[]
+  /** Legacy catalog field name: conditional retention of existing purchases, never awarded ownership. */
   grants: { when: Requirement; ids: string[] }[]
   ultraAscension: Requirement
   verification: {
