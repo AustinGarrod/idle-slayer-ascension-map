@@ -50,6 +50,8 @@ yarn check:release
 
 Browser checks use a local production preview on port 4173 by default; `yarn preview` opens one manually. Keep all automated checks on local or isolated CI builds. Production confirmation is deliberate manual inspection only. Catalog checks compare every native ID, coordinate, cost, predicate and icon hash with reviewed evidence; unit tests cover rules/storage and browser tests cover interactions, spoilers and responsiveness. There is no lint script.
 
+Failed local/CI browser tests retain a trace, screenshot and HTML report. CI uploads only synthetic failure diagnostics for five days. See [browser diagnostics](docs/browser-diagnostics.md) for Windows retrieval and local viewer commands.
+
 GitHub Pages CI validates and deploys successful main builds using the repository base path. `yarn check:release` inspects actual built entries, referenced assets, byte-identical catalog, all reviewed icons, complete runtime notices and exclusion of private inputs. Upload only `dist`; a merge or deployment alone does not establish manual production behavior.
 
 `yarn test:tools` runs the real normalization and offline wiki-parser entry points on invented fixtures using Python 3.10+ standard library only. It needs no UnityPy, installed game, saves, downloaded wiki responses or network access. Use `python` on Windows, `python3` elsewhere, or set `$env:PYTHON` to an interpreter path. [Coverage and limits](scripts/extract/README.md#synthetic-transformation-checks) supplement independent native review and real-input release gates.
