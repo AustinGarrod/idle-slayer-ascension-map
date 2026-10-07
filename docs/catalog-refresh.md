@@ -80,7 +80,7 @@ try {
 }
 ```
 
-If the shell is interrupted before `finally`, restore from the printed/retained `$catalogRecoveryPath` before continuing. Record that path in private working notes. Check that the restored public file has its original hash and that the private wiki candidate records the **candidate catalog** hash/revision. Review that new pair and adjust pinned parser/validation expectations only with evidence. A successful private generation is not approval. Do not copy the wiki candidate into `src/data/` yet.
+If the shell is interrupted before `finally`, restore from the retained `$catalogRecoveryPath` before continuing. Record that path in private working notes. Check that the restored public file has its original hash and that the private wiki candidate records the **candidate catalog** hash/revision. Review that new pair and adjust pinned parser/validation expectations only with evidence. A successful private generation is not approval. Keep the accepted private `candidate.json` unchanged for the final comparison. Do not copy it into `src/data/` yet.
 
 Save compatibility is a separate gate even if the catalog looks unchanged. Review native serialization/encoding, version discriminator, typed keys, milestone flags, UA count, Astral activation and retained-ownership baseline against new native evidence. Follow [the save-format contract and evidence list](save-import.md); synthetic decoder tests alone do not establish a new platform/version. There is currently no automatic generator that certifies a new save receipt. Assemble/review its sanitized evidence without embedding player data, then update the exact SHA-256 literal in `scripts/check-release.mjs` to the **reviewed final file bytes**:
 
@@ -102,7 +102,19 @@ python scripts/logic/validate_catalog_rules.py --export .local-game/asset-export
 
 Inspect the full diff, receipt identities/hashes and attribution. No raw inputs, private review sheets, save bytes, preference values or installation paths belong in the commit. Receipts describe established review; generating them does not perform it.
 
-With the accepted catalog now in `public/catalog.json`, regenerate wiki output from the **same reviewed cached responses**, using the linked candidate command with the recorded input/output paths and without `--refresh`. Compare its catalog identity and full bytes to the accepted private candidate; an unexpected difference blocks acceptance. Promote only the reviewed normalized priority JSON into `src/data/wiki-priorities.json`, together with reviewed validator expectations and provenance. Recompute all final receipts after the last catalog/icon/save-evidence change before validating.
+With the accepted catalog now in `public/catalog.json`, regenerate wiki output from the **same reviewed cached responses** into a different output file, without `--refresh`. Preserve the accepted private candidate from step 4 and compare before promotion:
+
+```powershell
+$wikiFinalCandidatePath = Join-Path $wikiReviewRoot 'final-candidate.json'
+if (Test-Path -LiteralPath $wikiFinalCandidatePath) { throw 'Preserve the existing final candidate and choose a new output path.' }
+node scripts/extract/wiki-priorities.mjs --mode=candidate "--input=$wikiReviewRoot" "--output=$wikiFinalCandidatePath"
+if ($LASTEXITCODE -ne 0) { throw 'Final wiki candidate generation failed.' }
+$wikiAcceptedHash = (Get-FileHash -LiteralPath (Join-Path $wikiReviewRoot 'candidate.json') -Algorithm SHA256).Hash
+$wikiFinalHash = (Get-FileHash -LiteralPath $wikiFinalCandidatePath -Algorithm SHA256).Hash
+if ($wikiFinalHash -ne $wikiAcceptedHash) { throw 'Final wiki candidate differs from accepted evidence; stop and review.' }
+```
+
+Check the catalog identity as well as the complete-byte hash. An unexpected difference blocks acceptance. Promote only the reviewed normalized priority JSON into `src/data/wiki-priorities.json`, together with reviewed validator expectations and provenance. Recompute all final receipts after the last catalog/icon/save-evidence change before validating.
 
 ## 6. Validate, independently review, then publish within authority
 
