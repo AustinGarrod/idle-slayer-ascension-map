@@ -149,4 +149,6 @@ Keep motion brief and purposeful, such as centering a selected node. Respect red
 
 ## Optional player intentions
 
+Prerequisite-route comparison stays in an optional native dialog, with its inspector entry after the purchase controls and hidden alongside compact detail content. Four current-visible target slots, completion modes and explicit item assumptions precede bounded route cards. OR alternatives, shared IDs, recorded requirements and blockers remain textual; no permanent rail or purchase action is added. All inputs, choices, route annotations and feedback are replay-blocked. Native Tab keeps picker titles clear of the measured dialog heading, including tall cost/ID rows with enlarged text.
+
 Goals stay in the existing scrollable Progress dialog, with entry from expanded upgrade details. No permanent rail competes with the map or selected inspector. A compact completion selector distinguishes acquisition, activation and a repeat-purchase rebuild; full explanatory wording stays alongside it. Current visible rows pair stable ID/exact cost with status and native requirement inspection, explicit ordering and retirement controls. Goal panels, choices and recovery feedback are excluded from replay. Intentions never become actual progress or a recommended optimal build.

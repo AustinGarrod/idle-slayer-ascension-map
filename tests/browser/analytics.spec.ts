@@ -669,6 +669,44 @@ test('catalog parsing errors show only fixed public wording in the actual record
   expect(capture.unexpected).toEqual([])
 })
 
+test('prerequisite route targets, queries and intentions remain blocked in real recorder snapshots and mutations', async ({ page, context, baseURL }) => {
+  const origin = new URL(baseURL!).origin
+  let releaseRecorder!: () => void
+  const recorderReady = new Promise<void>((resolve) => { releaseRecorder = resolve })
+  const capture = await installLocalRoutes(context, origin, { recorderReady })
+  await serveIsolatedApplication(context, origin)
+  const snapshotProof = 'ROUTE_PUBLIC_SNAPSHOT_PROOF', mutationProof = 'ROUTE_PUBLIC_MUTATION_PROOF'
+  const marker = 'ROUTE_PRIVATE_QUERY_82749'
+  const belt = catalog.upgrades.find((upgrade) => upgrade.title === 'Legendary Belt')!
+  await page.goto(`${origin}${appFixturePath}`)
+  await expect(page.locator('.toolbar')).toBeVisible()
+  const compact = page.getByRole('button', { name: 'Map options', exact: true })
+  await (await compact.isVisible() ? compact : page.getByRole('button', { name: 'Map view…', exact: true })).click()
+  await page.getByRole('dialog', { name: 'Map options', exact: true }).getByRole('button', { name: 'Compare prerequisite routes…', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Prerequisite routes', exact: true })
+  const input = dialog.getByRole('searchbox', { name: 'Find a route target', exact: true })
+  await input.fill(belt.title)
+  await dialog.locator(`[data-route-choice="${belt.id}"]`).click()
+  await dialog.getByRole('radio').first().check()
+  await page.evaluate((proof) => {
+    const node = document.createElement('p'); node.id = 'route-public-proof'; node.textContent = proof
+    document.querySelector('dialog[open]')!.appendChild(node)
+  }, snapshotProof)
+  await waitForActive(page)
+  releaseRecorder()
+  const snapshot = await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 2 && JSON.stringify(event).includes(snapshotProof)))
+  expect(blockedReplayNodes(snapshot).some((node) => node.attributes.class.includes('prerequisite-routes') && !(node.childNodes?.length))).toBe(true)
+  await dialog.locator('.route-picker summary').click()
+  await input.fill(marker)
+  await page.locator('#route-public-proof').evaluate((element, proof) => { element.textContent = proof }, mutationProof)
+  await page.locator('#route-public-proof').click()
+  const events = await waitForReplayEvents(capture, (items) => items.some((event) => event.type === 3 && JSON.stringify(event).includes(mutationProof)))
+  const evidence = JSON.stringify({ submissions: capture.submissions, replay: events })
+  for (const privateValue of [marker, 'Exact combined catalog cost', 'Mark route 1 as intended', 'Chosen OR alternatives']) expect(evidence).not.toContain(privateValue)
+  expect(await page.evaluate((key) => localStorage.getItem(key), profileKey)).toBeNull()
+  expect(capture.unexpected).toEqual([])
+})
+
 test('active dialog feedback remains private in actual recorder snapshots and mutations', async ({ page, context, baseURL }) => {
   const origin = new URL(baseURL!).origin
   let releaseRecorder!: () => void
