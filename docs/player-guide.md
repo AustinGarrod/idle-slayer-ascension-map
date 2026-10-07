@@ -1,0 +1,47 @@
+# Player guide
+
+Open the [Ascension Map](https://austingarrod.github.io/idle-slayer-ascension-map/) and use the [README first-use route](../README.md#start-playing) to begin. This guide describes the existing map, progress and privacy behavior.
+
+**Detailed Layout**, a readable dependency graph. Game Layout is the default; your last selection is remembered locally in this browser.
+
+Search titles, inspect details, record purchases and milestones, preview removals and Ultra Ascensions, undo changes, and back up one local profile as JSON. Import current progress from a reviewed Steam game save through a local preview. Spoilers are hidden by default across the map, connections, search, details, checklist and totals. OR paths require a choice; external items and Astral activation require explicit input. The app remains static, without accounts, an application backend, SP balances or Stone allocation. Self-hosted Umami collects usage analytics and session recordings as described below.
+
+**Detailed Layout** arranges visible paths from left to right. Arrows point from a prerequisite toward the upgrade; selecting an upgrade emphasizes its incoming and outgoing connections. **Game Layout** uses the native circular icon frames and icon proportions, with a wider starting view and thick straight lines on the original center-to-center angles. Grey lines have an unowned prerequisite; magenta lines have an owned prerequisite. Selecting a Game Layout upgrade adds directional arrows, dashed gold incoming paths and solid magenta outgoing paths. Hover or keyboard focus shows a tile's title; selecting it opens its details on desktop or touch screens. **Connected from** and **Leads to** in details jump directly to visible neighbors. The exact AND/OR and activation requirements remain in the details. Switching layouts preserves selection and progress, and does not change catalog coordinates.
+
+On small screens, **Map options** holds spoilers, milestones, progress, undo and source information. **Show spoilers** uses the same brown and gold control styling in the toolbar and Map options; toggling it preserves the map's current pan and zoom, including when a hidden selection's details close. The selected upgrade appears in a compact panel with its cost and purchase action; **Show details** expands the scrollable requirements and connections. **Map navigation** exposes directional pan buttons alongside touch pan/zoom. Layout selection is saved separately from progress and tracking preferences; backups, undo and clearing progress do not change it. If browser storage is unavailable, Game Layout is the initial fallback and switching remains usable for the current visit. Panel expansion is session-only.
+
+**Next upgrade** suggests the first remaining upgrade in the reviewed wiki order whose native reveal and purchase requirements are met. It shows the benefit, exact game cost, guide source and up to two alternatives. **Show on map** opens its details; **Record purchase…** uses the normal confirmation and undo flow. Suggestions recalculate from recorded purchases, milestones and activation after edits, restore or Ultra Ascension. Hidden, owned and blocked upgrades are excluded, including owned Astral locks awaiting activation.
+
+The wiki snapshot ranks 280 of 288 native upgrades and declares game 7.0.0; the catalog remains authoritative for 7.2.0 costs and gates. When no eligible upgrade has a wiki rank, suggestions explicitly use a native-cost **Catalog fallback**. General guide order does not account for SP balance, total USP, gear or personal play style. [Recommendation provenance and refresh](wiki-recommendations.md) documents source revisions, identity mapping, eight unranked upgrades and licensing. The site bundles this data locally and makes no wiki requests.
+
+## Import Steam progress
+
+Open **Progress → Import game save…** (on phones, **Map options → Progress**). Choose `savedata.sav` or `backup.sav` from:
+
+```text
+%USERPROFILE%\AppData\LocalLow\Pablo Leban\Idle Slayer\
+```
+
+The importer supports the reviewed **Windows Steam 7.2.0** save format. Close the game before selecting the file. Review the visible ownership, Astral activation, milestone and Ultra Ascension counts, then choose **Apply import**. Cancel keeps the current profile; undo restores it after applying. Suggestions recalculate immediately. Existing unknown map IDs and the spoiler preference remain intact.
+
+The selected file is decoded entirely in the browser. It is never uploaded, modified, bundled or stored as a game save. Only the map's recognized progress is retained; account preferences and unrelated native data are discarded. Exact purchase history is unavailable, so active permanent and retained ownership use a documented snapshot baseline. Android progress can be imported from a Steam copy after the game's existing cross-platform sync; direct mobile file access and cloud login are outside this feature. [Format, native evidence and compatibility](save-import.md).
+
+## Usage analytics and recordings
+
+The production app uses self-hosted [Umami](https://analytics.garrod.house) for page views, bounded interaction events, browser/device and referral/campaign information, approximate location when available, performance data and session recordings. Recordings can include the visible map and its recorded progress. Selected game saves and JSON backups are never uploaded; file inputs, search text, counters and import/restore previews are excluded from replay contents. Heatmaps still collect coarse click and scroll coordinates, including over excluded elements.
+
+Tracking starts automatically unless disabled through **About & sources → Privacy & tracking** or the browser's privacy signals. The preference is separate from map progress and survives reloads, undo, restore and clearing progress. If it cannot be read, tracking stays off. Changing it reloads the page; if map progress cannot be saved first, choose export-and-reload, reload without backup or cancel. A failed tracking-preference write reloads with `#analytics=off`, which disables tracking for that URL/visit without claiming a durable preference. Keep or bookmark that URL if storage remains unavailable. [Analytics setup and operator guide](analytics.md) documents the settings, event contract, URL safeguards, reports and local verification.
+
+## Progress and data
+
+Milestones mean the actual required item received, crafted or purchased. Controls for isolated external branches require explicit **Show spoilers** for first entry because the game supplies no earlier tree gate. Enter existing Ultra Ascension history in Progress, choose **Review history…**, then **Record history** to confirm. Leaving the field does not apply it. This increases the count while keeping current purchases current and preserving earlier ownership and activation; **Ultra Ascend…** instead previews a new reset. Invalid entries explain the reason. Use Undo for an entry mistake in this session or restore an earlier JSON backup after reloading. Confirm already activated Astrals separately in their details. The app never modifies the game.
+
+Tabs in the same browser follow saved progress while their session has no unsaved changes. If another tab changes saved progress while this tab has unsaved changes, this session is kept and **Review progress conflict** offers backup export and confirmed saved/session choices. Older previews and undo history are cleared when external progress changes. A busy or unavailable safe-saving mechanism keeps changes in memory with retry/export; privacy reload controls remain available. Reload older tabs once after this update so every tab uses coordinated saving.
+
+**Restore JSON backup…** previews only recorded purchases and milestones visible under the map's current spoiler setting, evaluated against the backup's progress. Applying replaces the complete profile, including hidden and unrecognized backup records and the backup's spoiler setting. Cancel keeps current progress; Undo restores it after applying.
+
+[Architecture](architecture.md) documents visibility, edits, resets and storage migrations. [Data provenance](data.md), [asset extraction](../scripts/extract/README.md) and [native logic inspection](../scripts/logic/README.md) give exact Windows refresh commands. Keep installed files, Steam manifests, saves, raw exports, downloaded tools and reconstructed assemblies inside ignored `.local-game/` or outside the repository; never serve or commit them. Optional copies use `.local-game/Idle Slayer/` and `.local-game/appmanifest_1353300.acf`.
+
+Native English localization supplies descriptions and icons. Fourteen effects have accurate static descriptions with notes for player-dependent values. Wiki priority ordering is separate from the native catalog; wiki descriptions and dependencies are not substituted. [The coverage receipt](../data/catalog-receipt.json) records game/build/tool versions, registry coverage, native fields and exact catalog/icon hashes. [design.md](../design.md) records reviewed layout concepts and Atlas styling; [AGENTS.md](../AGENTS.md) states implementation boundaries.
+
+
