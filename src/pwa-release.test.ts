@@ -50,10 +50,11 @@ function workerFixture(fail = false) {
   const deleted = vi.fn(async () => true)
   const skipWaiting = vi.fn(async () => {})
   const clients = [{ id: 'current', url: 'https://app.test' + PWA_BASE }]
+  const matchAll = vi.fn(async () => [...clients])
   const assets = ['index.html', 'catalog.json'].map((file) => ({ file, sha256: createHash('sha256').update(file).digest('hex') }))
   const caches = { open: async () => ({ put: async (url: string, response: Response) => { entries.set(url, response) }, match: async (url: string) => entries.get(url), keys: async () => [...entries.keys()].map((url) => ({ url })) }), delete: deleted, keys: async () => ['ascension-map-public-old'] }
   runInNewContext('const RELEASE=' + JSON.stringify({ version: 'test', assets }) + ';' + readFileSync('scripts/pwa-worker.js', 'utf8'), {
-    self: { addEventListener: (name: string, handler: (event: Record<string, unknown>) => void) => handlers.set(name, handler), location: new URL('https://app.test' + PWA_BASE + 'sw.js'), registration: { scope: 'https://app.test' + PWA_BASE }, clients: { matchAll: async () => clients }, skipWaiting },
+    self: { addEventListener: (name: string, handler: (event: Record<string, unknown>) => void) => handlers.set(name, handler), location: new URL('https://app.test' + PWA_BASE + 'sw.js'), registration: { scope: 'https://app.test' + PWA_BASE }, clients: { matchAll }, skipWaiting },
     caches, crypto: webcrypto, URL, Uint8Array, Response,
     fetch: async (url: string) => new Response(fail && url.endsWith('catalog.json') ? 'unverified newer bytes' : url.split('/').at(-1)),
   })
@@ -62,7 +63,7 @@ function workerFixture(fail = false) {
     handlers.get(name)!({ ...event, waitUntil: (promise: Promise<unknown>) => { task = promise } })
     await task
   }
-  return { dispatch, entries, deleted, skipWaiting, clients }
+  return { dispatch, entries, deleted, skipWaiting, clients, matchAll }
 }
 describe('strict service-worker boundary', () => {
   it('verifies the complete release before installation and deletes a partial cache on mismatch', async () => {
@@ -83,13 +84,30 @@ describe('strict service-worker boundary', () => {
     expect(await (await respondWith.mock.calls[0][0]).text()).toBe('index.html')
     expect([...worker.entries.keys()].every((url) => !url.includes('?'))).toBe(true)
   })
-  it('rejects activation with another open app window and activates only for the sole requesting client', async () => {
+  it('rejects repair with another open app window and permits its check for the sole requesting client', async () => {
     const worker = workerFixture(); const postMessage = vi.fn()
     worker.clients.push({ id: 'other', url: 'https://app.test' + PWA_BASE })
-    await worker.dispatch('message', { data: { type: 'ACTIVATE_UPDATE' }, source: { id: 'current' }, ports: [{ postMessage }] })
+    await worker.dispatch('message', { data: { type: 'CHECK_WINDOWS' }, source: { id: 'current' }, ports: [{ postMessage }] })
     expect(postMessage).toHaveBeenLastCalledWith({ accepted: false }); expect(worker.skipWaiting).not.toHaveBeenCalled()
     worker.clients.pop()
+    await worker.dispatch('message', { data: { type: 'CHECK_WINDOWS' }, source: { id: 'current' }, ports: [{ postMessage }] })
+    expect(postMessage).toHaveBeenLastCalledWith({ accepted: true }); expect(worker.skipWaiting).not.toHaveBeenCalled()
+  })
+  it('never activates or removes old assets from a window snapshot when another window joins late', async () => {
+    const worker = workerFixture(); const postMessage = vi.fn()
+    worker.matchAll.mockImplementationOnce(async () => {
+      const snapshot = [...worker.clients]
+      queueMicrotask(() => worker.clients.push({ id: 'joined-after-snapshot', url: 'https://app.test' + PWA_BASE }))
+      return snapshot
+    })
+    await worker.dispatch('message', { data: { type: 'CHECK_WINDOWS' }, source: { id: 'current' }, ports: [{ postMessage }] })
+    expect(postMessage).toHaveBeenCalledWith({ accepted: true })
+    expect(worker.clients).toHaveLength(2)
+    // Even a stale client asking for the former update protocol cannot force it.
     await worker.dispatch('message', { data: { type: 'ACTIVATE_UPDATE' }, source: { id: 'current' }, ports: [{ postMessage }] })
-    expect(postMessage).toHaveBeenLastCalledWith({ accepted: true }); expect(worker.skipWaiting).toHaveBeenCalledOnce()
+    expect(worker.skipWaiting).not.toHaveBeenCalled(); expect(worker.deleted).not.toHaveBeenCalled()
+    // Cache cleanup is reserved for the browser's eventual lifecycle activation.
+    await worker.dispatch('activate', {})
+    expect(worker.deleted).toHaveBeenCalledWith('ascension-map-public-old')
   })
 })

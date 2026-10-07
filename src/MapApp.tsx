@@ -28,7 +28,7 @@ import { getTrackingStatus, setTrackingPreference, trackEvent, updateAnalyticsCo
 import type { AnalyticsOperation } from './analytics'
 import { PrivacyPanel, trackingDisclosure } from './PrivacyPanel'
 import { InstallPanel } from './InstallPanel'
-import { reloadForUpdate, repairOffline, usePwaStatus } from './pwa'
+import { prepareUpdate, repairOffline, usePwaStatus } from './pwa'
 
 type UpgradeNode = Node<{ upgrade: Upgrade; state: string }, 'upgrade'>
 type Preview = { operation: AnalyticsOperation | 'prior_ascensions'; title: string; text: string; profile: Profile; changes?: string[]; groups?: { label: string; ids: string[] }[]; replaceStorage?: boolean; upgradeId?: string; milestoneId?: string; sessionVersion?: number; resolution?: 'saved' | 'local' }
@@ -61,12 +61,12 @@ const edgeTypes = { dependency: DependencyEdge, native: NativeEdge }
 const wikiPriorities = { schemaVersion, source: wikiSource, rows: wikiRows }
 const cost = (value: string) => BigInt(value).toLocaleString('en')
 
-function Dialog({ title, children, close }: { title: string; children: ReactNode; close: () => void }) {
+function Dialog({ title, children, close, dismissDisabled = false }: { title: string; children: ReactNode; close: () => void; dismissDisabled?: boolean }) {
   const ref = useRef<HTMLDialogElement>(null)
   const feedbackRef = useRef<HTMLDivElement>(null)
   const feedback = useContext(DialogFeedbackContext)
   const activeFeedback = feedback.title === title
-  const dismiss = () => { feedback.clear(); close() }
+  const dismiss = () => { if (!dismissDisabled) { feedback.clear(); close() } }
   useEffect(() => {
     const previousFocus = document.activeElement
     const dialog = ref.current
@@ -80,7 +80,7 @@ function Dialog({ title, children, close }: { title: string; children: ReactNode
     if (activeFeedback && feedback.announcement) feedbackRef.current?.scrollIntoView({ block: 'nearest' })
   }, [activeFeedback, feedback.announcement, feedback.sequence])
   return <dialog ref={ref} onCancel={(event) => { event.preventDefault(); dismiss() }} aria-labelledby="dialog-title">
-    <div className="dialog-heading"><h2 id="dialog-title">{title}</h2><button aria-label="Close dialog" onClick={dismiss}>×</button></div>
+    <div className="dialog-heading"><h2 id="dialog-title">{title}</h2><button aria-label="Close dialog" disabled={dismissDisabled} onClick={dismiss}>×</button></div>
     {activeFeedback && <div id="dialog-feedback" ref={feedbackRef} className="dialog-feedback telemetry-private rr-block" role="status" aria-live="polite" aria-atomic="true">{feedback.content}</div>}
     {children}
   </dialog>
@@ -117,7 +117,11 @@ function Atlas({ catalog }: { catalog: Catalog }) {
   const [preview, setPreviewState] = useState<Preview | null>(null)
   const [trackingReload, setTrackingReload] = useState<boolean | null>(null)
   const [appReload, setAppReload] = useState<'update' | 'repair' | null>(null)
+  const [updatePrepared, setUpdatePrepared] = useState(false)
+  const [appReloadPhase, setAppReloadPhase] = useState<'idle' | 'checking' | 'committed'>('idle')
+  const appReloadOperation = useRef<{ controller: AbortController; committed: boolean } | null>(null)
   const appReloadRequest = useRef(0)
+  const appReloadTitle = appReload === 'update' ? updatePrepared ? 'Close all map windows to update' : 'Prepare app update?' : 'Reload the app?'
   const pwaStatus = usePwaStatus()
   const [purchaseTarget, setPurchaseTarget] = useState<string | null>(null)
   const purchaseSource = useRef<'details' | 'recommendation'>('details')
@@ -197,7 +201,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     ?? (purchasePlan && purchaseTarget ? purchasePlan.kind === 'choice' ? 'Choose a prerequisite path' : purchasePlan.kind === 'blocked' ? 'Explicit progress required' : 'Record purchase?' : null)
     ?? (conflictReview ? 'Review progress conflict' : null)
     ?? (trackingReload !== null ? 'Reload with unsaved progress?' : null)
-    ?? (appReload !== null ? 'Reload the app?' : null)
+    ?? (appReload !== null ? appReloadTitle : null)
     ?? (menu ? menuTitles[menu] : null)
   const recommendations = useMemo(() => recommendUpgrades(catalog, profile, wikiPriorities), [catalog, profile])
   const progressStatus = {
@@ -240,11 +244,12 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     })
   }, [purchasePlan, purchaseTarget])
   function setMenu(next: Menu) {
+    if (appReloadOperation.current?.committed) return
     if (next === menu) return
     if (menu === 'progress') restoreRequest.current++
     if (next) setMessage('')
     if (menu === 'privacy' && next !== 'privacy') trackingChangeRequest.current++
-    if (menu === 'install' && next !== 'install') appReloadRequest.current++
+    if (menu === 'install' && next !== 'install') cancelAppReload()
     if (menu) trackEvent('panel_closed', { panel: menu })
     if (next) trackEvent('panel_opened', { panel: next })
     if (next === 'recommendations') trackEvent('recommendations_viewed', { reason: recommendations.status === 'fallback' ? 'catalog-fallback' : recommendations.status })
@@ -314,7 +319,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
         externalVersion = state.externalVersion
         gameImportRequest.current++; restoreRequest.current++; trackingChangeRequest.current++
         setPreviewState(null); setPurchaseTarget(null); setChoices({}); setGameImport(null); setGameImportLoading(false); setGameImportError('')
-        setConflictReview(null); setTrackingReload(null); setAppReload(null); appReloadRequest.current++; setMenuState(null)
+        setConflictReview(null); setTrackingReload(null); cancelAppReload(true); setMenuState(null)
         setMessage(state.conflict ? 'Saved progress changed. This session was kept for recovery.' : 'Progress updated from another tab. Previous previews and undo were cleared.')
       }
     })
@@ -327,14 +332,14 @@ function Atlas({ catalog }: { catalog: Catalog }) {
       if (event.storageArea === local && (event.key === null || event.key === PROFILE_STORAGE_KEY)) profileSession.refreshExternal()
     }
     window.addEventListener('storage', storageChanged)
-    return () => { window.removeEventListener('storage', storageChanged); unsubscribe(); gameImportRequest.current++; restoreRequest.current++; trackingChangeRequest.current++; appReloadRequest.current++; profileSession.cancelPending() }
+    return () => { window.removeEventListener('storage', storageChanged); unsubscribe(); gameImportRequest.current++; restoreRequest.current++; trackingChangeRequest.current++; appReloadRequest.current++; appReloadOperation.current?.controller.abort(); profileSession.cancelPending() }
   }, [profileSession])
   function reviewConflict() {
     setMessage('')
     const current = profileSession.getState()
     if (current.conflict) {
       gameImportRequest.current++; restoreRequest.current++; trackingChangeRequest.current++
-      setMenu(null); setPreviewState(null); setPurchaseTarget(null); setChoices({}); setTrackingReload(null); setAppReload(null)
+      cancelAppReload(true); setMenu(null); setPreviewState(null); setPurchaseTarget(null); setChoices({}); setTrackingReload(null)
       setGameImport(null); setGameImportLoading(false); setGameImportError('')
       setConflictReview({ version: current.version, snapshot: current.conflict })
     }
@@ -443,7 +448,8 @@ function Atlas({ catalog }: { catalog: Catalog }) {
   async function requestAppReload(action: 'update' | 'repair') {
     // Only the install panel exposes this action. Never interrupt an open
     // purchase/import/restore/recovery preview or a pending asynchronous read.
-    if (menu !== 'install' || preview || purchaseTarget || gameImportLoading || conflictReview) return
+    if (menu !== 'install' || preview || purchaseTarget || gameImportLoading || conflictReview || appReloadOperation.current) return
+    setUpdatePrepared(false)
     const request = ++appReloadRequest.current
     const current = profileSession.getState()
     if (current.pending) { profileSession.cancelPending(); setAppReload(action); return }
@@ -451,12 +457,28 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     if (request !== appReloadRequest.current || profileSession.getState().profile !== current.profile) return
     // Confirmation also explains session-only Undo loss when saving succeeds.
     setAppReload(action)
-    if (!saved) setMessage('Progress could not be saved. Export a backup before reloading, or cancel to keep this session.')
+    if (!saved) setMessage('Progress could not be saved. Export a backup before closing or reloading, or cancel to keep this session.')
+  }
+  function cancelAppReload(force = false) {
+    if (!force && appReloadOperation.current?.committed) return
+    appReloadRequest.current++
+    appReloadOperation.current?.controller.abort()
+    appReloadOperation.current = null
+    setAppReloadPhase('idle'); setUpdatePrepared(false); setAppReload(null)
   }
   async function finishAppReload(action: 'update' | 'repair') {
+    if (appReloadOperation.current) return
     profileSession.cancelPending()
-    const accepted = await (action === 'update' ? reloadForUpdate() : repairOffline())
-    if (!accepted) setAppReload(null)
+    if (action === 'update') {
+      if (prepareUpdate()) setUpdatePrepared(true)
+      else cancelAppReload()
+      return
+    }
+    const operation = { controller: new AbortController(), committed: false }
+    appReloadOperation.current = operation; setAppReloadPhase('checking')
+    const accepted = await repairOffline(operation.controller.signal, () => { operation.committed = true; setAppReloadPhase('committed') })
+    if (appReloadOperation.current !== operation) return
+    if (!accepted) cancelAppReload(true)
   }
   const recenterCamera = useEffectEvent(() => {
     if (loaded) moveCamera(detail?.id ?? catalog.startId, detail ? selectionZoom : startZoom)
@@ -689,10 +711,13 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     {menu === 'about' && <Dialog title="About this map" close={() => setMenu(null)}><p>Unofficial Idle Slayer companion. Game assets belong to their respective rights holders. Application code and asset attribution are documented separately.</p><p>Game {catalog.gameVersion} · Steam build {catalog.steamBuild}<br />Catalog {catalog.revision}</p><p>All map data and icons are bundled locally. No account or application backend is required.</p><p className="progress-save-status">{progressStatus}</p><p>{trackingDisclosure}</p><button onClick={() => setMenu('install')}>Install & offline</button><button onClick={() => setMenu('privacy')}>Privacy & tracking</button><a onClick={() => trackEvent('source_link_opened', { source: 'about', action: 'github' })} href="https://github.com/AustinGarrod/idle-slayer-ascension-map">Source and extraction documentation</a><a className="software-license-link" target="_blank" rel="noreferrer" onClick={() => trackEvent('source_link_opened', { source: 'about', action: 'license' })} href={`${import.meta.env.BASE_URL}licenses/index.html`}>Bundled software licenses</a></Dialog>}
     {menu === 'privacy' && <Dialog title="Privacy & tracking" close={() => setMenu(null)}><PrivacyPanel status={getTrackingStatus()} onChange={requestTrackingChange} progressStatus={progressStatus} /></Dialog>}
     {menu === 'install' && appReload === null && <Dialog title="Install & offline" close={() => setMenu(null)}><InstallPanel onReload={() => { void requestAppReload('update') }} onRepair={() => { void requestAppReload('repair') }} progressStatus={progressStatus} /></Dialog>}
-    {appReload !== null && <Dialog title="Reload the app?" close={() => setAppReload(null)}>
-      <p>{appReload === 'repair' ? 'Reconnect and download the app again.' : 'Activate the downloaded update and reload this app.'} Close other map tabs and app windows first. Session-only Undo ends on reload.</p>
-      <div className="telemetry-private rr-block"><p>{progressStatus}</p><p>{profileSession.getState().dirty ? 'This session has unsaved progress. Export a backup before reloading. Cancel keeps this session available.' : 'Saved progress, layout and tracking preferences will be kept. Export a backup first if you want an extra recovery copy.'}</p></div>
-      <div className="dialog-actions"><button className="primary" onClick={() => { if (backup()) void finishAppReload(appReload) }}>Export backup and reload</button>{!profileSession.getState().dirty ? <button onClick={() => { void finishAppReload(appReload) }}>Reload with saved progress</button> : <button className="danger" onClick={() => { void finishAppReload(appReload) }}>Reload without backup</button>}<button onClick={() => setAppReload(null)}>Cancel</button></div>
+    {appReload !== null && <Dialog title={appReloadTitle} close={() => cancelAppReload()} dismissDisabled={appReloadPhase === 'committed'}>
+      {updatePrepared ? <><p>Close every Ascension Map browser tab and installed app window, including this one. Then reopen the map from its icon or browser. The browser can activate the downloaded update after all old windows close; reloading an open window keeps the old release.</p><p className="telemetry-private rr-block">Before closing, save or export progress in each window. Unsaved changes and session-only Undo end when its window closes. Restore an exported backup after reopening if needed.</p><button onClick={() => cancelAppReload()}>Keep this session open</button></> : <>
+        <p>{appReload === 'repair' ? 'Reconnect and download the app again. Close other map tabs and app windows first. Session-only Undo ends on reload.' : 'Review progress before closing every map tab and app window, then reopen to update. Session-only Undo ends when this window closes.'}</p>
+        <div className="telemetry-private rr-block"><p>{progressStatus}</p><p>{profileSession.getState().dirty ? 'This session has unsaved progress. Export a backup before closing or reloading. Cancel keeps this session available.' : 'Saved progress, layout and tracking preferences will be kept. Export a backup first if you want an extra recovery copy.'}</p></div>
+        {appReloadPhase !== 'idle' && <p role="status">{appReloadPhase === 'checking' ? 'Checking other map windows… You can still cancel.' : 'Repair started. Keep this window open until it reloads.'}</p>}
+        <div className="dialog-actions"><button className="primary" disabled={appReloadPhase !== 'idle'} onClick={() => { if (backup()) void finishAppReload(appReload) }}>{appReload === 'update' ? 'Export backup and prepare update' : 'Export backup and reload'}</button>{!profileSession.getState().dirty ? <button disabled={appReloadPhase !== 'idle'} onClick={() => { void finishAppReload(appReload) }}>{appReload === 'update' ? 'Prepare with saved progress' : 'Reload with saved progress'}</button> : <button className="danger" disabled={appReloadPhase !== 'idle'} onClick={() => { void finishAppReload(appReload) }}>{appReload === 'update' ? 'Prepare without backup' : 'Reload without backup'}</button>}<button disabled={appReloadPhase === 'committed'} onClick={() => cancelAppReload()}>Cancel</button></div>
+      </>}
     </Dialog>}
     {trackingReload !== null && <Dialog title="Reload with unsaved progress?" close={() => { setTrackingReload(null); setMenu('privacy') }}>
       <p>Current progress could not be saved. Reloading may lose these changes and clears session-only undo. Export a backup first to keep this progress.</p>

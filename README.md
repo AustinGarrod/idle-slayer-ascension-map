@@ -16,7 +16,7 @@ The wiki snapshot ranks 280 of 288 native upgrades and declares game 7.0.0; the 
 
 Open **Install & offline** from the desktop footer, **Map options**, or **About & sources**. Supporting browsers offer **Install Ascension Map**; Android, iPhone/iPad and desktop menu guidance covers other cases. Keep the first visit online until public app files report ready, then reopen offline with the catalog, all icons, fonts, software licenses and local progress actions. Browser tabs and installed apps may use different storage; check progress after installing and export regular JSON backups.
 
-Updates wait for deliberate reload, with save/backup/cancel recovery and another-window checks. App-file repair keeps profile storage. Uninstalling or clearing browser data may remove progress. Only verified public app assets are cached; saves, backups, transfer data and analytics uploads are excluded. Offline usage is not queued for later tracking. [Installation, offline recovery, updates and local verification](docs/install-offline.md) explains platform/storage limits and the complete-release cache contract.
+Updates wait until every old map tab and app window closes. Prepare the update with save/backup/cancel recovery, close all windows, then reopen; reloading an open window keeps the old release. App-file repair keeps profile storage. Uninstalling or clearing browser data may remove progress. Only verified public app assets are cached; saves, backups, transfer data and analytics uploads are excluded. Offline usage is not queued for later tracking. [Installation, offline recovery, updates and local verification](docs/install-offline.md) explains platform/storage limits and the complete-release cache contract.
 
 ## Import Steam progress
 

@@ -17,16 +17,19 @@ let status: PwaStatus = { offline: 'loading', online: navigator.onLine, installe
 let registration: ServiceWorkerRegistration | undefined
 let installPrompt: InstallPrompt | undefined
 let started = false
-let reloading = false
 function publish(next: Partial<PwaStatus>) { status = { ...status, ...next }; listeners.forEach((listener) => listener()) }
 const subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener) } }
 export const usePwaStatus = () => useSyncExternalStore(subscribe, () => status)
 function installed() { return matchMedia('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true }
-function request(worker: ServiceWorker, type: string): Promise<{ ready?: boolean; accepted?: boolean }> {
+function request(worker: ServiceWorker, type: string, signal?: AbortSignal): Promise<{ ready?: boolean; accepted?: boolean }> {
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) { reject(new DOMException('Cancelled', 'AbortError')); return }
     const channel = new MessageChannel()
-    const timer = window.setTimeout(() => { channel.port1.close(); reject(new Error('Worker unavailable')) }, 8000)
-    channel.port1.onmessage = (event) => { window.clearTimeout(timer); channel.port1.close(); resolve(event.data) }
+    const cleanup = () => { window.clearTimeout(timer); channel.port1.close(); signal?.removeEventListener('abort', cancel) }
+    const cancel = () => { cleanup(); reject(new DOMException('Cancelled', 'AbortError')) }
+    const timer = window.setTimeout(() => { cleanup(); reject(new Error('Worker unavailable')) }, 8000)
+    signal?.addEventListener('abort', cancel, { once: true })
+    channel.port1.onmessage = (event) => { cleanup(); resolve(event.data) }
     worker.postMessage({ type }, [channel.port2])
   })
 }
@@ -51,7 +54,7 @@ export function initializePwa() {
   window.addEventListener('offline', () => publish({ online: false }))
   window.addEventListener('online', () => { publish({ online: true }); void checkForUpdate() })
   if (!import.meta.env.PROD || !('serviceWorker' in navigator) || !window.isSecureContext) { publish({ offline: 'unsupported' }); return }
-  navigator.serviceWorker.addEventListener('controllerchange', () => { if (reloading) window.location.reload(); else void refresh() })
+  navigator.serviceWorker.addEventListener('controllerchange', () => { void refresh() })
   void navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`, { scope: import.meta.env.BASE_URL, updateViaCache: 'none' }).then((result) => {
     registration = result
     const watch = () => {
@@ -70,27 +73,30 @@ export async function promptInstall() {
 }
 export async function checkForUpdate() {
   if (!registration || !navigator.onLine) { publish({ message: 'Connect to the internet to check for an update or retry the offline download.' }); return }
-  try { await registration.update(); await refresh(); publish({ message: registration.waiting ? 'An update is ready. Review your progress before reloading.' : registration.installing ? 'Downloading and verifying a complete offline release…' : 'Update check completed. No update is waiting.' }) }
+  try { await registration.update(); await refresh(); publish({ message: registration.waiting ? 'An update is ready. Save or export progress, then close every map window and reopen.' : registration.installing ? 'Downloading and verifying a complete offline release…' : 'Update check completed. No update is waiting.' }) }
   catch { publish({ message: 'Update check failed. The current cached map remains available if its files are saved.' }) }
 }
-export async function reloadForUpdate(): Promise<boolean> {
+export function prepareUpdate(): boolean {
   if (!registration?.waiting) { publish({ message: 'The update is no longer waiting. Check again.' }); return false }
-  reloading = true
-  try {
-    const response = await request(registration.waiting, 'ACTIVATE_UPDATE')
-    if (!response.accepted) { reloading = false; publish({ message: 'Close other Ascension Map tabs and app windows, then try again. This keeps every window on one complete release.' }); return false }
-    // controllerchange reloads only this deliberately consenting window.
-    return true
-  } catch { reloading = false; publish({ message: 'The update could not start. Your current session is still available; check again.' }); return false }
+  // The browser activates the waiting release only after all old controlled
+  // windows close. A client snapshot cannot safely authorize skipWaiting.
+  return true
 }
-export async function repairOffline(): Promise<boolean> {
+export async function repairOffline(signal: AbortSignal, onCommit: () => void): Promise<boolean> {
+  if (signal.aborted) return false
   if (!navigator.onLine) { publish({ message: 'Reconnect before repairing the offline download.' }); return false }
   if (registration?.active) {
     try {
-      if (!(await request(registration.active, 'CHECK_WINDOWS')).accepted) { publish({ message: 'Close other Ascension Map tabs and app windows before repairing.' }); return false }
+      const response = await request(registration.active, 'CHECK_WINDOWS', signal)
+      if (signal.aborted) return false
+      if (!response.accepted) { publish({ message: 'Close other Ascension Map tabs and app windows before repairing.' }); return false }
+      // Dismissal is disabled once unregister begins. External session changes
+      // can still abort this operation, including while unregister is pending.
+      onCommit()
       if (!await registration.unregister()) throw new Error('Unavailable')
-    } catch { publish({ message: 'Offline repair could not start. Close other map windows and try again.' }); return false }
-  }
+    } catch { if (!signal.aborted) publish({ message: 'Offline repair could not start. Close other map windows and try again.' }); return false }
+  } else onCommit()
+  if (signal.aborted) return false
   window.location.reload()
   return true
 }

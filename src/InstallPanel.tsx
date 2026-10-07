@@ -1,6 +1,6 @@
 import { checkForUpdate, promptInstall, usePwaStatus } from './pwa'
 
-export function InstallPanel({ onReload, onRepair, progressStatus }: { onReload?: () => void; onRepair: () => void; progressStatus?: string }) {
+export function InstallPanel({ onReload, onRepair, progressStatus, repairBusy = false }: { onReload?: () => void; onRepair: () => void; progressStatus?: string; repairBusy?: boolean }) {
   const status = usePwaStatus()
   return <div className="install-panel">
     <p>{status.installed ? 'Installed in this browser. Open from its home-screen or desktop icon.' : 'Add the map to your home screen or desktop, then open it in its own window.'}</p>
@@ -14,12 +14,12 @@ export function InstallPanel({ onReload, onRepair, progressStatus }: { onReload?
     <p className="offline-status" role="status">{status.offline === 'ready' ? 'Public app files are saved for offline reopening.' : status.offline === 'loading' ? 'Downloading and verifying offline app files… Keep this window online until ready.' : status.offline === 'unsupported' ? 'Offline installation is unavailable in this browser or development preview. Use a supported browser over HTTPS.' : 'Offline app files are not ready. Reconnect and retry; browser storage may be blocked or full.'} {status.online ? '' : 'You are offline.'}</p>
     <p>Once ready, reopen offline with the map and local progress actions. A first visit and external sources need internet.</p>
     {progressStatus && <p className="progress-save-status">{progressStatus}</p>}
-    <p>Updates wait until you choose to reload. Finish previews and close other map windows first, exporting their unsaved progress if needed. Reload ends session-only Undo.</p>
+    <p>Updates wait until every old map tab and app window closes. Finish previews, save or export progress in each window, then close all and reopen. Reloading an open window keeps its old release. Closing ends session-only Undo.</p>
     {status.message && <p role="status">{status.message}</p>}
     <div className="dialog-actions">
       <button onClick={() => { void checkForUpdate() }}>Check update / retry download</button>
-      {status.update && onReload && <button className="primary" onClick={onReload}>Update app and reload…</button>}
-      <button onClick={onRepair}>Repair offline files and reload…</button>
+      {status.update && onReload && <button className="primary" onClick={onReload}>Prepare app update…</button>}
+      <button disabled={repairBusy} onClick={onRepair}>Repair offline files and reload…</button>
     </div>
     <details><summary>Storage, privacy and recovery</summary>
       <p>Progress is stored by this browser on this device. Installed apps may use separate storage, especially on Apple devices; check your progress after installing and use a JSON backup to move it if needed. Export regular backups. Browser cleanup, storage eviction or uninstalling may remove app files or progress.</p>

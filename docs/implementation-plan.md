@@ -54,7 +54,7 @@ Maintain `AGENTS.md` and `README.md`, and add focused architecture and data docu
 
 ## Validation and release
 
-Installation and offline reopening follow [install-offline.md](install-offline.md): a standalone manifest at the Pages base, original normal/maskable icons, verified public-asset release caches, explicit guarded reloads, unchanged progress/privacy storage and documented platform limits. Build/release checks bind the offline inventory and worker to the distributed bytes. Actual platform installation/launch receipts remain distinct from local browser emulation.
+Installation and offline reopening follow [install-offline.md](install-offline.md): a standalone manifest at the Pages base, original normal/maskable icons, verified public-asset release caches, deliberate save/export preparation followed by closing all old windows and reopening, guarded app-file repair, unchanged progress/privacy storage and documented platform limits. Build/release checks bind the offline inventory and worker to the distributed bytes. Actual platform installation/launch receipts remain distinct from local browser emulation.
 
 - Validate catalog coverage against the game export, unique IDs, references, icons, coordinates and reachable prerequisite paths.
 - Test AND/OR dependencies, story gates, hidden search results, prerequisite filling, cascading removal, pending Astrals, permanent grants and repeated Ultra Ascensions.

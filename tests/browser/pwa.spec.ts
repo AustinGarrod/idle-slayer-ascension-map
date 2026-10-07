@@ -121,7 +121,97 @@ test('evicted app files explain offline recovery and repairing keeps saved progr
   await expect(page.locator('.offline-status')).toContainText('saved for offline reopening', { timeout: 45000 })
 })
 
-test('controlled updates retain profile/preferences, wait through previews, reject other windows and recover unsaved progress', async ({ browser }, testInfo) => {
+for (const dismissal of ['Cancel', 'Close dialog', 'Escape', 'external progress'] as const) {
+  test(`a delayed repair reply cannot reload a new preview after ${dismissal}`, async ({ page, context }) => {
+    await page.goto('./'); await offlineReady(page)
+    await page.evaluate(() => {
+      const native = ServiceWorker.prototype.postMessage
+      const unregister = ServiceWorkerRegistration.prototype.unregister
+      const state = window as Window & { releaseRepair?: () => Promise<void>; repairUnregisters?: number }
+      state.repairUnregisters = 0
+      ServiceWorkerRegistration.prototype.unregister = function () { state.repairUnregisters!++; return unregister.call(this) }
+      ServiceWorker.prototype.postMessage = function (message, transfer) {
+        if (message?.type === 'CHECK_WINDOWS') {
+          const worker = this
+          state.releaseRepair = () => new Promise<void>((resolve) => {
+            const bridge = new MessageChannel()
+            bridge.port1.onmessage = (event) => {
+              // Forward the real worker reply after cancellation, reproducing
+              // its delayed delivery without changing the app's repair logic.
+              const ports = Array.isArray(transfer) ? transfer : transfer?.transfer ?? []
+              ;(ports[0] as MessagePort).postMessage(event.data)
+              bridge.port1.close(); resolve()
+            }
+            native.call(worker, message, { transfer: [bridge.port2] })
+          })
+          return
+        }
+        native.call(this, message, Array.isArray(transfer) ? { transfer } : transfer)
+      }
+    })
+    await openInstall(page)
+    await page.getByRole('button', { name: 'Repair offline files and reload…', exact: true }).click()
+    await page.getByRole('button', { name: 'Reload with saved progress', exact: true }).click()
+    await expect(page.getByRole('dialog', { name: 'Reload the app?', exact: true })).toContainText('Checking other map windows')
+    await expect(page.getByRole('button', { name: 'Reload with saved progress', exact: true })).toBeDisabled()
+    if (dismissal === 'external progress') {
+      const other = await context.newPage(); await other.goto(page.url())
+      const changed = emptyProfile(catalog.revision); changed.epoch = 1
+      await other.evaluate(({ key, profile }) => localStorage.setItem(key, JSON.stringify(profile)), { key: PROFILE_STORAGE_KEY, profile: changed })
+      await expect(page.getByRole('dialog')).toHaveCount(0)
+      await other.close()
+    } else {
+      if (dismissal === 'Escape') await page.keyboard.press('Escape')
+      else await page.getByRole('button', { name: dismissal, exact: true }).click()
+      await expect(page.getByRole('dialog', { name: 'Install & offline', exact: true })).toBeVisible()
+      await page.getByRole('button', { name: 'Close dialog', exact: true }).click()
+    }
+    await page.getByRole('button', { name: 'Return to start', exact: true }).click()
+    await page.getByRole('button', { name: 'Record purchase…', exact: true }).click()
+    const preview = page.getByRole('dialog', { name: 'Record purchase?', exact: true })
+    await expect(preview).toBeVisible()
+    await page.evaluate(async () => await (window as Window & { releaseRepair?: () => Promise<void> }).releaseRepair!())
+    await expect(preview).toBeVisible()
+    expect(await page.evaluate(() => (window as Window & { repairUnregisters?: number }).repairUnregisters)).toBe(0)
+    expect(await page.evaluate(async () => Boolean((await navigator.serviceWorker.getRegistration())?.active))).toBe(true)
+  })
+}
+
+test('committed repair blocks dismissal and duplicate actions, and external invalidation cancels its later reload', async ({ page, context }) => {
+  await page.goto('./'); await offlineReady(page)
+  await page.evaluate(() => {
+    const native = ServiceWorkerRegistration.prototype.unregister
+    ServiceWorkerRegistration.prototype.unregister = function () {
+      const registration = this
+      return new Promise<boolean>((resolve) => {
+        (window as Window & { finishUnregister?: () => Promise<void> }).finishUnregister = async () => resolve(await native.call(registration))
+      })
+    }
+  })
+  await openInstall(page)
+  await page.getByRole('button', { name: 'Repair offline files and reload…', exact: true }).click()
+  await page.getByRole('button', { name: 'Reload with saved progress', exact: true }).click()
+  const repair = page.getByRole('dialog', { name: 'Reload the app?', exact: true })
+  await expect(repair).toContainText('Repair started')
+  for (const name of ['Close dialog', 'Cancel', 'Export backup and reload', 'Reload with saved progress']) {
+    await expect(page.getByRole('button', { name, exact: true })).toBeDisabled()
+  }
+  await page.keyboard.press('Escape'); await expect(repair).toBeVisible()
+  const other = await context.newPage(); await other.goto(page.url())
+  const changed = emptyProfile(catalog.revision); changed.epoch = 1
+  await other.evaluate(({ key, profile }) => localStorage.setItem(key, JSON.stringify(profile)), { key: PROFILE_STORAGE_KEY, profile: changed })
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await other.close()
+  await page.getByRole('button', { name: 'Return to start', exact: true }).click()
+  await page.getByRole('button', { name: 'Record purchase…', exact: true }).click()
+  const preview = page.getByRole('dialog', { name: 'Record purchase?', exact: true })
+  await expect(preview).toBeVisible()
+  await page.evaluate(async () => await (window as Window & { finishUnregister?: () => Promise<void> }).finishUnregister!())
+  await expect(preview).toBeVisible()
+  expect(await page.evaluate(async () => Boolean(await navigator.serviceWorker.getRegistration()))).toBe(false)
+})
+
+test('updates stay waiting for late windows, then naturally activate after all close with profile/preferences and backup recovery', async ({ browser }, testInfo) => {
   const scratch = mkdtempSync(resolve(tmpdir(), 'ascension-pwa-update-'))
   const previous = resolve(scratch, 'previous'), next = resolve(scratch, 'next')
   cpSync('dist', previous, { recursive: true }); cpSync('dist', next, { recursive: true })
@@ -168,41 +258,63 @@ test('controlled updates retain profile/preferences, wait through previews, reje
     await expect.poll(() => page.evaluate(({ key, id }) => Boolean(JSON.parse(localStorage.getItem(key)!).purchases[id]), { key: PROFILE_STORAGE_KEY, id: catalog.startId })).toBe(true)
     const other = await context.newPage(); await other.goto(page.url())
     await expect(other.locator('.toolbar')).toBeVisible()
-    await openInstall(page); await page.getByRole('button', { name: 'Update app and reload…', exact: true }).click()
-    await page.getByRole('button', { name: 'Reload with saved progress', exact: true }).click()
-    await expect(page.getByRole('dialog')).toContainText('Close other Ascension Map tabs')
-    await other.close(); await page.getByRole('button', { name: 'Close dialog', exact: true }).click()
+    const previousRelease = JSON.parse(readFileSync(resolve(previous, 'offline-assets.json'), 'utf8'))
+    await openInstall(page); await page.getByRole('button', { name: 'Prepare app update…', exact: true }).click()
+    await page.getByRole('button', { name: 'Prepare with saved progress', exact: true }).click()
+    await expect(page.getByRole('dialog')).toContainText('Close every Ascension Map browser tab')
+    // A window joining after preparation remains on the old complete release.
+    const late = await context.newPage(); await late.goto(page.url())
+    await expect(late.locator('.toolbar')).toBeVisible()
+    expect(await late.evaluate(async () => (await (await fetch('catalog.json')).json()).revision)).toBe(catalog.revision)
+    await expect.poll(() => page.evaluate(async () => Boolean((await navigator.serviceWorker.getRegistration())?.waiting))).toBe(true)
+    expect(await late.evaluate(async () => caches.keys())).toContain('ascension-map-public-' + previousRelease.version)
+    await other.close(); await page.getByRole('button', { name: 'Keep this session open', exact: true }).click()
+    await page.getByRole('button', { name: 'Close dialog', exact: true }).click()
     // Produce unsaved progress, then exercise cancel and backup before update.
     await page.evaluate(() => { (window as Window & { denyWrites?: boolean }).denyWrites = true })
     const spoilers = page.getByRole('checkbox', { name: 'Show spoilers', exact: true })
     if (!await spoilers.isVisible()) await page.getByRole('button', { name: 'Map options', exact: true }).click()
     await spoilers.check()
     if (await page.getByRole('dialog').count()) await page.getByRole('button', { name: 'Close dialog', exact: true }).click()
-    await openInstall(page); await page.getByRole('button', { name: 'Update app and reload…', exact: true }).click()
-    await expect(page.getByRole('dialog', { name: 'Reload the app?', exact: true })).toContainText('unsaved progress')
+    await openInstall(page); await page.getByRole('button', { name: 'Prepare app update…', exact: true }).click()
+    await expect(page.getByRole('dialog', { name: 'Prepare app update?', exact: true })).toContainText('unsaved progress')
     await page.getByRole('button', { name: 'Cancel', exact: true }).click()
     await expect(page.getByRole('dialog', { name: 'Install & offline', exact: true })).toBeVisible()
-    await page.getByRole('button', { name: 'Update app and reload…', exact: true }).click()
+    await page.getByRole('button', { name: 'Prepare app update…', exact: true }).click()
     const download = page.waitForEvent('download')
-    await page.getByRole('button', { name: 'Export backup and reload', exact: true }).click()
+    await page.getByRole('button', { name: 'Export backup and prepare update', exact: true }).click()
     const backup = JSON.parse(readFileSync((await (await download).path())!, 'utf8'))
     expect(backup.showSpoilers).toBe(true)
-    await expect(page.locator('.toolbar')).toBeVisible()
-    await expect.poll(() => page.evaluate(async () => await caches.keys())).toContain('ascension-map-public-' + release.version)
-    await openInstall(page)
-    await page.getByRole('button', { name: 'Close dialog', exact: true }).click()
-    const about = page.getByRole('button', { name: 'About & sources', exact: true })
-    if (!await about.isVisible()) await page.getByRole('button', { name: 'Map options', exact: true }).click()
+    await expect(page.getByRole('dialog', { name: 'Close all map windows to update', exact: true })).toBeVisible()
+    const reopenURL = page.url()
+    await page.close()
+    // Closing just the consenting window cannot update a late joining window.
+    expect(await late.evaluate(async () => (await (await fetch('catalog.json')).json()).revision)).toBe(catalog.revision)
+    expect(await late.evaluate(async () => Boolean((await navigator.serviceWorker.getRegistration())?.waiting))).toBe(true)
+    expect(await late.evaluate(async () => caches.keys())).toContain('ascension-map-public-' + previousRelease.version)
+    await late.close()
+    // Wait using the worker object, without creating another controlled window.
+    await expect.poll(async () => {
+      const worker = context.serviceWorkers().at(-1)
+      if (!worker) return false
+      try { return await worker.evaluate(async (version) => !(await caches.keys()).includes('ascension-map-public-' + version), previousRelease.version) }
+      catch { return false }
+    }, { timeout: 45000 }).toBe(true)
+    const reopened = await context.newPage(); await reopened.goto(reopenURL)
+    await expect(reopened.locator('.toolbar')).toBeVisible()
+    await expect.poll(() => reopened.evaluate(async () => await caches.keys())).toEqual(['ascension-map-public-' + release.version])
+    const about = reopened.getByRole('button', { name: 'About & sources', exact: true })
+    if (!await about.isVisible()) await reopened.getByRole('button', { name: 'Map options', exact: true }).click()
     await about.click()
-    await expect(page.getByRole('dialog')).toContainText(updatedCatalog.revision)
-    const saved = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), PROFILE_STORAGE_KEY)
+    await expect(reopened.getByRole('dialog')).toContainText(updatedCatalog.revision)
+    const saved = await reopened.evaluate((key) => JSON.parse(localStorage.getItem(key)!), PROFILE_STORAGE_KEY)
     expect(saved.purchases['future-unknown']).toEqual({ epoch: 2, active: false })
     expect(saved.purchases[astral.id]).toEqual({ epoch: 3, active: false })
     expect(saved.milestones['future-milestone']).toBe(true)
     expect(saved.showSpoilers).toBe(false)
-    expect(await page.evaluate((key) => localStorage.getItem(key), ANALYTICS_PREFERENCE_KEY)).toBe('disabled')
-    expect(await page.evaluate((key) => localStorage.getItem(key), LAYOUT_PREFERENCE_KEY)).toBe('web')
-    expect(new URL(page.url()).hash).toBe('#analytics=off')
+    expect(await reopened.evaluate((key) => localStorage.getItem(key), ANALYTICS_PREFERENCE_KEY)).toBe('disabled')
+    expect(await reopened.evaluate((key) => localStorage.getItem(key), LAYOUT_PREFERENCE_KEY)).toBe('web')
+    expect(new URL(reopened.url()).hash).toBe('#analytics=off')
   } finally {
     await context.close(); await new Promise<void>((resolve) => server.close(() => resolve()))
     if (!scratch.startsWith(resolve(tmpdir()) + sep + 'ascension-pwa-update-')) throw new Error('Unsafe test cleanup')

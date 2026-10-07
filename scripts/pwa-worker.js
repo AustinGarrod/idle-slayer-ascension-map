@@ -34,8 +34,8 @@ self.addEventListener('install', (event) => {
   })());
 });
 self.addEventListener('activate', (event) => {
-  // Normal activation waits for old windows to close. Explicit activation below
-  // requires the requesting window to be the only one, then it reloads itself.
+  // No skipWaiting or clients.claim: the browser waits for every old controlled
+  // window to close before activation and removal of its complete release cache.
   event.waitUntil((async () => {
     for (const name of await caches.keys()) if (name.startsWith('ascension-map-public-') && name !== cacheName) await caches.delete(name);
   })());
@@ -46,12 +46,11 @@ self.addEventListener('message', (event) => {
     const keys = await cache.keys();
     event.ports[0]?.postMessage({ ready: keys.length === allowed.size, version: RELEASE.version });
   })());
-  if (['ACTIVATE_UPDATE', 'CHECK_WINDOWS'].includes(event.data?.type)) event.waitUntil((async () => {
+  if (event.data?.type === 'CHECK_WINDOWS') event.waitUntil((async () => {
     const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     const appWindows = windows.filter((client) => new URL(client.url).origin === self.location.origin && new URL(client.url).pathname.startsWith(new URL(self.registration.scope).pathname));
     if (!event.source || appWindows.some((client) => client.id !== event.source.id)) { event.ports[0]?.postMessage({ accepted: false }); return; }
     event.ports[0]?.postMessage({ accepted: true });
-    if (event.data.type === 'ACTIVATE_UPDATE') await self.skipWaiting();
   })());
 });
 self.addEventListener('fetch', (event) => {

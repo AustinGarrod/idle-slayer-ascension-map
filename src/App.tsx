@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Catalog } from './domain/types'
 import MapApp from './MapApp'
 import { catalogErrors } from './domain/catalog'
@@ -11,6 +11,16 @@ export default function App() {
   const [catalog, setCatalog] = useState<Catalog | null>(null)
   const [loadFailed, setLoadFailed] = useState(false)
   const [trackingStatus, setTrackingStatus] = useState(getTrackingStatus)
+  const [repairing, setRepairing] = useState(false)
+  const repairRequest = useRef<AbortController | null>(null)
+  useEffect(() => () => { repairRequest.current?.abort() }, [catalog])
+  async function repairStartup() {
+    if (repairRequest.current) return
+    const controller = new AbortController()
+    repairRequest.current = controller; setRepairing(true)
+    await repairOffline(controller.signal, () => {})
+    if (repairRequest.current === controller) { repairRequest.current = null; setRepairing(false) }
+  }
   useEffect(() => {
     if (catalog) return
     const refreshTracking = (event: StorageEvent) => {
@@ -34,7 +44,7 @@ export default function App() {
     <p role="status">{loadFailed ? 'The verified game catalog could not be loaded. Please try again.' : 'Loading the native Ascension tree…'}</p>
     {loadFailed && <p>Reconnect to download the map, or repair missing offline files below. Your saved profile has not been replaced.</p>}
     {loadFailed && <button onClick={() => window.location.reload()}>Try again</button>}
-    {loadFailed && <details className="startup-privacy"><summary>Install & offline recovery</summary><InstallPanel onRepair={() => { void repairOffline() }} /></details>}
+    {loadFailed && <details className="startup-privacy"><summary>Install & offline recovery</summary><InstallPanel onRepair={() => { void repairStartup() }} repairBusy={repairing} /></details>}
     <p className="startup-disclosure">{trackingDisclosure}</p>
     <details className="startup-privacy" onToggle={(event) => { if (event.currentTarget.open) setTrackingStatus(getTrackingStatus()) }}>
       <summary>Privacy & tracking</summary>
