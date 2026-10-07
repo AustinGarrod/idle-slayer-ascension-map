@@ -1,4 +1,5 @@
 import type { Catalog, Profile, Requirement, Upgrade } from './types'
+import { MAX_PROFILE_EPOCH } from './types'
 
 export function satisfies(requirement: Requirement, profile: Profile): boolean {
   switch (requirement.kind) {
@@ -140,7 +141,7 @@ export function planRemoval(catalog: Catalog, original: Profile, id: string, mil
 }
 
 export function planUltraAscension(catalog: Catalog, original: Profile) {
-  if (!satisfies(catalog.ultraAscension, original)) return null
+  if (original.epoch >= MAX_PROFILE_EPOCH || !satisfies(catalog.ultraAscension, original)) return null
   const profile = structuredClone(original)
   const cleared: string[] = []
   const activated: string[] = []
