@@ -1,4 +1,6 @@
-import { expect, test, type Page } from '@playwright/test'
+import { seedProfile } from './helpers/profile'
+import { openProgress } from './helpers/app'
+import { expect, test } from './fixtures'
 import { readFileSync } from 'node:fs'
 import { emptyProfile, type Catalog } from '../../src/domain/types'
 import { PROFILE_STORAGE_KEY } from '../../src/domain/storage'
@@ -8,12 +10,6 @@ const catalog = JSON.parse(readFileSync('public/catalog.json', 'utf8')) as Catal
 const ua = catalog.upgrades.find((node) => node.title === 'Ultra Ascension')!
 const cases = ['active', 'pending', 'absent-source', 'absent-target'] as const
 const retainedText = 'Existing purchase · retained by Astral progress on reset'
-
-async function openProgress(page: Page) {
-  const action = page.getByRole('button', { name: 'Progress', exact: true })
-  if (!await action.isVisible()) await page.getByRole('button', { name: 'Map options', exact: true }).click()
-  await action.click()
-}
 
 for (const retention of catalog.grants) {
   if (retention.when.kind !== 'active') throw new Error('Expected reviewed active-source retention')
@@ -28,7 +24,7 @@ for (const retention of catalog.grants) {
       if (condition !== 'absent-target') profile.purchases[target.id] = { epoch: 1, active: true }
       const retained = condition === 'active' || condition === 'pending' && source.activation === 'after-ultra-ascension'
       const before = structuredClone(profile)
-      await page.addInitScript(({ key, profile }) => localStorage.setItem(key, JSON.stringify(profile)), { key: PROFILE_STORAGE_KEY, profile })
+      await seedProfile(page, profile)
       await page.goto('./')
       await page.getByRole('searchbox').fill(target.title)
       await page.locator('.search-result').filter({ hasText: target.title }).first().click()
