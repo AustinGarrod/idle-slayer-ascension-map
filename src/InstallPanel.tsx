@@ -3,7 +3,7 @@ import { checkForUpdate, promptInstall, usePwaStatus } from './pwa'
 export function InstallPanel({ onReload, onRepair, progressStatus }: { onReload?: () => void; onRepair: () => void; progressStatus?: string }) {
   const status = usePwaStatus()
   return <div className="install-panel">
-    <p>{status.installed ? 'Running as an installed app.' : 'Add the map to your home screen or desktop, then open it in its own window.'}</p>
+    <p>{status.installed ? 'Installed in this browser. Open from its home-screen or desktop icon.' : 'Add the map to your home screen or desktop, then open it in its own window.'}</p>
     {!status.installed && status.canInstall && <button className="primary" onClick={() => { void promptInstall() }}>Install Ascension Map</button>}
     {!status.installed && !status.canInstall && <p>This browser has not offered an install prompt. Its menu may still support installation:</p>}
     {!status.installed && <ul className="install-guidance">

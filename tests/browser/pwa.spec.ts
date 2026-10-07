@@ -76,7 +76,7 @@ test('unsupported prompts, supported prompt and standalone guidance stay truthfu
   await page.getByRole('button', { name: 'Install Ascension Map', exact: true }).click()
   await expect(page.getByRole('dialog')).toContainText('Installation dismissed')
   await page.evaluate(() => window.dispatchEvent(new Event('appinstalled')))
-  await expect(page.getByRole('dialog')).toContainText('Running as an installed app')
+  await expect(page.getByRole('dialog')).toContainText('Installed in this browser')
   await expect(page.locator('.install-guidance')).toHaveCount(0)
 })
 
