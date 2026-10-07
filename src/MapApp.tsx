@@ -140,7 +140,14 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     return () => observer.disconnect()
   }, [])
   const flow = useReactFlow<UpgradeNode>()
-  const reducedMotion = useMemo(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches, [])
+  const motionPreference = useMemo(() => window.matchMedia('(prefers-reduced-motion: reduce)'), [])
+  const [reducedMotion, setReducedMotion] = useState(() => motionPreference.matches)
+  useEffect(() => {
+    const update = () => setReducedMotion(motionPreference.matches)
+    motionPreference.addEventListener('change', update)
+    update()
+    return () => motionPreference.removeEventListener('change', update)
+  }, [motionPreference])
   const visible = useMemo(() => visibility(catalog, profile), [catalog, profile])
   const index = useMemo(() => new Map(catalog.upgrades.map((node) => [node.id, node])), [catalog])
   const detail = selected && visible.ids.has(selected) ? index.get(selected) : undefined
