@@ -195,9 +195,15 @@ function Atlas({ catalog, transferInbox }: { catalog: Catalog; transferInbox: Pr
       atlas.style.setProperty('--map-navigation-reserve', available < 400 ? '130px' : '230px')
     }
     measure()
-    const observer = new ResizeObserver(measure)
+    // Updating reserved space inside resize delivery can synchronously resize
+    // the observed workspace again. Defer that layout write to the next frame.
+    let pendingFrame: number | undefined
+    const observer = new ResizeObserver(() => {
+      if (pendingFrame !== undefined) return
+      pendingFrame = window.requestAnimationFrame(() => { pendingFrame = undefined; measure() })
+    })
     observer.observe(toolbar); observer.observe(workspace)
-    return () => observer.disconnect()
+    return () => { observer.disconnect(); if (pendingFrame !== undefined) window.cancelAnimationFrame(pendingFrame) }
   }, [])
   const flow = useReactFlow<UpgradeNode>()
   const motionPreference = useMemo(() => window.matchMedia('(prefers-reduced-motion: reduce)'), [])
@@ -267,7 +273,8 @@ function Atlas({ catalog, transferInbox }: { catalog: Catalog; transferInbox: Pr
   const previousOverviewProgress = useRef({ progress: layoutProgress, layout })
   const incoming = visible.connections.filter((edge) => edge.to === detail?.id).map((edge) => index.get(edge.from)!)
   const outgoing = visible.connections.filter((edge) => edge.from === detail?.id).map((edge) => index.get(edge.to)!)
-  const related = new Set([...incoming, ...outgoing].map((node) => node.id))
+  const related = useMemo(() => new Set(visible.connections.flatMap((edge) =>
+    edge.to === detail?.id ? [edge.from] : edge.from === detail?.id ? [edge.to] : [])), [visible.connections, detail?.id])
   const purchasePlan = purchaseTarget ? planPurchase(catalog, profile, purchaseTarget, choices) : null
   const activeDialogTitle = preview?.title
     ?? (purchasePlan && purchaseTarget ? purchasePlan.kind === 'choice' ? 'Choose a prerequisite path' : purchasePlan.kind === 'blocked' ? 'Explicit progress required' : 'Record purchase?' : null)
@@ -791,12 +798,13 @@ function Atlas({ catalog, transferInbox }: { catalog: Catalog; transferInbox: Pr
       && (previous.layout !== layout || pendingOverviewRequest.current === cameraRequest.current)) fitOverviewCamera()
   }, [layoutProgress, layout])
   const state = (node: Upgrade) => upgradeState(node, profile)
-  const nodes: UpgradeNode[] = visible.upgrades.map((node) => ({ id: node.id, type: 'upgrade', position: layout.centers.get(node.id)!,
+  // Unrelated modal/feedback state must not reset React Flow's measured nodes.
+  const nodes = useMemo<UpgradeNode[]>(() => visible.upgrades.map((node) => ({ id: node.id, type: 'upgrade', position: layout.centers.get(node.id)!,
     data: { upgrade: node, state: state(node) }, selected: selected === node.id,
     className: !overviewView && detail && node.id !== detail.id ? related.has(node.id) ? 'node-related' : 'node-muted' : '',
     ariaLabel: `${node.title}, ${state(node)}, ${cost(node.cost)} Slayer Points`, width: nodeWidth, height: nodeHeight,
     domAttributes: { tabIndex: node.id === graphTabStop ? 0 : -1, 'aria-current': selected === node.id ? 'true' : undefined },
-    ...(gameLayout ? { zIndex: 2 } : {}) }))
+    ...(gameLayout ? { zIndex: 2 } : {}) })), [visible.upgrades, profile, selected, overviewView, detail?.id, related, layout, nodeWidth, nodeHeight, graphTabStop, gameLayout])
   const edges = visible.connections.map((edge) => {
     const from = layout.centers.get(edge.from)!, to = layout.centers.get(edge.to)!
     const dx = to.x - from.x, dy = to.y - from.y

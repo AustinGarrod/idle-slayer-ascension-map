@@ -1212,13 +1212,15 @@ test('unsaved progress opt-out preserves cancellation and exports current memory
 
 test('real recorder excludes transfer URL payloads, QR contents, links and replacement previews', async ({ page, context, baseURL }) => {
   const origin = new URL(baseURL!).origin
+  let releaseRecorder!: () => void
+  const recorderReady = new Promise<void>((resolve) => { releaseRecorder = resolve })
   const marker = 'SENTINEL-private-transfer-progress-27591'
   const outgoing = { ...initial, purchases: { [marker]: { epoch: 0, active: false } } }
   const incoming = { ...initial, epoch: 314159, purchases: { [marker]: { epoch: 2, active: false }, [catalog.startId]: { epoch: 314159, active: true } } }
   const encoded = await encodeProgressTransfer(catalog, incoming, 'web')
   if (!encoded.ok) throw new Error(encoded.error)
   const link = progressTransferLink(encoded.token, origin, appFixturePath)
-  const capture = await installLocalRoutes(context, origin)
+  const capture = await installLocalRoutes(context, origin, { recorderReady })
   await serveIsolatedApplication(context, origin)
   await page.addInitScript(({ key, outgoing }) => localStorage.setItem(key, JSON.stringify(outgoing)), { key: profileKey, outgoing })
   await page.goto(link)
@@ -1227,6 +1229,13 @@ test('real recorder excludes transfer URL payloads, QR contents, links and repla
   await expect(dialog.getByRole('heading', { name: 'Review transfer', exact: true })).toBeVisible()
   expect(new URL(page.url()).hash).toBe('')
   await expect(dialog).not.toContainText(marker)
+  const snapshotProof = 'TRANSFER-public-snapshot-proof-42816'
+  await dialog.evaluate((element, proof) => {
+    const publicNode = document.createElement('p'); publicNode.textContent = proof; element.appendChild(publicNode)
+  }, snapshotProof)
+  releaseRecorder()
+  const snapshot = await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 2 && JSON.stringify(event).includes(snapshotProof)))
+  expect(blockedReplayNodes(snapshot).some((node) => node.attributes.class.includes('progress-transfer') && !(node.childNodes?.length))).toBe(true)
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
   await openProgress(page)
   await page.getByRole('button', { name: 'Transfer to another device…', exact: true }).click()
@@ -1238,10 +1247,9 @@ test('real recorder excludes transfer URL payloads, QR contents, links and repla
     document.querySelector('dialog')!.appendChild(button)
   }, publicMarker)
   await page.locator('#transfer-public-replay-proof').click()
-  const events = await waitForReplayEvents(capture, (events) => events.some((event) => JSON.stringify(event).includes(publicMarker)))
+  const events = await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 3 && JSON.stringify(event).includes(publicMarker)))
   const evidence = JSON.stringify({ submissions: capture.submissions, replay: events })
   for (const privateValue of [marker, encoded.token, generatedLink, '314159']) expect(evidence).not.toContain(privateValue)
-  expect(blockedReplayNodes(events.find((event) => event.type === 2)!).some((node) => node.attributes.class.includes('progress-transfer') && !(node.childNodes?.length))).toBe(true)
   expect(capture.unexpected).toEqual([])
 })
 
