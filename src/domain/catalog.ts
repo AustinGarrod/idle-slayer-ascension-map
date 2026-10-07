@@ -68,9 +68,9 @@ export function catalogErrors(value: unknown): string[] {
     if (connectionIds.has(key)) errors.push(`Duplicate connection ${key}.`)
     connectionIds.add(key)
   }
-  for (const grant of value.grants) {
-    if (!record(grant) || !Array.isArray(grant.ids) || !grant.ids.every((id) => upgradeIds.has(String(id)))) { errors.push('Invalid retention grant.'); continue }
-    requirement(grant.when, 'retention grant')
+  for (const retention of value.grants) {
+    if (!record(retention) || !Array.isArray(retention.ids) || !retention.ids.every((id) => upgradeIds.has(String(id)))) { errors.push('Invalid conditional retention rule.'); continue }
+    requirement(retention.when, 'conditional retention rule')
   }
   requirement(value.ultraAscension, 'Ultra Ascension')
   if (!upgradeIds.has(String(value.startId))) errors.push('Start upgrade is missing.')
