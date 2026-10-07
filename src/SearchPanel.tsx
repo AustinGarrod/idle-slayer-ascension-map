@@ -23,6 +23,7 @@ export function SearchPanel({ upgrades, profile, inputRef, open, onOpenChange, o
   const [queryRevision, setQueryRevision] = useState(0)
   const [filter, setFilter] = useState<DiscoveryFilter>('all')
   const panel = useRef<HTMLDivElement>(null)
+  const focusFrame = useRef(0)
   const results = useMemo(() => discoverUpgrades(upgrades, profile, query, filter), [upgrades, profile, query, filter])
   const latestSearch = useRef<{ query_length: '1-3' | '4-10' | '11-30' | '31+'; results: '0' | '1-5' | '6-20' | '21+' } | null>(null)
   latestSearch.current = query.trim() ? {
@@ -37,6 +38,37 @@ export function SearchPanel({ upgrades, profile, inputRef, open, onOpenChange, o
     return () => window.clearTimeout(timer)
   }, [queryRevision])
   useEffect(() => { if (panel.current) panel.current.scrollTop = 0 }, [query, filter])
+  useEffect(() => () => window.cancelAnimationFrame(focusFrame.current), [])
+  useEffect(() => {
+    const container = panel.current
+    const heading = container?.querySelector('.results-heading')
+    if (!open || !container || !heading) return
+    const observer = new ResizeObserver(() => {
+      const focused = document.activeElement
+      if (focused instanceof HTMLButtonElement && focused.matches('.search-result') && container.contains(focused)) revealFocusedTitle(focused)
+    })
+    observer.observe(container); observer.observe(heading)
+    return () => observer.disconnect()
+  }, [open])
+  function revealFocusedTitle(button: HTMLButtonElement) {
+    if (!button.matches(':focus-visible')) return
+    function align() {
+      const container = panel.current
+      const title = button.querySelector('.discovery-title')
+      const heading = container?.querySelector('.results-heading')
+      if (document.activeElement !== button || !button.matches(':focus-visible') || !container || !title || !heading) return
+      const bounds = container.getBoundingClientRect(), text = title.getBoundingClientRect()
+      const top = Math.max(bounds.top, heading.getBoundingClientRect().bottom, 0) + 8
+      const bottom = Math.min(bounds.bottom, window.innerHeight) - 8
+      if (text.top < top) container.scrollTop += text.top - top
+      else if (text.bottom > bottom) container.scrollTop += Math.min(text.bottom - bottom, text.top - top)
+    }
+    // Native keyboard focus can center a tall row with its title behind the sticky
+    // header. Recheck after that scrolling, using actual header and title geometry.
+    align()
+    window.cancelAnimationFrame(focusFrame.current)
+    focusFrame.current = window.requestAnimationFrame(align)
+  }
   function close() { inputRef.current?.focus({ preventScroll: true }); onOpenChange(false) }
   return <div className="search-box" onKeyDown={(event) => { if (event.key === 'Escape') { event.stopPropagation(); close() } }}>
     <label className="sr-only" htmlFor="search">Search visible upgrade titles and effects</label><span aria-hidden="true">⌕</span>
@@ -50,7 +82,7 @@ export function SearchPanel({ upgrades, profile, inputRef, open, onOpenChange, o
         <option value="all">All visible</option><option value="available">Available</option><option value="locked">Locked</option><option value="owned">Owned</option><option value="pending">Awaiting activation</option>
       </select><small>Available: native requirements recorded. SP balance is not checked.</small></div>
       <div className="discovery-list">
-        {results.map(({ node, state, duplicateTitle }) => <button className="search-result" key={node.id} data-upgrade-id={node.id} onClick={(event) => onSelect(node.id, event.detail === 0)}>
+        {results.map(({ node, state, duplicateTitle }) => <button className="search-result" key={node.id} data-upgrade-id={node.id} onFocus={(event) => revealFocusedTitle(event.currentTarget)} onClick={(event) => onSelect(node.id, event.detail === 0)}>
           <Icon node={node} /><span><span className="discovery-title">{node.title}</span><small className={`discovery-state ${state}`}>{stateLabels[state]}</small><small>{BigInt(node.cost).toLocaleString('en')} SP</small>
             {duplicateTitle && <small className="discovery-identity">ID: {node.id}</small>}<small className="discovery-effect">{node.description}</small></span>
         </button>)}

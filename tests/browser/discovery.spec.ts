@@ -3,6 +3,7 @@ import { expect, test, type Page } from '@playwright/test'
 import type { Catalog, Profile } from '../../src/domain/types'
 import { emptyProfile } from '../../src/domain/types'
 import { satisfies, visibility } from '../../src/domain/rules'
+import { tabThroughDiscovery } from './helpers/discovery-focus'
 
 const catalog = JSON.parse(readFileSync('public/catalog.json', 'utf8')) as Catalog
 const initial = emptyProfile(catalog.revision)
@@ -138,3 +139,44 @@ for (const viewport of [{ width: 320, height: 568 }, { width: 844, height: 390 }
     await expect(page.locator('.details h2')).toHaveText(final.title)
   })
 }
+
+test('native Tab keeps every focused title clear of the sticky header at 320×350', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 350 })
+  await page.goto('./')
+  await tabThroughDiscovery(page, visible.upgrades.map((node) => node.id))
+  await page.keyboard.press('Tab')
+  await page.keyboard.press('Enter')
+  await expect(page.locator('.details h2')).toHaveText(visible.upgrades.at(-1)!.title)
+  await expect(page.locator('.details h2')).toBeFocused()
+  await page.getByRole('button', { name: 'Close upgrade details' }).click()
+  await expect(page.getByRole('searchbox')).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('region', { name: 'Visible upgrade results' })).toHaveCount(0)
+})
+
+test('pointer focus keeps a partially scrolled row stationary until its click selects it', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 350 })
+  await page.goto('./')
+  await page.getByRole('searchbox').focus()
+  const second = visible.upgrades[1]
+  const row = result(page, second.id)
+  const panel = page.getByRole('region', { name: 'Visible upgrade results' })
+  await row.evaluate((button) => {
+    const panel = button.closest('.upgrade-discovery')!
+    const heading = panel.querySelector('.results-heading')!.getBoundingClientRect()
+    const title = button.querySelector('.discovery-title')!.getBoundingClientRect()
+    panel.scrollTop += title.top - heading.bottom + title.height / 2
+  })
+  const point = await row.locator('.discovery-state').evaluate((element) => {
+    const bounds = element.getBoundingClientRect()
+    return { x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 }
+  })
+  const before = await panel.evaluate((element) => element.scrollTop)
+  await page.mouse.move(point.x, point.y)
+  await page.mouse.down()
+  await expect(row).toBeFocused()
+  expect(await panel.evaluate((element) => element.scrollTop)).toBe(before)
+  await page.mouse.up()
+  await expect(page.locator('.details h2')).toHaveText(second.title)
+  await expect(page.locator('.react-flow__node.selected')).toHaveAttribute('data-id', second.id)
+})
