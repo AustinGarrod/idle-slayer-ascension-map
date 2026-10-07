@@ -7,7 +7,7 @@ export type GoalMode = 'acquire' | 'activate' | 'rebuild'
 export type Goal = { id: string; mode: GoalMode }
 export type Goals = { version: 1; targets: Goal[] }
 export const emptyGoals = (): Goals => ({ version: 1, targets: [] })
-export const goalModeLabels: Record<GoalMode, string> = { acquire: 'Acquire once', activate: 'Own and activate', rebuild: 'Recurring rebuild' }
+export const goalModeLabels: Record<GoalMode, string> = { acquire: 'Acquire upgrade', activate: 'Own and activate', rebuild: 'Recurring rebuild' }
 
 /** Separate intentions schema; unknown stable IDs survive later catalog revisions. */
 export function parseGoals(text: string): Goals {

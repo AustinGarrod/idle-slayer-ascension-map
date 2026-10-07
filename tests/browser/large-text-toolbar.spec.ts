@@ -109,3 +109,28 @@ for (const layout of ['Game Layout', 'Detailed Layout']) test(`${layout} toolbar
   await page.getByRole('button', { name: 'Next upgrade', exact: true }).click()
   await expect(page.getByRole('dialog', { name: 'Suggested next upgrade', exact: true })).toBeVisible()
 })
+
+
+test('chosen progression intentions are readable at the actual 200% font without recording progress', async ({ page }) => {
+  await page.goto('./')
+  await page.getByRole('searchbox').fill('Permanent Slayer')
+  await page.locator('.search-result').filter({ hasText: 'Permanent Slayer' }).click()
+  await page.getByRole('button', { name: 'Show details', exact: true }).click()
+  await page.getByRole('button', { name: 'Set progression goal…', exact: true }).click()
+  await page.getByRole('combobox', { name: 'Goal completion', exact: true }).selectOption('rebuild')
+  await page.getByRole('button', { name: 'Save goal', exact: true }).click()
+  const panel = page.locator('.goals-panel')
+  await expect(panel).toContainText('1 visible goal · 0 achieved')
+  await page.getByRole('combobox', { name: 'Goal completion', exact: true }).scrollIntoViewIfNeeded()
+  await page.screenshot({ path: test.info().outputPath('goals-choice-200-percent.png') })
+  expect(await panel.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true)
+  for (const button of await panel.locator('button').all()) {
+    await button.scrollIntoViewIfNeeded()
+    const bounds = await button.boundingBox()
+    expect(bounds!.width).toBeGreaterThanOrEqual(44)
+    expect(bounds!.height).toBeGreaterThanOrEqual(44)
+    expect(await button.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true)
+  }
+  await page.screenshot({ path: test.info().outputPath('goals-200-percent.png') })
+  expect(await page.evaluate(() => localStorage.getItem('idle-slayer-ascension-map.profile.v1'))).toBeNull()
+})

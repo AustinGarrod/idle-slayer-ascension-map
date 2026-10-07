@@ -460,7 +460,7 @@ dialog:has(.map-help) { overflow-wrap: anywhere; }
 .goals-panel h4 { margin: 10px 0; font-size: .875rem; }
 .goals-panel p, .goals-panel small { font-size: .8125rem; line-height: 1.5; }
 .goals-panel .goal-choice label { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0; }
-.goals-panel select { width: 100%; min-width: 0; min-height: 44px; font: inherit; color: var(--bright-gold); background: var(--raised); }
+.goals-panel select { width: 100%; min-width: 0; min-height: 44px; font: inherit; font-size: .8125rem; color: var(--bright-gold); background: var(--raised); }
 .goal-list { list-style: none; padding: 0; }
 .goal-list li, .goal-choice, .goal-recovery { margin: 16px 0; border: 1px solid #574631; border-radius: 5px; padding: 12px; }
 .goals-panel button { font-size: .8125rem; overflow-wrap: anywhere; }

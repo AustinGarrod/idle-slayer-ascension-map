@@ -24,6 +24,7 @@ async function choose(page: Page, title: string, mode = 'acquire') {
   await expect(page.locator('.goals-panel')).toContainText('Intention recorded')
 }
 async function progress(page: Page) {
+  await expect(page.locator('.toolbar')).toBeVisible()
   const action = page.getByRole('button', { name: 'Progress', exact: true })
   if (!await action.isVisible()) await page.getByRole('button', { name: 'Map options', exact: true }).click()
   await action.click()
@@ -106,5 +107,57 @@ test('unreadable saved goals are preserved until deliberate confirmed recovery',
   await page.getByRole('button', { name: "Save this visit's goals…", exact: true }).click()
   await page.getByRole('button', { name: 'Confirm goal recovery', exact: true }).click()
   expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), GOALS_STORAGE_KEY)).toEqual({ version: 1, targets: [{ id: catalog.startId, mode: 'acquire' }] })
+  expect(await saved(page)).toBeNull()
+})
+
+
+test('recurring checklist recomputes from a real reset and retains conditionally kept Village Key', async ({ page }) => {
+  const landlord = node('Land Lord'), village = node('Village Key')
+  const profile = { ...initial, epoch: 1, showSpoilers: true, purchases: Object.fromEntries(catalog.upgrades.map((upgrade) => [upgrade.id, { epoch: 1, active: upgrade.id !== landlord.id }])) }
+  const intentions = { version: 1, targets: [{ id: village.id, mode: 'rebuild' }, { id: catalog.startId, mode: 'rebuild' }] }
+  await page.addInitScript(({ key, profile, goalsKey, intentions }) => {
+    localStorage.setItem(key, JSON.stringify(profile)); localStorage.setItem(goalsKey, JSON.stringify(intentions))
+  }, { key: PROFILE_STORAGE_KEY, profile, goalsKey: GOALS_STORAGE_KEY, intentions })
+  await page.goto('./'); await progress(page)
+  await expect(page.locator('.goals-panel')).toContainText('2 achieved')
+  await page.getByRole('button', { name: 'Ultra Ascend…', exact: true }).click()
+  await page.getByRole('dialog', { name: 'Ultra Ascend?', exact: true }).getByRole('button', { name: 'Apply changes', exact: true }).click()
+  await expect(page.locator('.map-summary')).toContainText('Ultra Ascensions 2')
+  await progress(page)
+  await expect(page.locator('.goals-panel')).toContainText('1 achieved')
+  await expect(page.locator(`.goal-list li[data-goal-id="${village.id}"]`)).toContainText('Achieved')
+  await expect(page.locator(`.goal-list li[data-goal-id="${catalog.startId}"]`)).toContainText('Eligible to purchase')
+  const actual = JSON.parse((await saved(page))!)
+  expect(actual.purchases[village.id]).toBeTruthy()
+  expect(actual.purchases[catalog.startId]).toBeUndefined()
+  await page.getByRole('button', { name: 'Close dialog', exact: true }).click()
+  const undo = page.getByRole('button', { name: 'Undo', exact: true })
+  if (!await undo.isVisible()) await page.getByRole('button', { name: 'Map options', exact: true }).click()
+  await undo.click()
+  const options = page.getByRole('dialog', { name: 'Map options', exact: true })
+  if (await options.isVisible()) await options.getByRole('button', { name: 'Close dialog', exact: true }).click()
+  await progress(page)
+  await expect(page.locator('.goals-panel')).toContainText('2 achieved')
+  expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), GOALS_STORAGE_KEY)).toEqual(intentions)
+})
+
+
+test('unsaved intentions survive external goal changes until deliberate recovery', async ({ page, context }) => {
+  await page.addInitScript((key) => {
+    const native = Storage.prototype.setItem
+    Storage.prototype.setItem = function (name, value) { if (name === key) throw new Error('synthetic storage failure'); native.call(this, name, value) }
+  }, GOALS_STORAGE_KEY)
+  await page.goto('./'); await choose(page, 'Permanent Slayer', 'rebuild')
+  const other = await context.newPage(); await other.goto(page.url())
+  const incoming = { version: 1, targets: [{ id: node('Minions').id, mode: 'acquire' }] }
+  await other.evaluate(({ key, incoming }) => localStorage.setItem(key, JSON.stringify(incoming)), { key: GOALS_STORAGE_KEY, incoming })
+  await expect(page.locator('.goals-panel')).toContainText('Saved goals changed in another tab')
+  await expect(page.locator('.goal-list li')).toHaveAttribute('data-goal-id', catalog.startId)
+  await page.getByRole('button', { name: 'Review saved goals', exact: true }).click()
+  await page.getByRole('button', { name: 'Cancel goal recovery', exact: true }).click()
+  await expect(page.locator('.goal-list li')).toHaveAttribute('data-goal-id', catalog.startId)
+  await page.getByRole('button', { name: 'Review saved goals', exact: true }).click()
+  await page.getByRole('button', { name: 'Confirm goal recovery', exact: true }).click()
+  await expect(page.locator('.goal-list li')).toHaveAttribute('data-goal-id', node('Minions').id)
   expect(await saved(page)).toBeNull()
 })
