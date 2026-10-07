@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test } from './fixtures'
+import type { Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import type { Catalog } from '../../src/domain/types'
 import { emptyProfile } from '../../src/domain/types'
@@ -10,9 +11,6 @@ const start = catalog.upgrades.find((upgrade) => upgrade.id === catalog.startId)
 const gatherer = catalog.upgrades.find((upgrade) => upgrade.title === 'Soul Gatherer Bundle')!
 const quests = catalog.upgrades.find((upgrade) => upgrade.title === 'Permanent Quests')!
 const visible = visibility(catalog, initial)
-const runtimeErrors: Error[] = []
-test.beforeEach(({ page }) => { runtimeErrors.length = 0; page.on('pageerror', (error) => runtimeErrors.push(error)) })
-test.afterEach(() => expect(runtimeErrors).toEqual([]))
 
 async function openSuggestions(page: Page) {
   await page.getByRole('button', { name: 'Next upgrade', exact: true }).click()
@@ -81,7 +79,7 @@ test('recommendation dialog filters spoilers and owned pending locks with source
   for (const card of await dialog.locator('.recommendation-card').all()) {
     const id = (await card.getAttribute('data-upgrade-id'))!
     const upgrade = catalog.upgrades.find((node) => node.id === id)!
-    await expect(card).toContainText(`${BigInt(upgrade.cost).toLocaleString('en')} SP`)
+    await expect(card.getByRole('math')).toHaveAccessibleName(`${BigInt(upgrade.cost).toLocaleString('en')} Slayer Points`)
   }
 })
 

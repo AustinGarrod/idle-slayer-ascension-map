@@ -6,6 +6,7 @@ import type { DiscoveryFilter, UpgradeState } from './domain/discovery'
 import { Icon } from './UpgradeCard'
 import { trackEvent } from './analytics'
 import './SearchPanel.css'
+import { SPCost } from './SPCost'
 
 const stateLabels: Record<UpgradeState, string> = {
   available: '+ Available', locked: '◇ Locked', purchased: '✓ Owned and active', pending: '◷ Owned · awaiting activation',
@@ -129,7 +130,7 @@ export function SearchPanel({ upgrades, profile, inputRef, open, onOpenChange, o
           }
         }} onClick={(event) => onSelect(node.id, event.detail === 0)}>
           <span id={`${resultsId}-${index}`} aria-hidden="true" className="sr-only">Candidate {index + 1} of {results.length} visible results.</span>
-          <Icon node={node} /><span><span className="discovery-title">{node.title}</span><small className={`discovery-state ${state}`}>{stateLabels[state]}</small><small>{BigInt(node.cost).toLocaleString('en')} SP</small>
+          <Icon node={node} /><span><span className="discovery-title">{node.title}</span><small className={`discovery-state ${state}`}>{stateLabels[state]}</small><small><SPCost value={node.cost} /></small>
             {duplicateTitle && <small className="discovery-identity">ID: {node.id}</small>}<small className="discovery-effect">{node.description}</small></span>
         </button>)}
         {results.length === 0 && <p>No visible upgrades match{filter === 'all' ? '.' : ' this progress state.'}</p>}

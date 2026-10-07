@@ -1,4 +1,5 @@
-import { expect, test, type Locator, type Page } from '@playwright/test'
+import { expect, test } from './fixtures'
+import type { Locator, Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import type { Catalog } from '../../src/domain/types'
 
@@ -63,8 +64,8 @@ test('different stable IDs reset details scrolling even when their titles match'
   expect(first.id).not.toBe(next.id)
   const selectKey = async (cost: string) => {
     await page.getByRole('searchbox').fill('Astral Key')
-    await page.locator('.search-result').filter({ hasText: `${BigInt(cost).toLocaleString('en')} SP` }).click()
-    await expect(page.locator('.detail-cost')).toHaveText(`${BigInt(cost).toLocaleString('en')} SP`)
+    await page.locator('.search-result').filter({ has: page.getByRole('math', { name: `${BigInt(cost).toLocaleString('en')} Slayer Points`, exact: true }) }).click()
+    await expect(page.locator('.detail-cost').getByRole('math')).toHaveAccessibleName(`${BigInt(cost).toLocaleString('en')} Slayer Points`)
   }
   await page.goto('./')
   await selectKey(first.cost)

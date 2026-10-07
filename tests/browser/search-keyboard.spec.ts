@@ -1,4 +1,7 @@
-import { expect, test } from '@playwright/test'
+import { readFileSync } from 'node:fs'
+import { expect, test } from './fixtures'
+import { emptyProfile, type Catalog } from '../../src/domain/types'
+import { visibility } from '../../src/domain/rules'
 import { focusedDiscoveryTitleIsReadable } from './helpers/discovery-focus'
 
 test.beforeEach(async ({ page }) => {
@@ -17,6 +20,7 @@ test('arrow selection opens a non-first result through native button focus', asy
   const chosen = rows.nth(1), id = await chosen.getAttribute('data-upgrade-id'), title = await chosen.locator('.discovery-title').innerText()
   await expect(page.getByRole('button', { name: 'Toggle search results', exact: true })).toHaveAttribute('aria-expanded', 'true')
   await expect(input).toHaveAttribute('aria-controls', (await region.getAttribute('id'))!)
+  await expect(page.getByRole('button', { name: 'Toggle search results', exact: true })).toHaveAttribute('aria-controls', (await region.getAttribute('id'))!)
   const status = page.getByRole('status').filter({ hasText: 'Search results open.' })
   await expect(status).toHaveText(`Search results open. ${count} visible results.`)
   await expect(input).toHaveAccessibleDescription(new RegExp(`^Search results open[.] ${count} visible results[.]`))
@@ -32,13 +36,14 @@ test('arrow selection opens a non-first result through native button focus', asy
   await expect(chosen).toBeFocused()
   await expect(chosen).toHaveAttribute('aria-current', 'true')
   await expect(region.locator('[aria-current="true"]')).toHaveCount(1)
-  expect(await chosen.getAttribute('aria-describedby')).toBeTruthy()
+  await expect(chosen).toHaveAccessibleDescription(new RegExp(`Candidate 2 of ${count} visible results[.]$`))
   const toggleBox = await page.getByRole('button', { name: 'Toggle search results', exact: true }).boundingBox()
   expect(toggleBox!.width).toBeGreaterThanOrEqual(44); expect(toggleBox!.height).toBeGreaterThanOrEqual(44)
   await page.screenshot({ path: info.outputPath('keyboard-candidate.png') })
   await page.keyboard.press('Enter')
   await expect(region).toHaveCount(0)
   await expect(page.locator('.details h2')).toHaveText(title)
+  await expect(page.locator('.details h2')).toBeFocused()
   await expect(page.locator('.react-flow__node.selected')).toHaveAttribute('data-id', id!)
   expect(await page.evaluate(() => localStorage.getItem('idle-slayer-ascension-map.profile.v1'))).toBeNull()
 })
@@ -74,6 +79,8 @@ test('Escape and disclosure expose closed state, then arrows reopen candidates',
   await page.keyboard.press('Escape')
   await expect(input).toBeFocused()
   await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+  await expect(toggle).not.toHaveAttribute('aria-controls')
+  await expect(input).not.toHaveAttribute('aria-controls')
   await expect(page.getByRole('status').filter({ hasText: 'Search results closed.' })).toBeVisible()
   await input.press('ArrowUp')
   await expect(page.locator('.search-result').last()).toBeFocused()
@@ -194,5 +201,36 @@ test('Escape in a populated native search field closes results without clearing 
   await input.press('Escape')
   await expect(region).toHaveCount(0)
   await expect(input).toHaveValue('')
+  expect(await page.evaluate(() => localStorage.getItem('idle-slayer-ascension-map.profile.v1'))).toBeNull()
+})
+
+test('candidate positions and status exclude matching hidden upgrades', async ({ page }) => {
+  const catalog = JSON.parse(readFileSync('public/catalog.json', 'utf8')) as Catalog
+  const visible = visibility(catalog, emptyProfile(catalog.revision))
+  const hidden = catalog.upgrades.find((node) => !visible.ids.has(node.id))!
+  const augmented = { ...catalog, upgrades: catalog.upgrades.map((node) => node.id === hidden.id ? { ...node, title: visible.upgrades[0].title, description: 'PRIVATE-HIDDEN-CANDIDATE' } : node) }
+  await page.route('**/catalog.json', (route) => route.fulfill({ contentType: 'application/json', body: JSON.stringify(augmented) }))
+  await page.goto('./')
+  const input = page.getByRole('searchbox')
+  const status = page.getByRole('status', { name: 'Search result state', exact: true })
+  await input.focus()
+  await expect(status).toHaveText(`Search results open. ${visible.total} visible results.`)
+  await expect(page.locator(`.search-result[data-upgrade-id="${hidden.id}"]`)).toHaveCount(0)
+  await expect(page.locator('.discovery-identity')).toHaveCount(0)
+  await input.press('ArrowUp')
+  const last = page.locator('.search-result').last()
+  await expect(last).toBeFocused()
+  await expect(last).toHaveAttribute('data-upgrade-id', visible.upgrades.at(-1)!.id)
+  await expect(last).toHaveAccessibleDescription(new RegExp(`Candidate ${visible.total} of ${visible.total} visible results[.]$`))
+  await page.keyboard.press('Escape')
+  await input.fill('PRIVATE-HIDDEN-CANDIDATE')
+  await expect(status).toHaveText('Search results open. 0 visible results; no matching visible upgrades.')
+  for (const key of ['ArrowDown', 'ArrowUp', 'Enter']) {
+    await input.press(key)
+    await expect(input).toBeFocused()
+    await expect(page.locator('.search-result')).toHaveCount(0)
+    await expect(page.locator('.details')).toHaveCount(0)
+  }
+  await expect(status).not.toContainText('PRIVATE-HIDDEN-CANDIDATE')
   expect(await page.evaluate(() => localStorage.getItem('idle-slayer-ascension-map.profile.v1'))).toBeNull()
 })
