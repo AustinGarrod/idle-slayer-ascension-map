@@ -1068,3 +1068,33 @@ test('continuing the final eligible suggestion reports the fresh all-owned reaso
   expect(capture.submissions.filter((submission) => submission.payload.name === 'recommendation_purchase_applied')).toHaveLength(1)
   expect(capture.unexpected).toEqual([])
 })
+
+
+test('exact upgrade references keep native recorder URLs and referrers clean and suspend dirty live navigation', async ({ page, context, baseURL }) => {
+  const origin = new URL(baseURL!).origin
+  const capture = await installLocalRoutes(context, origin)
+  await serveIsolatedApplication(context, origin)
+  const hidden = catalog.upgrades.find((upgrade) => !visible.ids.has(upgrade.id))!
+  await page.goto(`${origin}${appFixturePath}?private=${secrets.url}#upgrade=${hidden.id}&catalog=${catalog.revision}`)
+  await expect(page.locator('.toolbar')).toBeVisible()
+  await expect(page.locator('.toast')).toContainText('unavailable under your current spoiler setting')
+  await waitForActive(page)
+  expect(page.url()).toBe(`${origin}${appFixturePath}`)
+  const events = await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 2))
+  const decoded = JSON.stringify({ submissions: capture.submissions, replay: events })
+  expect(decoded).not.toContain(hidden.id)
+  expect(decoded).not.toContain(secrets.url)
+  expect(capture.submissions.filter((item) => ['record', 'heatmap', 'event'].includes(item.type)).every((item) => !String(item.payload.url).includes('upgrade=') && !String(item.payload.url).includes('#'))).toBe(true)
+  const before = capture.submissions.filter((item) => ['record', 'heatmap'].includes(item.type)).length
+  await page.evaluate(({ id, revision }) => { location.hash = `upgrade=${id}&catalog=${revision}` }, { id: catalog.startId, revision: catalog.revision })
+  await expect(page.locator('.details h2')).toHaveText('Permanent Slayer')
+  await expect.poll(() => page.url()).toBe(`${origin}${appFixturePath}`)
+  const submitted = capture.submissions.filter((item) => ['record', 'heatmap'].includes(item.type)).length
+  expect(submitted).toBe(before)
+  await page.evaluate(() => { document.body.appendChild(Object.assign(document.createElement('p'), { textContent: 'SENTINEL-after-reference-suspension' })) })
+  // The real recorder rereads the guarded session cache on flush. Existing
+  // URL privacy tests cover the longer buffering window; this directly
+  // verifies its final public accessor cannot resume this document.
+  expect(await page.evaluate(() => (window as Window & { umami?: { getSession?: () => { cache?: string } } }).umami?.getSession?.().cache)).toBeUndefined()
+  expect(capture.unexpected).toEqual([])
+})

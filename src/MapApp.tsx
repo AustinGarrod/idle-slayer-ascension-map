@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { KeyboardEvent } from 'react'
 import { Background, MarkerType, ReactFlow, ReactFlowProvider, useReactFlow } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
@@ -39,10 +39,12 @@ import { PrivacyPanel, trackingDisclosure } from './PrivacyPanel'
 import { ProgressComparison, type ProgressComparisonProps } from './ProgressComparison'
 import { progressBackupFilename } from './domain/progress-comparison'
 import { MapHelpPanel } from './MapHelpPanel'
+import { UpgradeReference } from './UpgradeReference'
+import { getUpgradeReference, subscribeUpgradeReference } from './upgrade-reference-receiver'
 
 type Preview = { operation: AnalyticsOperation | 'prior_ascensions'; title: string; text: string; profile: Profile; changes?: string[]; groups?: { label: string; ids: string[] }[]; replaceStorage?: boolean; upgradeId?: string; milestoneId?: string; sessionVersion?: number; resolution?: 'saved' | 'local'; comparison?: Omit<ProgressComparisonProps, 'catalog'> }
 type Menu = 'options' | 'progress' | 'milestones' | 'about' | 'recommendations' | 'game-import' | 'privacy' | 'keyboard-help' | null
-type SelectionSource = 'map' | 'search' | 'neighbor' | 'recommendation' | 'start' | 'keyboard'
+type SelectionSource = 'map' | 'search' | 'neighbor' | 'recommendation' | 'start' | 'keyboard' | 'reference'
 const menuTitles: Record<Exclude<Menu, null>, string> = { options: 'Map options', progress: 'Your progress', milestones: 'Milestones', about: 'About this map', recommendations: 'Suggested next upgrade', 'game-import': 'Import game progress', privacy: 'Privacy & tracking', 'keyboard-help': 'Map help' }
 const graphKeyboardHelp = 'Arrow Right or Down: next visible upgrade. Arrow Left or Up: previous. Home or End: first or last. Enter or Space: select. Escape: deselect. Tab: leave upgrades for camera controls. Shift+Tab: return to the map shortcut. Upgrades are browsed in catalog order; tree positions stay fixed. Directional pan controls close during keyboard exploration.'
 
@@ -341,7 +343,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     recenterOnMapResize.current = true
     // Docked details resize the canvas. Wait for its new dimensions before centering.
     window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
-      if (request !== cameraRequest.current) return
+      if (request !== cameraRequest.current || !visibility(catalog, profileSession.getState().profile).ids.has(id)) return
       const map = mapElement.current?.getBoundingClientRect()
       const camera = mapElement.current?.querySelector('.camera-controls')?.getBoundingClientRect()
       const attribution = mapElement.current?.querySelector('.react-flow__attribution')?.getBoundingClientRect()
@@ -384,10 +386,22 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     keyboardSearchDetails.current = focusDetails
     if (focusDetails) setDetailFocusRevision((revision) => revision + 1)
     if (!selected) setDetailExpanded(false)
-    if (lastSelection.current !== id) trackEvent('upgrade_selected', { upgrade_id: id, source })
+    if (source !== 'reference' && lastSelection.current !== id) trackEvent('upgrade_selected', { upgrade_id: id, source })
     lastSelection.current = id
     setGraphFocus(id); setSelected(id); setSearchOpen(false); moveCamera(id)
   }
+  const referenceDelivery = useSyncExternalStore(subscribeUpgradeReference, getUpgradeReference, () => null)
+  const handledReference = useRef(0)
+  useEffect(() => {
+    if (!loaded || !referenceDelivery || referenceDelivery.sequence === handledReference.current) return
+    if (profileSession.getState().version !== sessionState.version) return
+    handledReference.current = referenceDelivery.sequence
+    const reference = referenceDelivery.reference
+    if (reference.kind === 'invalid') { setMessage('This upgrade reference is invalid. Your progress and spoiler setting were kept.'); return }
+    if (!visible.ids.has(reference.id)) { setMessage('The referenced upgrade is unavailable under your current spoiler setting, or is missing from this catalog. Your progress was kept.'); return }
+    center(reference.id, 'reference', true)
+    setMessage(reference.revision === catalog.revision ? 'Upgrade reference opened using your own recorded progress.' : 'This reference uses a different catalog revision. Upgrade facts follow the current catalog; your progress was kept.')
+  }, [referenceDelivery, loaded, sessionState.version, catalog, visible.ids])
   function focusGraphUpgrade(id: string) {
     leaveOverview()
     const node = Array.from(mapElement.current?.querySelectorAll<HTMLElement>('.react-flow__node') ?? []).find((element) => element.dataset.id === id)
@@ -734,7 +748,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
       </section>
       {detail && !overviewView && <aside ref={detailsElement} className={`details ${detailExpanded ? 'expanded' : ''}`} aria-label="Upgrade details"><div className="detail-heading"><div className="detail-identity"><Icon node={detail} /><div><h2 ref={detailHeading} tabIndex={-1}>{detail.title}</h2><small className="detail-cost">{cost(detail.cost)} SP</small></div></div><div className="detail-tools"><button className="detail-toggle" aria-expanded={detailExpanded} aria-controls="detail-content" onClick={() => { trackEvent('details_toggled', { expanded: !detailExpanded }); setDetailExpanded(!detailExpanded) }}>{detailExpanded ? 'Hide details' : 'Show details'}</button><button aria-label="Close upgrade details" onClick={clearSelection}>×</button></div></div><p className={`state-label ${state(detail)}`}>{state(detail) === 'pending' ? '◷ Owned · awaiting activation' : state(detail) === 'purchased' ? '✓ Purchased and active' : state(detail) === 'locked' ? '◇ Locked' : '+ Available'}</p><div className="detail-content" id="detail-content"><p className="detail-description">{detail.description}</p>{requirementReturn}<dl><dt>Purchase requirements</dt><dd><RequirementView requirement={detail.purchase} profile={profile} visible={visible} onReview={(route) => reviewRequirement(route, detail.id)} /></dd><dt>Reveal requirements</dt><dd><RequirementView requirement={detail.reveal} profile={profile} visible={visible} onReview={(route) => reviewRequirement(route, detail.id)} /></dd><dt>Ultra Ascension</dt><dd>{detail.retention === 'repeat' ? retainedOnReset.has(detail.id) ? 'Existing purchase · retained by Astral progress on reset' : profile.purchases[detail.id] ? 'Repeat purchase · clears on reset' : 'Repeat purchase · not currently owned' : 'Ownership retained'}{detail.activation === 'after-ultra-ascension' ? ' · Astral lock' : ''}</dd></dl>
         <div className="connection-list"><section aria-label="Connected from"><h3>Connected from</h3>{incoming.length ? incoming.map((node) => <button key={node.id} onClick={() => center(node.id, 'neighbor')}><Icon node={node} /><span>{node.title}</span><span aria-hidden="true">←</span></button>) : <p>No visible incoming connections.</p>}</section><section aria-label="Leads to"><h3>Leads to</h3>{outgoing.length ? outgoing.map((node) => <button key={node.id} onClick={() => center(node.id, 'neighbor')}><Icon node={node} /><span>{node.title}</span><span aria-hidden="true">→</span></button>) : <p>No visible outgoing connections.</p>}</section><small>Connections show paths. Purchase requirements above specify AND / OR and activation gates.</small></div>
-        <div className="source-notes"><h3>Sources</h3>{detail.sources.map((source, i) => <p key={i}>{source.url ? <a onClick={() => trackEvent('source_link_opened', { source: 'details', upgrade_id: detail.id, action: 'other' })} href={source.url} target="_blank" rel="noreferrer">{source.label}</a> : source.label}{source.evidence && <small>{source.evidence}</small>}</p>)}</div></div>
+        <UpgradeReference key={detail.id} catalog={catalog} upgrade={detail} /><div className="source-notes"><h3>Sources</h3>{detail.sources.map((source, i) => <p key={i}>{source.url ? <a onClick={() => trackEvent('source_link_opened', { source: 'details', upgrade_id: detail.id, action: 'other' })} href={source.url} target="_blank" rel="noreferrer">{source.label}</a> : source.label}{source.evidence && <small>{source.evidence}</small>}</p>)}</div></div>
         <div className="detail-actions">
         {profile.purchases[detail.id] ? <button className="danger full" disabled={saving} onClick={() => previewRemoval(detail.id)}>Remove purchase…</button> : <button className="primary full" disabled={saving} onClick={() => startPurchase(detail.id)}>Record purchase…</button>}
         {profile.purchases[detail.id] && detail.activation === 'after-ultra-ascension' && !profile.purchases[detail.id].active && <button className="full" disabled={saving} onClick={() => previewAstralActivation(detail.id)}>Already activated…</button>}

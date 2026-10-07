@@ -146,3 +146,6 @@ Keep motion brief and purposeful, such as centering a selected node. Respect red
 - Search and detail panels are usable on narrow screens and at increased text size.
 - A spoiler-hidden screen exposes only content allowed by the shared visibility rules.
 - Added fonts, icons and wiki text have recorded provenance and attribution.
+
+
+Public reference copying belongs to expanded upgrade details. Its optional manual text field and buttons wrap at enlarged browser fonts, preserve 44px controls and never add permanent map rails. Opening a reference focuses visible details; hidden or missing targets receive a fixed generic announcement without changing spoiler choice. Page title and preview metadata remain generic.
