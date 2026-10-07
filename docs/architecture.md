@@ -58,6 +58,13 @@ Analytics is an optional external service: script, network and API failures must
 
 ## Rendering and verification
 
+Recorded progress can reflow Detailed Layout. When the same visible selected ID
+receives new coordinates, the camera recenters using its current zoom and the
+shared canvas-fit safeguards. Unchanged selected coordinates and unselected
+views keep their viewport; Game Layout adds no progress-following camera move.
+View-only spoiler changes preserve the existing exact pan/zoom behavior.
+Automatic recentering does not emit a user selection or camera event.
+
 Toolbar and workspace border-box heights are observed so inspector limits, search results and compact status placement follow actual available space, including notices and rotation. Phone views retain a 230px map reservation normally and use 80px when the workspace is shorter than 400px. Short landscape windows at 480–639px place the inspector beside the map while retaining both toolbar rows. Inspector content scrolls within its bounds; selection fits the real canvas and can use the gap beside camera controls when there is insufficient room above them. Catalog coordinates, card sizes and ordinary camera scales are unchanged.
 
 React Flow renders fixed nodes with editing/deletion disabled. `map-layout.ts` supplies centers and visible connection paths for the Game and Web modes. Game uses 100×100 circular frames with 64×64 icons; its two-point routes follow native center vectors, clipped at the circle boundary rather than React Flow's cardinal handles. `NativeEdge` adds a dark under-stroke behind the native 12-unit line, with 14-unit selected paths. Web retains 132×122 text cards and pinned Dagre layered ranking and crossing minimization, with sorted stable IDs and edges for deterministic placement. Only the shared visibility result enters layout, bounds and edge routing; hidden topology cannot reserve empty spaces or affect the Web arrangement. Native coordinates and game predicates are unchanged. Layout is memoized by the visible graph and mode, rather than search or purchase-state rendering.
