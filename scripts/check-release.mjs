@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 import { recommendationDataErrors } from '../src/domain/recommendation-data-validation.ts'
 import { validateNoticeDistribution } from './runtime-notices.ts'
 import { validateReleaseArtifact } from './release-artifact.ts'
+import { validatePwaDistribution } from './pwa.ts'
 
 const catalogBytes = readFileSync('public/catalog.json')
 const catalog = JSON.parse(catalogBytes)
@@ -23,4 +24,5 @@ if (createHash('sha256').update(saveReceiptBytes).digest('hex') !== 'd2746dfe356
   || JSON.stringify(saveReceipt.milestoneMappings.map((item) => item.id).sort()) !== JSON.stringify(catalog.milestones.map((item) => item.id).sort())) throw new Error('Steam import evidence does not match the reviewed catalog and receipt. Re-review native save semantics before supporting a changed game version.')
 validateReleaseArtifact(process.cwd(), 'dist')
 validateNoticeDistribution(process.cwd(), 'dist')
+validatePwaDistribution(process.cwd(), 'dist')
 console.log(`Release gate passed: built application entries and CSS assets, ${receipt.nativeNodeCount} reviewed upgrades, ${receipt.nativeEdgeCount} native connections, ${receipt.spriteCount} receipt-matched icons, ${priorities.rows.length} reviewed wiki priorities and complete runtime notices; static dist contains no private game inputs.`)

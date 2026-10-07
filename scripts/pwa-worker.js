@@ -1,0 +1,73 @@
+// The build prepends the immutable RELEASE inventory. Cache only those public bytes.
+const cacheName = 'ascension-map-public-' + RELEASE.version;
+const allowed = new Map(RELEASE.assets.map((asset) => [new URL(asset.file, self.registration.scope).href, asset]));
+const startURL = new URL('index.html', self.registration.scope).href;
+const recoveryHTML = `<!doctype html><html lang="en"><meta name="viewport" content="width=device-width"><title>Map files unavailable</title><body><h1>Reconnect to reopen the map</h1><p>The saved app files are unavailable. Connect to the internet and close other map windows before repairing. Browser-stored progress is separate and will be kept.</p><button id="repair">Repair app files and reload</button><p id="note" role="status"></p><script>
+document.getElementById('repair').onclick=async()=>{
+ const note=document.getElementById('note');
+ if(!navigator.onLine){note.textContent='Connect to the internet before repairing.';return;}
+ try{
+  const registration=await navigator.serviceWorker.getRegistration();
+  if(registration?.active){
+   const allowed=await new Promise((resolve,reject)=>{const channel=new MessageChannel();const timer=setTimeout(()=>reject(new Error()),8000);channel.port1.onmessage=(event)=>{clearTimeout(timer);channel.port1.close();resolve(event.data.accepted)};registration.active.postMessage({type:'CHECK_WINDOWS'},[channel.port2]);});
+   if(!allowed){note.textContent='Close other Ascension Map windows, then try again.';return;}
+   if(!await registration.unregister())throw new Error();
+  }
+  location.reload();
+ }catch{note.textContent='Repair could not start. Reconnect and try again. Do not clear browser data if you want to keep saved progress.';}
+};
+</script></body></html>`;
+async function sha256(bytes) {
+  return [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+self.addEventListener('install', (event) => {
+  event.waitUntil((async () => {
+    try {
+      const cache = await caches.open(cacheName);
+      // A failed or racing deployment cannot publish a partly populated cache.
+      for (const [url, asset] of allowed) {
+        const response = await fetch(url, { cache: 'no-store', credentials: 'omit', redirect: 'error' });
+        if (!response.ok || response.type === 'opaque' || await sha256(await response.clone().arrayBuffer()) !== asset.sha256) throw new Error('Incomplete release');
+        await cache.put(url, response);
+      }
+    } catch (error) { await caches.delete(cacheName); throw error; }
+  })());
+});
+self.addEventListener('activate', (event) => {
+  // Normal activation waits for old windows to close. Explicit activation below
+  // requires the requesting window to be the only one, then it reloads itself.
+  event.waitUntil((async () => {
+    for (const name of await caches.keys()) if (name.startsWith('ascension-map-public-') && name !== cacheName) await caches.delete(name);
+  })());
+});
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'CHECK_READY') event.waitUntil((async () => {
+    const cache = await caches.open(cacheName);
+    const keys = await cache.keys();
+    event.ports[0]?.postMessage({ ready: keys.length === allowed.size, version: RELEASE.version });
+  })());
+  if (['ACTIVATE_UPDATE', 'CHECK_WINDOWS'].includes(event.data?.type)) event.waitUntil((async () => {
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const appWindows = windows.filter((client) => new URL(client.url).origin === self.location.origin && new URL(client.url).pathname.startsWith(new URL(self.registration.scope).pathname));
+    if (!event.source || appWindows.some((client) => client.id !== event.source.id)) { event.ports[0]?.postMessage({ accepted: false }); return; }
+    event.ports[0]?.postMessage({ accepted: true });
+    if (event.data.type === 'ACTIVATE_UPDATE') await self.skipWaiting();
+  })());
+});
+self.addEventListener('fetch', (event) => {
+  const request = event.request;
+  const url = new URL(request.url);
+  if (request.method !== 'GET' || url.origin !== self.location.origin) return;
+  const navigation = request.mode === 'navigate' && [new URL(self.registration.scope).pathname, new URL(startURL).pathname].includes(url.pathname);
+  // Only navigation to the map root may ignore a query. Never store that URL,
+  // fragments, file/Blob imports, transfer data, external analytics or POSTs.
+  const key = navigation ? startURL : request.url;
+  if (!allowed.has(key)) return;
+  event.respondWith((async () => {
+    const cached = await (await caches.open(cacheName)).match(key);
+    if (cached) return cached;
+    // Do not fetch newer bytes into an older running release after eviction.
+    if (navigation) return new Response(recoveryHTML, { status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+    return new Response('This app file is unavailable. Reconnect and reopen the map.', { status: 503 });
+  })());
+});

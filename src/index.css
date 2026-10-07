@@ -48,6 +48,10 @@ small { display: block; font-size: .8125rem; color: var(--muted); line-height: 1
 ::selection { color: #fff6dc; background: #78326a; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .upgrade-changes li { overflow-wrap: anywhere; }
+.install-guidance { padding-left: 1.3em; line-height: 1.6; }
+.install-guidance li { margin-bottom: 12px; }
+.install-panel p, .install-guidance li { overflow-wrap: anywhere; }
+.offline-status { color: var(--bright-gold); }
 
 .atlas { height: 100dvh; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .toolbar {

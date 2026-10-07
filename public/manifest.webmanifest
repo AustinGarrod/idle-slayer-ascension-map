@@ -1,0 +1,16 @@
+{
+  "id": "/idle-slayer-ascension-map/",
+  "name": "Idle Slayer Ascension Map",
+  "short_name": "Ascension Map",
+  "description": "An unofficial companion for the Idle Slayer Ascension tree, with local progress.",
+  "start_url": "/idle-slayer-ascension-map/",
+  "scope": "/idle-slayer-ascension-map/",
+  "display": "standalone",
+  "background_color": "#15120f",
+  "theme_color": "#231e19",
+  "icons": [
+    { "src": "pwa/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "pwa/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "pwa/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

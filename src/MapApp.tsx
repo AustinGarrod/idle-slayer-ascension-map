@@ -27,12 +27,14 @@ import { PriorAscensionsForm } from './PriorAscensionsForm'
 import { getTrackingStatus, setTrackingPreference, trackEvent, updateAnalyticsContext } from './analytics'
 import type { AnalyticsOperation } from './analytics'
 import { PrivacyPanel, trackingDisclosure } from './PrivacyPanel'
+import { InstallPanel } from './InstallPanel'
+import { reloadForUpdate, repairOffline, usePwaStatus } from './pwa'
 
 type UpgradeNode = Node<{ upgrade: Upgrade; state: string }, 'upgrade'>
 type Preview = { operation: AnalyticsOperation | 'prior_ascensions'; title: string; text: string; profile: Profile; changes?: string[]; groups?: { label: string; ids: string[] }[]; replaceStorage?: boolean; upgradeId?: string; milestoneId?: string; sessionVersion?: number; resolution?: 'saved' | 'local' }
-type Menu = 'options' | 'progress' | 'milestones' | 'about' | 'recommendations' | 'game-import' | 'privacy' | null
+type Menu = 'options' | 'progress' | 'milestones' | 'about' | 'recommendations' | 'game-import' | 'privacy' | 'install' | null
 type SelectionSource = 'map' | 'search' | 'neighbor' | 'recommendation' | 'start' | 'keyboard'
-const menuTitles: Record<Exclude<Menu, null>, string> = { options: 'Map options', progress: 'Your progress', milestones: 'Milestones', about: 'About this map', recommendations: 'Suggested next upgrade', 'game-import': 'Import game progress', privacy: 'Privacy & tracking' }
+const menuTitles: Record<Exclude<Menu, null>, string> = { options: 'Map options', progress: 'Your progress', milestones: 'Milestones', about: 'About this map', recommendations: 'Suggested next upgrade', 'game-import': 'Import game progress', privacy: 'Privacy & tracking', install: 'Install & offline' }
 const DialogFeedbackContext = createContext<{ title: string | null; announcement: string; sequence: number; content: ReactNode; clear: () => void }>({ title: null, announcement: '', sequence: 0, content: null, clear: () => {} })
 
 function Icon({ node }: { node: Upgrade }) {
@@ -114,6 +116,9 @@ function Atlas({ catalog }: { catalog: Catalog }) {
   const [navigationOpen, setNavigationOpen] = useState(false)
   const [preview, setPreviewState] = useState<Preview | null>(null)
   const [trackingReload, setTrackingReload] = useState<boolean | null>(null)
+  const [appReload, setAppReload] = useState<'update' | 'repair' | null>(null)
+  const appReloadRequest = useRef(0)
+  const pwaStatus = usePwaStatus()
   const [purchaseTarget, setPurchaseTarget] = useState<string | null>(null)
   const purchaseSource = useRef<'details' | 'recommendation'>('details')
   const purchaseEventKey = useRef('')
@@ -192,6 +197,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     ?? (purchasePlan && purchaseTarget ? purchasePlan.kind === 'choice' ? 'Choose a prerequisite path' : purchasePlan.kind === 'blocked' ? 'Explicit progress required' : 'Record purchase?' : null)
     ?? (conflictReview ? 'Review progress conflict' : null)
     ?? (trackingReload !== null ? 'Reload with unsaved progress?' : null)
+    ?? (appReload !== null ? 'Reload the app?' : null)
     ?? (menu ? menuTitles[menu] : null)
   const recommendations = useMemo(() => recommendUpgrades(catalog, profile, wikiPriorities), [catalog, profile])
   const progressStatus = {
@@ -238,6 +244,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     if (menu === 'progress') restoreRequest.current++
     if (next) setMessage('')
     if (menu === 'privacy' && next !== 'privacy') trackingChangeRequest.current++
+    if (menu === 'install' && next !== 'install') appReloadRequest.current++
     if (menu) trackEvent('panel_closed', { panel: menu })
     if (next) trackEvent('panel_opened', { panel: next })
     if (next === 'recommendations') trackEvent('recommendations_viewed', { reason: recommendations.status === 'fallback' ? 'catalog-fallback' : recommendations.status })
@@ -307,7 +314,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
         externalVersion = state.externalVersion
         gameImportRequest.current++; restoreRequest.current++; trackingChangeRequest.current++
         setPreviewState(null); setPurchaseTarget(null); setChoices({}); setGameImport(null); setGameImportLoading(false); setGameImportError('')
-        setConflictReview(null); setTrackingReload(null); setMenuState(null)
+        setConflictReview(null); setTrackingReload(null); setAppReload(null); appReloadRequest.current++; setMenuState(null)
         setMessage(state.conflict ? 'Saved progress changed. This session was kept for recovery.' : 'Progress updated from another tab. Previous previews and undo were cleared.')
       }
     })
@@ -320,14 +327,14 @@ function Atlas({ catalog }: { catalog: Catalog }) {
       if (event.storageArea === local && (event.key === null || event.key === PROFILE_STORAGE_KEY)) profileSession.refreshExternal()
     }
     window.addEventListener('storage', storageChanged)
-    return () => { window.removeEventListener('storage', storageChanged); unsubscribe(); gameImportRequest.current++; restoreRequest.current++; trackingChangeRequest.current++; profileSession.cancelPending() }
+    return () => { window.removeEventListener('storage', storageChanged); unsubscribe(); gameImportRequest.current++; restoreRequest.current++; trackingChangeRequest.current++; appReloadRequest.current++; profileSession.cancelPending() }
   }, [profileSession])
   function reviewConflict() {
     setMessage('')
     const current = profileSession.getState()
     if (current.conflict) {
       gameImportRequest.current++; restoreRequest.current++; trackingChangeRequest.current++
-      setMenu(null); setPreviewState(null); setPurchaseTarget(null); setChoices({}); setTrackingReload(null)
+      setMenu(null); setPreviewState(null); setPurchaseTarget(null); setChoices({}); setTrackingReload(null); setAppReload(null)
       setGameImport(null); setGameImportLoading(false); setGameImportError('')
       setConflictReview({ version: current.version, snapshot: current.conflict })
     }
@@ -432,6 +439,24 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     if (request !== trackingChangeRequest.current) return
     if (saved) finishTrackingChange(enabled)
     else { setMenu(null); setTrackingReload(enabled) }
+  }
+  async function requestAppReload(action: 'update' | 'repair') {
+    // Only the install panel exposes this action. Never interrupt an open
+    // purchase/import/restore/recovery preview or a pending asynchronous read.
+    if (menu !== 'install' || preview || purchaseTarget || gameImportLoading || conflictReview) return
+    const request = ++appReloadRequest.current
+    const current = profileSession.getState()
+    if (current.pending) { profileSession.cancelPending(); setAppReload(action); return }
+    const saved = !current.dirty || await persist(current.profile)
+    if (request !== appReloadRequest.current || profileSession.getState().profile !== current.profile) return
+    // Confirmation also explains session-only Undo loss when saving succeeds.
+    setAppReload(action)
+    if (!saved) setMessage('Progress could not be saved. Export a backup before reloading, or cancel to keep this session.')
+  }
+  async function finishAppReload(action: 'update' | 'repair') {
+    profileSession.cancelPending()
+    const accepted = await (action === 'update' ? reloadForUpdate() : repairOffline())
+    if (!accepted) setAppReload(null)
   }
   const recenterCamera = useEffectEvent(() => {
     if (loaded) moveCamera(detail?.id ?? catalog.startId, detail ? selectionZoom : startZoom)
@@ -640,13 +665,13 @@ function Atlas({ catalog }: { catalog: Catalog }) {
         {profile.purchases[detail.id] && detail.activation === 'after-ultra-ascension' && !profile.purchases[detail.id].active && <button className="full" disabled={saving} onClick={() => previewAstralActivation(detail.id)}>Already activated…</button>}
         </div></aside>}
     </div>
-    <footer><span>Unofficial companion · {progressStatus}</span><button disabled={saving || !history.length} onClick={undo}>Undo</button><button onClick={() => setMenu('about')}>About & sources</button><button onClick={() => setMenu('privacy')}>Privacy & tracking</button></footer>
+    <footer><span>Unofficial companion · {progressStatus}</span><button disabled={saving || !history.length} onClick={undo}>Undo</button><button onClick={() => setMenu('about')}>About & sources</button><button onClick={() => setMenu('privacy')}>Privacy & tracking</button><button aria-label="Install & offline" onClick={() => setMenu('install')}>{pwaStatus.update ? 'Update ready' : 'Install & offline'}</button></footer>
     {!activeDialogTitle && <p className="sr-only" role="status">{message === storageError ? '' : message}</p>}{!activeDialogTitle && message !== storageError && message && toastVisible && <div className="toast" onClick={() => setMessage('')}>{message}<button aria-label="Dismiss status" onClick={() => setMessage('')}>×</button></div>}
     <input className="sr-only telemetry-private rr-block" tabIndex={-1} aria-label="Map progress JSON backup" ref={fileInput} type="file" accept="application/json,.json" onChange={(event) => { const file = event.target.files?.[0]; if (file) void restore(file); else restoreRequest.current++; event.target.value = '' }} />
     <input className="sr-only telemetry-private rr-block" tabIndex={-1} aria-label="Idle Slayer game save" ref={gameFileInput} type="file" accept=".sav" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void readGameSave(file) }} />
     {menu === 'game-import' && <Dialog title="Import game progress" close={closeGameImport}>{gameImport ? <GameSaveImportPanel catalog={catalog} currentProfile={gameImport.original} preview={gameImport.result} onApply={applyGameImport} onCancel={closeGameImport} /> : <div className="game-save-picker">{gameImportLoading ? <p role="status">Reading game save…</p> : <><p className="telemetry-private rr-block" role="alert">{gameImportError}</p><p>Choose <b>savedata.sav</b> or <b>backup.sav</b> from Idle Slayer 7.2.0 on Steam. The selected file is read locally in your browser.</p><p className="game-save-path">%USERPROFILE%\AppData\LocalLow\Pablo Leban\Idle Slayer\</p></>}<div className="dialog-actions">{!gameImportLoading && <button className="primary" onClick={chooseGameSave}>Choose game save…</button>}<button onClick={closeGameImport}>Cancel</button></div></div>}</Dialog>}
     {menu === 'recommendations' && <Dialog title="Suggested next upgrade" close={() => setMenu(null)}><RecommendationPanel catalog={catalog} recommendations={recommendations} onSelect={(id) => selectSuggestion(id)} onPurchase={(id) => selectSuggestion(id, true)} /></Dialog>}
-    {menu === 'options' && <Dialog title="Map options" close={() => setMenu(null)}><div className="map-options"><p><b>{visible.owned} / {visible.total}</b> visible upgrades owned · Epoch {profile.epoch}<br />{profile.showSpoilers ? 'Spoilers shown' : 'Spoilers hidden'}</p><label className="spoiler-control"><input type="checkbox" disabled={saving} checked={profile.showSpoilers} onChange={(event) => toggleSpoilers(event.target.checked)} />Show spoilers</label><button onClick={() => setMenu('milestones')}>Milestones</button><button onClick={() => setMenu('progress')}>Progress</button><button disabled={saving || !history.length} onClick={() => { undo(); setMenu(null) }}>Undo</button><button onClick={() => setMenu('about')}>About & sources</button><button onClick={() => setMenu('privacy')}>Privacy & tracking</button><small>Unofficial companion · {progressStatus}</small></div></Dialog>}
+    {menu === 'options' && <Dialog title="Map options" close={() => setMenu(null)}><div className="map-options"><p><b>{visible.owned} / {visible.total}</b> visible upgrades owned · Epoch {profile.epoch}<br />{profile.showSpoilers ? 'Spoilers shown' : 'Spoilers hidden'}</p><label className="spoiler-control"><input type="checkbox" disabled={saving} checked={profile.showSpoilers} onChange={(event) => toggleSpoilers(event.target.checked)} />Show spoilers</label><button onClick={() => setMenu('milestones')}>Milestones</button><button onClick={() => setMenu('progress')}>Progress</button><button disabled={saving || !history.length} onClick={() => { undo(); setMenu(null) }}>Undo</button><button onClick={() => setMenu('about')}>About & sources</button><button aria-label="Install & offline" onClick={() => setMenu('install')}>{pwaStatus.update ? 'Install & offline · Update ready' : 'Install & offline'}</button><button onClick={() => setMenu('privacy')}>Privacy & tracking</button><small>Unofficial companion · {progressStatus}</small></div></Dialog>}
     {menu === 'milestones' && <Dialog title="Milestones" close={() => setMenu(null)}><p>Record the required item received or purchased in the game.</p>{visible.milestones.map((item) => <label className="milestone" key={item.id}><input type="checkbox" disabled={saving} checked={profile.milestones[item.id] === true} onChange={(event) => { if (event.target.checked) { if (change({ ...profile, milestones: { ...profile.milestones, [item.id]: true } }, 'Milestone recorded.')) trackEvent('milestone_changed', { milestone_id: item.id, recorded: true }) } else { setMenu(null); previewRemoval(item.id, true) } }} /><span>{item.title}<small>{item.description}</small></span></label>)}{!visible.milestones.length && <p>No milestone controls are currently revealed.</p>}</Dialog>}
     {menu === 'progress' && <Dialog title="Your progress" close={() => setMenu(null)}>
       <p>One local profile. Keep a backup when changing browsers or devices.</p>
@@ -661,8 +686,14 @@ function Atlas({ catalog }: { catalog: Catalog }) {
         <button className="danger" onClick={() => { setMenu(null); setPreview({ operation: 'clear', title: 'Clear all progress?', text: 'Clear every purchase, milestone and unknown ID, and return to epoch 0 with spoilers hidden. You can undo this change in this session.', profile: emptyProfile(catalog.revision), replaceStorage: true }) }}>Clear all progress…</button>
       </div>
     </Dialog>}
-    {menu === 'about' && <Dialog title="About this map" close={() => setMenu(null)}><p>Unofficial Idle Slayer companion. Game assets belong to their respective rights holders. Application code and asset attribution are documented separately.</p><p>Game {catalog.gameVersion} · Steam build {catalog.steamBuild}<br />Catalog {catalog.revision}</p><p>All map data and icons are bundled locally. No account or application backend is required.</p><p className="progress-save-status">{progressStatus}</p><p>{trackingDisclosure}</p><button onClick={() => setMenu('privacy')}>Privacy & tracking</button><a onClick={() => trackEvent('source_link_opened', { source: 'about', action: 'github' })} href="https://github.com/AustinGarrod/idle-slayer-ascension-map">Source and extraction documentation</a><a className="software-license-link" target="_blank" rel="noreferrer" onClick={() => trackEvent('source_link_opened', { source: 'about', action: 'license' })} href={`${import.meta.env.BASE_URL}licenses/index.html`}>Bundled software licenses</a></Dialog>}
+    {menu === 'about' && <Dialog title="About this map" close={() => setMenu(null)}><p>Unofficial Idle Slayer companion. Game assets belong to their respective rights holders. Application code and asset attribution are documented separately.</p><p>Game {catalog.gameVersion} · Steam build {catalog.steamBuild}<br />Catalog {catalog.revision}</p><p>All map data and icons are bundled locally. No account or application backend is required.</p><p className="progress-save-status">{progressStatus}</p><p>{trackingDisclosure}</p><button onClick={() => setMenu('install')}>Install & offline</button><button onClick={() => setMenu('privacy')}>Privacy & tracking</button><a onClick={() => trackEvent('source_link_opened', { source: 'about', action: 'github' })} href="https://github.com/AustinGarrod/idle-slayer-ascension-map">Source and extraction documentation</a><a className="software-license-link" target="_blank" rel="noreferrer" onClick={() => trackEvent('source_link_opened', { source: 'about', action: 'license' })} href={`${import.meta.env.BASE_URL}licenses/index.html`}>Bundled software licenses</a></Dialog>}
     {menu === 'privacy' && <Dialog title="Privacy & tracking" close={() => setMenu(null)}><PrivacyPanel status={getTrackingStatus()} onChange={requestTrackingChange} progressStatus={progressStatus} /></Dialog>}
+    {menu === 'install' && appReload === null && <Dialog title="Install & offline" close={() => setMenu(null)}><InstallPanel onReload={() => { void requestAppReload('update') }} onRepair={() => { void requestAppReload('repair') }} progressStatus={progressStatus} /></Dialog>}
+    {appReload !== null && <Dialog title="Reload the app?" close={() => setAppReload(null)}>
+      <p>{appReload === 'repair' ? 'Reconnect and download the app again.' : 'Activate the downloaded update and reload this app.'} Close other map tabs and app windows first. Session-only Undo ends on reload.</p>
+      <div className="telemetry-private rr-block"><p>{progressStatus}</p><p>{profileSession.getState().dirty ? 'This session has unsaved progress. Export a backup before reloading. Cancel keeps this session available.' : 'Saved progress, layout and tracking preferences will be kept. Export a backup first if you want an extra recovery copy.'}</p></div>
+      <div className="dialog-actions"><button className="primary" onClick={() => { if (backup()) void finishAppReload(appReload) }}>Export backup and reload</button>{!profileSession.getState().dirty ? <button onClick={() => { void finishAppReload(appReload) }}>Reload with saved progress</button> : <button className="danger" onClick={() => { void finishAppReload(appReload) }}>Reload without backup</button>}<button onClick={() => setAppReload(null)}>Cancel</button></div>
+    </Dialog>}
     {trackingReload !== null && <Dialog title="Reload with unsaved progress?" close={() => { setTrackingReload(null); setMenu('privacy') }}>
       <p>Current progress could not be saved. Reloading may lose these changes and clears session-only undo. Export a backup first to keep this progress.</p>
       <p>Recording stops when you confirm the tracking change and reload. Cancelling keeps this session and its current tracking choice.</p>

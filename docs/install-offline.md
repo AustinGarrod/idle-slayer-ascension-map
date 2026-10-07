@@ -1,0 +1,59 @@
+# Installation and offline use
+
+The static Ascension Map can be installed from a supporting browser. **Install & offline** is available in the desktop footer, **Map options**, and **About & sources**. It offers **Install Ascension Map** only after the browser supplies an installation event. Dismissed prompts fall back to instructions; an installed standalone window shows its installed state. A browser tab cannot reliably detect a separate installation, so browser-menu guidance remains conditional.
+
+| Platform | Installation route |
+| --- | --- |
+| Android | In a supporting browser such as Chrome, choose **Install app** or **Add to Home screen** from its menu. Follow the browser's confirmation and launch the resulting home-screen icon. |
+| iPhone / iPad | Open the map in Safari. Choose **Share → Add to Home Screen**; enable **Open as Web App** if offered. Launch that icon. On iPad, Share may be in the toolbar. |
+| Desktop | Supporting Chrome/Edge browsers offer an address-bar install icon or an install menu command. Supported macOS Safari versions offer **File → Add to Dock**. Other browsers may provide a bookmark instead. |
+
+Menu wording, installation eligibility and storage behavior depend on the browser and OS. Installation requires a secure context (HTTPS, or localhost for controlled local checks). The manifest identifies and launches `/idle-slayer-ascension-map/`, uses standalone display, and scopes the worker to that same Pages path. It contains no progress, transfer or tracking data. Its original gold/magenta tree mark has separate 192/512px regular and 512px maskable assets; the maskable design places meaningful artwork inside the central 80%-diameter safe circle. A 180px Apple touch icon is included. `scripts/generate-app-icons.mjs` renders the original vector drawing using the already-reviewed Playwright development dependency; inspect regenerated icons before committing.
+
+The installation routes follow the platform guidance in [Chrome's web-app help](https://support.google.com/chrome/answer/9658361?co=GENIE.Platform%3DAndroid), [Apple's iPhone guide](https://support.apple.com/guide/iphone/open-as-web-app-iphea86e5236/ios), and [Apple's Safari web-app guide](https://support.apple.com/104996). Browser install-event handling follows [MDN's installation documentation](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/How_to/Trigger_install_prompt).
+
+## Download and reopen
+
+Keep the initial visit online until **Install & offline** says **Public app files are saved for offline reopening**. A successful catalog render alone does not establish offline readiness. The worker verifies a complete release before installation succeeds: application HTML, compiled code/styles, the reviewed catalog, all 288 icons, local fonts, installation icons/manifest, and bundled software licenses. Once ready, close/reopen or reload the map to use the cached release. The map, search, recommendations, purchases, milestones, reset previews, undo, JSON backups and supported user-selected native-save import run locally. External sources need internet.
+
+A first-ever visit cannot work offline; the browser can display its own network error before any app code exists. If code loads but the catalog does not, the loading screen explains reconnect/retry and offers offline recovery without replacing the saved profile. Blocked/full storage or a failed/incomplete download keeps the online app usable and reports that offline files are not ready. Browser eviction can remove cached files later: a missing app shell shows reconnect/repair instructions. Reconnect, close other map windows, then use **Repair app files and reload**; within the normal app use **Repair offline files and reload…**. Repair unregisters the app worker and downloads again, retaining profile/layout/tracking storage. It does not clear browser data.
+
+## Progress and storage limits
+
+The existing version 1 profile and storage key remain unchanged. A browser tab and installed app may share storage in some browsers; do not assume they do everywhere. Apple home-screen or Dock apps, separate browsers, profiles and devices may have different storage contexts. Check the installed app's progress and use the existing JSON export/restore route when moving it. Installation works independently of any device-transfer feature.
+
+Export regular backups. Local storage is not cloud backup; browser cleanup, private-mode restrictions, device loss, cache/storage eviction or uninstalling may remove app files or progress. Uninstall behavior differs by platform: removing an icon can leave browser data, while an uninstall that also clears site data can delete progress. Export before uninstalling or clearing data. Session-only undo and unconfirmed previews never survive a reload. Read/write failures retain an exportable memory session and expose the existing retry/conflict recovery controls.
+
+## Complete releases and deliberate updates
+
+The build writes `offline-assets.json`, an explicit public-file inventory with SHA-256 hashes, and `sw.js`. Its release identity binds every listed byte and worker source. Installation fetches with cache bypass and verifies every response; missing or mismatched bytes reject the installation and delete the incomplete release cache. This prevents a racing deployment from combining catalog/code/assets from different releases. Running releases serve their own verified cache without opportunistic network refresh. New bytes are not substituted after eviction; recovery downloads a complete release instead.
+
+A replacement worker waits while a map window is open. The footer/Map options expose **Update ready**, and **Install & offline** offers **Update app and reload…**. **Check update / retry download** manually checks the worker; reconnecting also checks. There is no scheduled polling or forced reload. Native import, restore, purchase, OR-choice and recovery previews are not interrupted. Leave or complete them before opening installation controls.
+
+Reload first attempts the existing coordinated profile save. A confirmation explains loss of session-only undo and shows current save status. Unsaved/failed/pending progress offers **Export backup and reload**, **Reload without backup**, or **Cancel**; no action is selected automatically. Saved progress offers backup export or **Reload with saved progress**. Close other map tabs/app windows first, exporting their unsaved progress if needed. The worker rejects explicit activation while another app window exists, avoiding an old document fetching a new release. On consent, only the requesting window reloads. Normal worker activation can also occur once every old window has closed. Old public release caches are then removed; profile, purchases, pending Astrals, milestones, unknown IDs, layout and tracking preferences are separate and remain intact.
+
+If an update fails, keep using the previous complete cache and retry online. If files were evicted, use repair and restore a JSON backup if progress storage was independently lost. Do not clear all browser site data as an app-file recovery step.
+
+## Privacy
+
+The worker accepts only GET requests for the exact generated public inventory and root navigation. It never caches arbitrary URLs, query-bearing asset requests, native saves, file/Blob inputs, backups, transfer payloads, external analytics responses or POSTs. Root navigation uses the canonical cached shell without storing the query/hash. No background sync, telemetry cache or upload queue is added.
+
+When the browser signals offline, the analytics boundary discards its bounded startup queue, suspends that document and denies the recorder's public session-cache accessor. Buffered offline replay/events cannot resume uploading when connectivity returns. An offline-started document also stays untracked until a fresh online reload. The existing tracking preference, disabled `#analytics=off` URL, Do Not Track and Global Privacy Control continue to apply on that reload. Source [analytics.md](analytics.md) defines the remaining behavior.
+
+## Local verification and platform evidence
+
+From Windows PowerShell with Node.js 24 and pinned Yarn 4.13.0:
+
+```powershell
+yarn install --immutable
+yarn typecheck
+yarn test
+yarn build
+yarn check:release
+yarn playwright install chromium
+yarn test:e2e
+```
+
+Without a global Yarn launcher, use `node .yarn/releases/yarn-4.13.0.cjs <command>`. Existing browser tests block workers for isolated request interception; `tests/browser/pwa.spec.ts` explicitly enables workers and uses only local production builds. It exercises manifest/public cache coverage, offline reload/new-window progress and licenses, prompt/installed-state presentation, offline-download failure, evicted-cache repair, and two complete local releases with controlled activation, another-window rejection, retained Astral/unknown state/preferences and failed-saving backup/cancel paths. Unit tests verify cache integrity/privacy boundaries and offline telemetry suppression. The build/release gate verifies manifest scope, app icon dimensions/source bytes, public inventory and exact worker output alongside the existing catalog/notices checks. No runtime dependency was added.
+
+Browser emulation and synthetic installation events do not prove actual Android, iOS/iPadOS or desktop installation/launch behavior. Record real platform, browser version, install route, standalone launch, offline reopen and progress persistence separately. iPhone/iPad and macOS Safari flows require those actual platforms. Never run automated checks against production; authorized production confirmation remains deliberate manual inspection.

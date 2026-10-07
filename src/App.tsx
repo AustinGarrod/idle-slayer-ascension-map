@@ -4,6 +4,8 @@ import MapApp from './MapApp'
 import { catalogErrors } from './domain/catalog'
 import { ANALYTICS_PREFERENCE_KEY, getTrackingStatus, setTrackingPreference, trackEvent } from './analytics'
 import { PrivacyPanel, trackingDisclosure } from './PrivacyPanel'
+import { InstallPanel } from './InstallPanel'
+import { repairOffline } from './pwa'
 
 export default function App() {
   const [catalog, setCatalog] = useState<Catalog | null>(null)
@@ -30,7 +32,9 @@ export default function App() {
   return <main className="loading">
     <h1>Ascension Map</h1>
     <p role="status">{loadFailed ? 'The verified game catalog could not be loaded. Please try again.' : 'Loading the native Ascension tree…'}</p>
+    {loadFailed && <p>Reconnect to download the map, or repair missing offline files below. Your saved profile has not been replaced.</p>}
     {loadFailed && <button onClick={() => window.location.reload()}>Try again</button>}
+    {loadFailed && <details className="startup-privacy"><summary>Install & offline recovery</summary><InstallPanel onRepair={() => { void repairOffline() }} /></details>}
     <p className="startup-disclosure">{trackingDisclosure}</p>
     <details className="startup-privacy" onToggle={(event) => { if (event.currentTarget.open) setTrackingStatus(getTrackingStatus()) }}>
       <summary>Privacy & tracking</summary>

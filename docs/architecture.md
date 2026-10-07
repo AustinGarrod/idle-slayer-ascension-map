@@ -72,6 +72,10 @@ Recordings can capture the rendered visible map, upgrade states and ordinary int
 
 Analytics is an optional external service: script, network and API failures must leave every map feature usable. Local/CI browser checks intercept analytics requests and validate payloads and exclusions without contacting production. [analytics.md](analytics.md) is the operator guide and event/report contract.
 
+## Installation and offline releases
+
+The PWA retains the same static architecture and existing profile, layout and analytics storage boundaries. A build-generated SHA-256 inventory precaches only reviewed public app files as one complete release. Missing/mismatched downloads reject installation. A waiting worker activates after all old windows close, or on explicit consent from the sole app window followed by its reload. Save failure, pending progress and previews require the existing recovery/confirmation decisions; no automatic reload occurs. Cache loss has a reconnect/repair path that does not clear progress. Analytics suspends offline documents and drops queued events/replay access until a fresh online reload. [install-offline.md](install-offline.md) defines platform guidance, coherent updates, privacy and verification.
+
 ## Rendering and verification
 
 Recorded progress can reflow Detailed Layout. When the same visible selected ID
