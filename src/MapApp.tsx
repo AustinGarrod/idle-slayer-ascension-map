@@ -43,6 +43,8 @@ import { SPCost, ExactCostDetails } from './SPCost'
 import { presentCost } from './domain/cost-presentation'
 import { useCheckpointSession } from './useCheckpointSession'
 import { CheckpointPanel } from './CheckpointPanel'
+import { useComparisonSession } from './useComparisonSession'
+import { SavedComparisonPanel } from './SavedComparisonPanel'
 import { GoalsPanel } from './GoalsPanel'
 import { useGoals } from './useGoals'
 
@@ -86,6 +88,9 @@ function Atlas({ catalog }: { catalog: Catalog }) {
   const [menu, setMenuState] = useState<Menu>(null)
   const checkpoints = useCheckpointSession(catalog.revision)
   const [checkpointsOpen, setCheckpointsOpen] = useState(false)
+  const comparison = useComparisonSession()
+  const [comparisonOpen, setComparisonOpen] = useState(false)
+  const [comparisonInitialId, setComparisonInitialId] = useState<string | undefined>()
   const [gameImport, setGameImport] = useState<{ result: GameSaveImportPreview; original: Profile } | null>(null)
   const [gameImportError, setGameImportError] = useState('')
   const [gameImportLoading, setGameImportLoading] = useState(false)
@@ -197,6 +202,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     ?? (conflictReview ? 'Review progress conflict' : null)
     ?? (trackingReload !== null ? 'Reload with unsaved progress?' : null)
     ?? (checkpointsOpen ? 'Progress checkpoints' : null)
+    ?? (comparisonOpen ? 'Saved upgrade comparison' : null)
     ?? (menu ? menuTitles[menu] : null)
   const recommendations = useMemo(() => recommendUpgrades(catalog, profile, wikiPriorities), [catalog, profile])
   const blockedRecommendation = recommendations.status === 'blocked' ? requirementReviewTarget(visible, profile, selected) : undefined
@@ -236,7 +242,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     })
   }, [purchasePlan, purchaseTarget])
   function setMenu(next: Menu, recommendationStatus = recommendations.status) {
-    if (next) setCheckpointsOpen(false)
+    setCheckpointsOpen(false); setComparisonOpen(false)
     if (next === menu) return
     if (menu === 'progress') restoreRequest.current++
     if (next) setMessage('')
@@ -247,9 +253,12 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     setMenuState(next)
   }
   function openCheckpoints() { setMenu(null); setSearchOpen(false); setCheckpointsOpen(true) }
+  function openComparison(id?: string) {
+    setMenu(null); setSearchOpen(false); setComparisonInitialId(id); setComparisonOpen(true)
+  }
   function setPreview(next: Preview | null) {
     if (next && profileSession.getState().profile !== profile) { setMessage('Progress changed. Create a fresh preview from the current session.'); return }
-    if (next) setCheckpointsOpen(false)
+    if (next) { setCheckpointsOpen(false); setComparisonOpen(false) }
     if (next && next.operation !== 'prior_ascensions') trackEvent(`${next.operation}_previewed`, { upgrade_id: next.upgradeId, milestone_id: next.milestoneId })
     else if (!next && preview && preview.operation !== 'prior_ascensions') trackEvent(`${preview.operation}_cancelled`, { upgrade_id: preview.upgradeId, milestone_id: preview.milestoneId })
     setMessage('')
@@ -285,12 +294,12 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     setMenu(null); center(id, 'recommendation')
     if (purchase) startPurchase(id, 'recommendation')
   }
-  function reviewRequirement(route: RequirementRoute, target: string) {
+  function reviewRequirement(route: RequirementRoute, target: string, fromComparison = false) {
     if (!visible.ids.has(target) || route.kind === 'upgrade' && !visible.ids.has(route.id)
       || route.kind === 'milestone' && !visible.milestones.some((item) => item.id === route.id)) return
-    setRequirementReview({ target: requirementOrigin?.id ?? target, route })
+    setRequirementReview({ target: fromComparison ? target : requirementOrigin?.id ?? target, route })
     if (purchaseTarget) cancelPurchase()
-    if (route.kind === 'upgrade') { setMenu(null); center(route.id, 'neighbor', true); setDetailExpanded(true) }
+    if (route.kind === 'upgrade') { setMenu(null); center(route.id, 'neighbor', true, !fromComparison); setDetailExpanded(true) }
     else setMenu(route.kind === 'milestone' ? 'milestones' : 'progress')
   }
   function returnToRequirementTarget() {
@@ -333,6 +342,7 @@ function Atlas({ catalog }: { catalog: Catalog }) {
     const current = profileSession.getState()
     if (current.conflict) {
       setCheckpointsOpen(false)
+      setComparisonOpen(false)
       gameImportRequest.current++; restoreRequest.current++; trackingChangeRequest.current++
       setMenu(null); setPreviewState(null); setPurchaseTarget(null); setChoices({}); setTrackingReload(null)
       setGameImport(null); setGameImportLoading(false); setGameImportError('')
@@ -393,13 +403,13 @@ function Atlas({ catalog }: { catalog: Catalog }) {
       else void flow.setCenter(position.x, position.y + inset, { zoom, duration })
     }))
   }
-  function center(id: string, source: SelectionSource = 'map', focusDetails = false) {
+  function center(id: string, source: SelectionSource = 'map', focusDetails = false, reportSelection = true) {
     if (!visible.ids.has(id)) return
     leaveOverview()
     keyboardSearchDetails.current = focusDetails
     if (focusDetails) setDetailFocusRevision((revision) => revision + 1)
     if (!selected) setDetailExpanded(false)
-    if (lastSelection.current !== id) trackEvent('upgrade_selected', { upgrade_id: id, source })
+    if (reportSelection && lastSelection.current !== id) trackEvent('upgrade_selected', { upgrade_id: id, source })
     lastSelection.current = id
     setGraphFocus(id); setSelected(id); setSearchOpen(false); moveCamera(id)
   }
@@ -753,16 +763,19 @@ function Atlas({ catalog }: { catalog: Catalog }) {
         <div className="detail-actions">
         {profile.purchases[detail.id] ? <button className="danger full" disabled={saving} onClick={() => previewRemoval(detail.id)}>Remove purchase…</button> : <button className="primary full" disabled={saving} onClick={() => startPurchase(detail.id)}>Record purchase…</button>}
         {profile.purchases[detail.id] && detail.activation === 'after-ultra-ascension' && !profile.purchases[detail.id].active && <button className="full" disabled={saving} onClick={() => previewAstralActivation(detail.id)}>Already activated…</button>}
-        </div><div className="detail-secondary"><ExactCostDetails key={detail.id} value={detail.cost} upgradeId={detail.id} /></div></aside>}
+        </div><div className="detail-secondary"><ExactCostDetails key={detail.id} value={detail.cost} upgradeId={detail.id} /><button onClick={() => openComparison(detail.id)}>Compare this upgrade…</button></div></aside>}
     </div>
     <footer><span>Unofficial companion · {progressStatus}</span>{historyControls}<button onClick={() => setMenu('keyboard-help')}>Map help…</button><button onClick={() => setMenu('about')}>About & sources</button><button onClick={() => setMenu('privacy')}>Privacy & tracking</button></footer>
     {!activeDialogTitle && <p className="sr-only" role="status" aria-label="Map action feedback">{message === storageError ? '' : message}</p>}{!activeDialogTitle && message !== storageError && message && toastVisible && <div className="toast" onClick={() => setMessage('')}>{message}<button aria-label="Dismiss status" onClick={() => setMessage('')}>×</button></div>}
     <input className="sr-only telemetry-private rr-block" tabIndex={-1} aria-label="Map progress JSON backup" ref={fileInput} type="file" accept="application/json,.json" onChange={(event) => { const file = event.target.files?.[0]; if (file) void restore(file); else restoreRequest.current++; event.target.value = '' }} />
     <input className="sr-only telemetry-private rr-block" tabIndex={-1} aria-label="Idle Slayer game save" ref={gameFileInput} type="file" accept=".sav" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void readGameSave(file) }} />
     {checkpointsOpen && <Dialog title="Progress checkpoints" close={() => setCheckpointsOpen(false)}><CheckpointPanel catalog={catalog} profile={profile} history={history} redoHistory={redoHistory} state={checkpoints.state} session={checkpoints.session} currentProfile={() => profileSession.getState().profile} /></Dialog>}
+    {comparisonOpen && <Dialog title="Saved upgrade comparison" close={() => setComparisonOpen(false)}><SavedComparisonPanel catalog={catalog} profile={profile} visible={visible} session={comparison.session} state={comparison.state} initialId={comparisonInitialId}
+      onInspect={(id) => { setComparisonOpen(false); setRequirementReview(null); center(id, 'neighbor', true, false) }}
+      onReview={(route, origin) => { setComparisonOpen(false); reviewRequirement(route, origin, true) }} /></Dialog>}
     {menu === 'game-import' && <Dialog title="Import game progress" close={closeGameImport}>{gameImport ? <GameSaveImportPanel catalog={catalog} currentProfile={gameImport.original} preview={gameImport.result} onApply={applyGameImport} onCancel={closeGameImport} /> : <div className="game-save-picker">{gameImportLoading ? <p role="status">Reading game save…</p> : <><p className="telemetry-private rr-block" role="alert">{gameImportError}</p><p>Choose <b>savedata.sav</b> or <b>backup.sav</b> from Idle Slayer 7.2.0 on Steam. The selected file is read locally in your browser.</p><p className="game-save-path">%USERPROFILE%\AppData\LocalLow\Pablo Leban\Idle Slayer\</p></>}<div className="dialog-actions">{!gameImportLoading && <button className="primary" onClick={chooseGameSave}>Choose game save…</button>}<button onClick={closeGameImport}>Cancel</button></div></div>}</Dialog>}
     {menu === 'recommendations' && <Dialog title="Suggested next upgrade" close={() => setMenu(null)}><RecommendationPanel catalog={catalog} recommendations={recommendations} onSelect={(id) => selectSuggestion(id)} onPurchase={(id) => selectSuggestion(id, true)} blockedUpgrade={blockedRecommendation} onReviewRequirements={reviewBlockedRecommendation} /></Dialog>}
-    {menu === 'options' && <Dialog title="Map options" close={() => setMenu(null)}><div className="map-options"><p><b>{visible.owned} / {visible.total}</b> visible upgrades owned · Ultra Ascensions {profile.epoch}<br />{profile.showSpoilers ? 'Spoilers shown' : 'Spoilers hidden'}</p><label className="spoiler-control"><input type="checkbox" disabled={saving} checked={profile.showSpoilers} onChange={(event) => toggleSpoilers(event.target.checked)} />Show spoilers</label><button onClick={showOverview} disabled={!visible.ids.size}>Overview visible map</button><button onClick={(event) => refocusSelection(event.detail === 0)} disabled={!detail}>Refocus selected upgrade</button><small>Overview fits only currently visible upgrades. Refocus returns your selection to inspection size without changing progress.</small><button onClick={() => setMenu('milestones')}>Milestones</button><button onClick={() => setMenu('progress')}>Progress</button>{historyControls}<button onClick={() => setMenu('keyboard-help')}>Map help…</button><button onClick={() => setMenu('about')}>About & sources</button><button onClick={() => setMenu('privacy')}>Privacy & tracking</button><small>Unofficial companion · {progressStatus}</small></div></Dialog>}
+    {menu === 'options' && <Dialog title="Map options" close={() => setMenu(null)}><div className="map-options"><p><b>{visible.owned} / {visible.total}</b> visible upgrades owned · Ultra Ascensions {profile.epoch}<br />{profile.showSpoilers ? 'Spoilers shown' : 'Spoilers hidden'}</p><label className="spoiler-control"><input type="checkbox" disabled={saving} checked={profile.showSpoilers} onChange={(event) => toggleSpoilers(event.target.checked)} />Show spoilers</label><button onClick={() => openComparison()}>Saved upgrade comparison…</button><button onClick={showOverview} disabled={!visible.ids.size}>Overview visible map</button><button onClick={(event) => refocusSelection(event.detail === 0)} disabled={!detail}>Refocus selected upgrade</button><small>Overview fits only currently visible upgrades. Refocus returns your selection to inspection size without changing progress.</small><button onClick={() => setMenu('milestones')}>Milestones</button><button onClick={() => setMenu('progress')}>Progress</button>{historyControls}<button onClick={() => setMenu('keyboard-help')}>Map help…</button><button onClick={() => setMenu('about')}>About & sources</button><button onClick={() => setMenu('privacy')}>Privacy & tracking</button><small>Unofficial companion · {progressStatus}</small></div></Dialog>}
     {menu === 'milestones' && <Dialog title="Milestones" close={() => setMenu(null)}><p>Record the required item received or purchased in the game.</p>{requirementReturn}{visible.milestones.map((item) => <label className="milestone" key={item.id}><input data-requirement-milestone={item.id} type="checkbox" disabled={saving} checked={profile.milestones[item.id] === true} onChange={(event) => { if (event.target.checked) { if (change({ ...profile, milestones: { ...profile.milestones, [item.id]: true } }, 'Milestone recorded.', false, 'milestone')) trackEvent('milestone_changed', { milestone_id: item.id, recorded: true }) } else { setMenu(null); previewRemoval(item.id, true) } }} /><span>{item.title}<small>{item.description}</small></span></label>)}{!visible.milestones.length && <div><p>No milestone controls are currently revealed. Controls follow the game's reveal rules. To enter existing progress on an isolated branch, you can explicitly choose Show spoilers in Map options, then return here. Record only the required item actually received, crafted or purchased.</p><button onClick={() => setMenu('options')}>Review spoiler setting</button></div>}</Dialog>}
     {menu === 'progress' && <Dialog title="Your progress" close={() => setMenu(null)}>
       <p>One local profile. Keep a backup when changing browsers or devices.</p><button onClick={() => setMenu('keyboard-help')}>Map help…</button>{requirementReturn}
