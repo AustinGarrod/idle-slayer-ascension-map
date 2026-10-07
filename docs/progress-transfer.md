@@ -8,6 +8,8 @@ Opening a link, receiving a paste, generating a code and cancelling keep progres
 
 Undo restores the preceding progress profile and the transferred layout during this session. A subsequent explicit layout selection remains independent and invalidates the transfer's layout undo association. Ordinary JSON backups, restores, clear and progress undo retain their existing layout-independent contract. Profile or layout write failures retain usable in-memory progress/layout and report existing retry/export recovery or a layout-for-this-visit message. Cancelling, leaving the transfer dialog, unmounting or an external progress update invalidates pending generation/decoding and previews. Confirmation rechecks the current session before replacing anything.
 
+A transfer link arriving in the current page supersedes the active progress interaction. It closes purchase/OR, clear/reset/history, restore/import, conflict and tracking-reload confirmations, invalidates pending file reads and privacy reload work, and cancels pending saving while retaining the in-memory profile and Undo history. One named transfer dialog owns the preview or validation feedback. Malformed arrivals also cancel the older interaction without applying either action; cancelling the receiver does not reopen it. A late game-file selection while receiving is ignored.
+
 ## Transport and bounds
 
 The version 1 envelope contains `format: "ISAM"`, `version: 1`, `layout` and an explicit encoding. The URL carries `#transfer=v1.<gzip-base64url>` on the map's existing base path. Browser-native [Compression Streams](https://developer.mozilla.org/en-US/docs/Web/API/CompressionStream) perform gzip compression/decompression; unsupported browsers can use the unchanged JSON backup route. Gzip's integrity checks and strict base64url/UTF-8/JSON validation reject incomplete or damaged input. This is a copy format, not proof of a sender's identity.
@@ -40,6 +42,7 @@ yarn preview --host 127.0.0.1 --port 4189 --strictPort
 # In another PowerShell window:
 $env:PLAYWRIGHT_BASE_URL = 'http://127.0.0.1:4189/idle-slayer-ascension-map/'
 yarn test:e2e tests/browser/progress-transfer.spec.ts
+yarn test:e2e tests/browser/transfer-interruption.spec.ts
 yarn test:e2e tests/browser/analytics.spec.ts --grep transfer
 ```
 

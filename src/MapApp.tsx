@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useEffectEvent, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Background, Handle, MarkerType, Position, ReactFlow, ReactFlowProvider, useReactFlow } from '@xyflow/react'
 import type { Node, NodeProps } from '@xyflow/react'
@@ -69,6 +69,7 @@ const cost = (value: string) => BigInt(value).toLocaleString('en')
 function Dialog({ title, children, close }: { title: string; children: ReactNode; close: () => void }) {
   const ref = useRef<HTMLDialogElement>(null)
   const feedbackRef = useRef<HTMLDivElement>(null)
+  const titleId = useId()
   const feedback = useContext(DialogFeedbackContext)
   const activeFeedback = feedback.title === title
   const dismiss = () => { feedback.clear(); close() }
@@ -84,8 +85,8 @@ function Dialog({ title, children, close }: { title: string; children: ReactNode
   useEffect(() => {
     if (activeFeedback && feedback.announcement) feedbackRef.current?.scrollIntoView({ block: 'nearest' })
   }, [activeFeedback, feedback.announcement, feedback.sequence])
-  return <dialog ref={ref} onCancel={(event) => { event.preventDefault(); dismiss() }} aria-labelledby="dialog-title">
-    <div className="dialog-heading"><h2 id="dialog-title">{title}</h2><button aria-label="Close dialog" onClick={dismiss}>×</button></div>
+  return <dialog ref={ref} onCancel={(event) => { event.preventDefault(); dismiss() }} aria-labelledby={titleId}>
+    <div className="dialog-heading"><h2 id={titleId}>{title}</h2><button aria-label="Close dialog" onClick={dismiss}>×</button></div>
     {activeFeedback && <div id="dialog-feedback" ref={feedbackRef} className="dialog-feedback telemetry-private rr-block" role="status" aria-live="polite" aria-atomic="true">{feedback.content}</div>}
     {children}
   </dialog>
@@ -442,7 +443,14 @@ function Atlas({ catalog, initialTransfer }: { catalog: Catalog; initialTransfer
     }
   }
   function openTransfer(mode: 'send' | 'receive') {
+    // An arriving link replaces the active interaction, never its progress.
+    // Invalidate async work before it can reopen a superseded preview or reload.
+    gameImportRequest.current++; restoreRequest.current++; trackingChangeRequest.current++
+    profileSession.cancelPending()
+    setPreview(null); cancelPurchase(); setChoices({}); setConflictReview(null); setTrackingReload(null)
+    setGameImport(null); setGameImportLoading(false); setGameImportError('')
     transferRequest.current++; setTransferBusy(false); setTransferGenerated(null); setTransferPreview(null)
+    setMessage('')
     setTransferMode(mode); setMenu('transfer')
   }
   function closeTransfer() {
@@ -477,25 +485,25 @@ function Atlas({ catalog, initialTransfer }: { catalog: Catalog; initialTransfer
     changeLayout(transferPreview.layout, false)
     closeTransfer()
   }
+  const receiveCapturedTransfer = useEffectEvent((received: NonNullable<TransferCapture>) => {
+    openTransfer('receive')
+    if (received.error) setMessage(received.error)
+    else if (received.token) {
+      const token = received.token
+      delete received.token
+      void receiveTransfer(token)
+    }
+  })
   useEffect(() => {
     if (!loaded || initialTransferHandled.current) return
     initialTransferHandled.current = true
-    if (!initialTransfer) return
-    openTransfer('receive')
-    if (initialTransfer.error) setMessage(initialTransfer.error)
-    else if (initialTransfer.token) {
-      const token = initialTransfer.token
-      delete initialTransfer.token
-      void receiveTransfer(token)
-    }
+    if (initialTransfer) receiveCapturedTransfer(initialTransfer)
   }, [loaded])
   useEffect(() => {
     const changed = () => {
       const received = captureProgressTransfer(window)
       if (!received) return
-      openTransfer('receive')
-      if (received.error) setMessage(received.error)
-      else if (received.token) void receiveTransfer(received.token)
+      receiveCapturedTransfer(received)
     }
     window.addEventListener('hashchange', changed, true)
     return () => window.removeEventListener('hashchange', changed, true)
@@ -645,6 +653,7 @@ function Atlas({ catalog, initialTransfer }: { catalog: Catalog; initialTransfer
     window.requestAnimationFrame(() => document.querySelector<HTMLElement>('[data-game-import-trigger]')?.focus({ preventScroll: true }))
   }
   async function readGameSave(file: File) {
+    if (menu !== 'progress' && menu !== 'game-import') return
     const request = ++gameImportRequest.current
     setGameImport(null); setGameImportError(''); setGameImportLoading(true); setMenu('game-import')
     let bytes: Uint8Array
