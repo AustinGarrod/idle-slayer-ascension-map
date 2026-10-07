@@ -11,7 +11,6 @@ export default defineConfig({
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
     baseURL: previewURL ?? 'http://127.0.0.1:4173/idle-slayer-ascension-map/',
-    serviceWorkers: 'block',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'off',

@@ -2,6 +2,8 @@
 
 Use `test` and `expect` from `tests/browser/fixtures.ts` for app scenarios. Its automatic fixture records unhandled JavaScript errors for each test and every page in that test's supplied browser context, including new tabs. The list belongs to one test and is checked during teardown; errors identify the failed scenario. Tests that deliberately create separate contexts still own their specialized setup and error checks.
 
+The default context blocks only top-level app service-worker registration before app code runs, preserving isolated request interception. It skips opaque startup pages and every subframe: Playwright's global `serviceWorkers: 'block'` injection otherwise reads the restricted Navigator accessor inside sandboxed reference previews and produces a harness error. Worker scenarios use `test.use({ appServiceWorkers: true })` and explicitly allow real workers. Separately created contexts must supply their own worker policy and page-error listeners; sandbox and error assertions stay intact.
+
 Small public-behavior helpers live in `tests/browser/helpers/`:
 
 - `app.ts`: toolbar readiness, responsive Map options access, Progress, spoilers, layout, title selection, Undo and a confirmed start purchase. Title selection is for fixtures with an unambiguous title; identity-sensitive scenarios must select their explicit stable ID.

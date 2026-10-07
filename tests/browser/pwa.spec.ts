@@ -16,7 +16,7 @@ import { COMPARISON_STORAGE_KEY } from '../../src/domain/saved-comparison'
 import { GOALS_STORAGE_KEY } from '../../src/domain/goals'
 import { openProgress } from './helpers/app'
 
-test.use({ serviceWorkers: 'allow' })
+test.use({ serviceWorkers: 'allow', appServiceWorkers: true })
 const base = '/idle-slayer-ascension-map/'
 const catalog = JSON.parse(readFileSync('public/catalog.json', 'utf8'))
 async function openInstall(page: Page) {
