@@ -9,8 +9,13 @@ const options = Object.fromEntries(process.argv.slice(2).filter((argument) => ar
   return [name, value ?? true]
 }))
 const input = String(options.input ?? '.local-game/wiki-priorities')
-const output = String(options.output ?? 'src/data/wiki-priorities.json')
-const revision = String(options.revision ?? '7187')
+const mode = String(options.mode ?? 'candidate')
+if (!['candidate', 'reproduce'].includes(mode)) throw new Error('Use --mode=candidate or --mode=reproduce')
+const output = String(options.output ?? path.join(input, mode === 'reproduce' ? 'reproduced.json' : 'candidate.json'))
+const referenceText = mode === 'reproduce' ? await readFile(String(options.reference ?? 'src/data/wiki-priorities.json'), 'utf8') : null
+const reference = referenceText === null ? null : JSON.parse(referenceText)
+const revision = String(options.revision ?? reference?.source.revision ?? '7187')
+if (reference && revision !== String(reference.source.revision)) throw new Error('Reproduction must use the reviewed primary revision')
 const pageUrl = 'https://idleslayer.fandom.com/wiki/Ascension_Tree_Tier_List'
 const api = 'https://idleslayer.fandom.com/api.php'
 const sha = (value) => createHash('sha256').update(value).digest('hex')
@@ -31,8 +36,10 @@ if (options.refresh) {
   const page = Object.values((await readJSON('tier-list-api.json')).query.pages)[0]
   await download('tier-sections.json', `${api}?action=parse&oldid=${page.revisions[0].revid}&prop=sections&format=json`)
   await download('rightsinfo.json', `${api}?action=query&meta=siteinfo&siprop=rightsinfo&format=json`)
-  await download('ascension-strategy-api.json', `${api}?action=query&prop=revisions&rvprop=ids%7Ctimestamp%7Ccontent&rvslots=main&titles=Ascension_Strategy&format=json`)
-  await download('licensing-api.json', 'https://community.fandom.com/api.php?action=query&prop=revisions&rvprop=ids%7Ctimestamp%7Ccontent&rvslots=main&titles=Help%3ALicensing&format=json')
+  const strategySelector = reference ? `revids=${encodeURIComponent(reference.source.strategyContext.revision)}` : 'titles=Ascension_Strategy'
+  const licensingSelector = reference ? `revids=${encodeURIComponent(reference.source.licenseEvidence.revision)}` : 'titles=Help%3ALicensing'
+  await download('ascension-strategy-api.json', `${api}?action=query&prop=revisions&rvprop=ids%7Ctimestamp%7Ccontent&rvslots=main&${strategySelector}&format=json`)
+  await download('licensing-api.json', `https://community.fandom.com/api.php?action=query&prop=revisions&rvprop=ids%7Ctimestamp%7Ccontent&rvslots=main&${licensingSelector}&format=json`)
   await writeFile(path.join(input, 'fetch-receipt.json'), JSON.stringify({ retrievedAt: new Date().toISOString().slice(0, 10) }, null, 2) + '\n')
 }
 
@@ -53,6 +60,15 @@ const fetched = await readJSON('fetch-receipt.json')
 const catalogText = await readFile('public/catalog.json', 'utf8')
 const catalog = JSON.parse(catalogText)
 const byId = new Map(catalog.upgrades.map((node) => [node.id, node]))
+if (reference && (
+  wikiRevision.revid !== reference.source.revision || wikiRevision.timestamp !== reference.source.revisionTimestamp ||
+  sha(wikitext) !== reference.source.wikitextSha256 ||
+  String(strategyRevision.revid) !== reference.source.strategyContext.revision || strategyRevision.timestamp !== reference.source.strategyContext.revisionTimestamp ||
+  sha(strategyRevision.slots.main['*']) !== reference.source.strategyContext.wikitextSha256 ||
+  String(licensingRevision.revid) !== reference.source.licenseEvidence.revision || licensingRevision.timestamp !== reference.source.licenseEvidence.revisionTimestamp ||
+  rights.text !== reference.source.licenseEvidence.wikiApiRights || rights.url !== reference.source.licenseEvidence.wikiApiRightsUrl ||
+  sha(catalogText) !== reference.catalog.sha256
+)) throw new Error('Cached/fetched evidence differs from the reviewed snapshot; generate and review a candidate instead')
 
 function plain(value) {
   return value.replace(/<ref\b[^>]*\/>/gi, '').replace(/<ref\b[^>]*>[\s\S]*?<\/ref>/gi, '')
@@ -200,7 +216,7 @@ const data = {
     revision: wikiRevision.revid, revisionTimestamp: wikiRevision.timestamp,
     revisionUrl: `${pageUrl}?oldid=${wikiRevision.revid}`, historyUrl: `${pageUrl}?action=history`,
     gameVersion: wikitext.match(/Last updated:\s*v([^\s]+)/)?.[1] ?? null,
-    retrievedAt: fetched.retrievedAt, wikitextSha256: sha(wikitext),
+    retrievedAt: reference?.source.retrievedAt ?? fetched.retrievedAt, wikitextSha256: sha(wikitext),
     license: 'CC-BY-SA-3.0', licenseUrl: 'https://creativecommons.org/licenses/by-sa/3.0/',
     licenseEvidence: { wikiApiRights: rights.text, wikiApiRightsUrl: rights.url, fandomDefaultUrl: 'https://community.fandom.com/wiki/Help:Licensing', revision: String(licensingRevision.revid), revisionTimestamp: licensingRevision.timestamp },
     attribution: 'Idle Slayer Wiki contributors. Ordering adapted into stable native IDs; descriptions are original summaries based on native effects. Raw wiki paragraphs and images are not copied.',
@@ -216,6 +232,14 @@ const data = {
     unmappedRows, ambiguousRows, costMismatches, reviewedAliases, syntaxCorrections,
   },
 }
+const generated = JSON.stringify(data, null, 2) + '\n'
+if (referenceText !== null && generated !== referenceText) throw new Error('Generated reproduction differs from the reviewed bytes; do not promote it')
 await mkdir(path.dirname(output), { recursive: true })
-await writeFile(output, JSON.stringify(data, null, 2) + '\n')
+await writeFile(output, generated)
+if (referenceText !== null) await writeFile(output + '.reproduction-receipt.json', JSON.stringify({
+  mode, reproducedAt: new Date().toISOString(), sourceFetchedAt: fetched.retrievedAt,
+  originalSnapshotRetrievedAt: reference.source.retrievedAt,
+  referenceSha256: sha(referenceText), reproducedSha256: sha(generated),
+  primaryRevision: wikiRevision.revid, strategyRevision: strategyRevision.revid, licensingRevision: licensingRevision.revid,
+}, null, 2) + '\n')
 console.log(JSON.stringify({ output, revision: data.source.revision, ranked: rows.length, native: catalog.upgrades.length, rawRows: extracted.length, unmapped: unmappedRows, ambiguous: ambiguousRows, costMismatches }, null, 2))
