@@ -1,5 +1,6 @@
 import { emptyProfile, type Profile } from './types'
 import { exportProfileBackup, parseProfileBackup, PROFILE_STORAGE_KEY, type ProfileErrorKind } from './storage'
+import type { HistoryAction } from './profile-history'
 
 export const PROFILE_WRITE_LOCK = `${PROFILE_STORAGE_KEY}.write`
 interface Storage {
@@ -14,9 +15,11 @@ export type StoredSnapshot =
   | { kind: 'invalid'; text: string; error: string; errorKind: ProfileErrorKind }
   | { kind: 'unavailable'; error: string; errorKind: 'storage-read' }
 export type ProfilePersistence = 'loading' | 'new' | 'saved' | 'saving' | 'unsaved' | 'failed' | 'conflict'
+export interface ProfileHistoryEntry { profile: Profile; action: HistoryAction }
 export interface ProfileSessionState {
   profile: Profile
-  history: Profile[]
+  history: ProfileHistoryEntry[]
+  redoHistory: ProfileHistoryEntry[]
   version: number
   externalVersion: number
   pending: boolean
@@ -34,7 +37,7 @@ export function createProfileSession(options: { revision: string; storage: () =>
   let persisted: Profile | undefined
   let initialized = false
   let operation = 0
-  let state: ProfileSessionState = { profile: emptyProfile(options.revision), history: [], version: 0, externalVersion: 0, pending: false, dirty: false, persistence: 'loading', writable: false, error: '', conflict: null }
+  let state: ProfileSessionState = { profile: emptyProfile(options.revision), history: [], redoHistory: [], version: 0, externalVersion: 0, pending: false, dirty: false, persistence: 'loading', writable: false, error: '', conflict: null }
   const listeners = new Set<(state: ProfileSessionState) => void>()
   function emit() {
     const persistence = !initialized ? 'loading' : state.conflict ? 'conflict' : state.pending ? 'saving'
@@ -59,7 +62,7 @@ export function createProfileSession(options: { revision: string; storage: () =>
     baseline = snapshot.kind === 'unavailable' ? undefined : snapshot.text
     if (snapshot.kind === 'valid') {
       persisted = snapshot.profile
-      state = { ...state, profile: snapshot.profile, history: [], writable: true, error: '', errorKind: undefined, version: state.version + 1 }
+      state = { ...state, profile: snapshot.profile, history: [], redoHistory: [], writable: true, error: '', errorKind: undefined, version: state.version + 1 }
     } else state = { ...state, error: snapshot.error, errorKind: snapshot.errorKind, writable: false }
     emit()
   }
@@ -70,9 +73,9 @@ export function createProfileSession(options: { revision: string; storage: () =>
     if (!preserve && snapshot.kind === 'valid') {
       baseline = snapshot.text
       persisted = snapshot.profile
-      state = { ...state, profile: snapshot.profile, history: [], conflict: null, pending: false, writable: true, error: '', errorKind: undefined }
+      state = { ...state, profile: snapshot.profile, history: [], redoHistory: [], conflict: null, pending: false, writable: true, error: '', errorKind: undefined }
     } else {
-      state = { ...state, history: [], conflict: snapshot, pending: false, error: snapshot.kind === 'valid'
+      state = { ...state, history: [], redoHistory: [], conflict: snapshot, pending: false, error: snapshot.kind === 'valid'
         ? 'Saved progress changed in another tab. This session was kept. Export it or review the conflict before saving.'
         : `${snapshot.error} This session was kept; review recovery before replacing saved data.`, errorKind: snapshot.kind === 'valid' ? 'stale' : snapshot.errorKind }
     }
@@ -130,9 +133,9 @@ export function createProfileSession(options: { revision: string; storage: () =>
       if (ticket === operation) { state = { ...state, pending: false }; emit() }
     }
   }
-  function apply(next: Profile, replaceStorage = false): boolean {
+  function apply(next: Profile, replaceStorage = false, action: HistoryAction = 'change'): boolean {
     if (state.pending) { error('Progress is being saved. Try this change again when saving finishes.', 'unavailable'); return false }
-    state = { ...state, profile: next, history: [...state.history.slice(-19), state.profile], version: state.version + 1 }
+    state = { ...state, profile: next, history: [...state.history.slice(-19), { profile: state.profile, action }], redoHistory: [], version: state.version + 1 }
     emit()
     void save(replaceStorage)
     return true
@@ -140,7 +143,15 @@ export function createProfileSession(options: { revision: string; storage: () =>
   function undo(): boolean {
     if (state.pending || !state.history.length) return false
     const previous = state.history.at(-1)!
-    state = { ...state, profile: previous, history: state.history.slice(0, -1), version: state.version + 1 }
+    state = { ...state, profile: previous.profile, history: state.history.slice(0, -1), redoHistory: [...state.redoHistory, { profile: state.profile, action: previous.action }], version: state.version + 1 }
+    emit()
+    void save()
+    return true
+  }
+  function redo(): boolean {
+    if (state.pending || !state.redoHistory.length) return false
+    const next = state.redoHistory.at(-1)!
+    state = { ...state, profile: next.profile, history: [...state.history, { profile: state.profile, action: next.action }], redoHistory: state.redoHistory.slice(0, -1), version: state.version + 1 }
     emit()
     void save()
     return true
@@ -151,7 +162,7 @@ export function createProfileSession(options: { revision: string; storage: () =>
     if (current.kind !== 'valid' || current.text !== state.conflict.text) { observe(current); return false }
     baseline = current.text
     persisted = current.profile
-    state = { ...state, profile: current.profile, history: [state.profile], conflict: null, version: state.version + 1, error: '', errorKind: undefined, writable: true }
+    state = { ...state, profile: current.profile, history: [{ profile: state.profile, action: 'recovery' }], redoHistory: [], conflict: null, version: state.version + 1, error: '', errorKind: undefined, writable: true }
     emit()
     return true
   }
@@ -166,5 +177,5 @@ export function createProfileSession(options: { revision: string; storage: () =>
     return null
   }
   function subscribe(listener: (state: ProfileSessionState) => void) { listeners.add(listener); return () => { listeners.delete(listener) } }
-  return { initialize, subscribe, getState: () => state, apply, undo, save, retry, refreshExternal, cancelPending, useSaved }
+  return { initialize, subscribe, getState: () => state, apply, undo, redo, save, retry, refreshExternal, cancelPending, useSaved }
 }
