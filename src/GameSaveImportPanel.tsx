@@ -1,4 +1,5 @@
 import { useId } from 'react'
+import { ProgressComparison } from './ProgressComparison'
 import type { GameSaveImportPreview } from './domain/game-save-import'
 import { visibleProgress } from './domain/progress-summary'
 import type { Catalog, Profile } from './domain/types'
@@ -32,6 +33,7 @@ export function GameSaveImportPanel({ catalog, currentProfile, preview, onApply,
       <tbody>{rows.map((row) => <tr key={row.label}><th scope="row">{row.label}</th><td>{row.current.toLocaleString('en')}</td><td>{row.incoming.toLocaleString('en')}</td></tr>)}</tbody>
     </table>
     <p className="game-save-import-scope" id={scopeId}>Upgrade and milestone counts follow the map's current spoiler setting.</p>
+    <ProgressComparison catalog={catalog} current={currentProfile} incoming={preview.profile} incomingLabel="After import" context={`Steam save version ${preview.sourceVersion}`} showSettings={false} />
     {preview.warnings.length > 0 && <section className="game-save-import-notes telemetry-private rr-block" aria-labelledby={notesId}>
       <h3 id={notesId}>Import notes</h3>
       <ul>{preview.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>
