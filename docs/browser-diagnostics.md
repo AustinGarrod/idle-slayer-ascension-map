@@ -2,7 +2,7 @@
 
 Browser checks run against local production previews or isolated CI builds, with synthetic progress and save fixtures and intercepted analytics. Never run these checks against the production site or add a real player's files to a diagnostic run. Traces contain DOM snapshots, test source and network details; screenshots show the failed scenario.
 
-Playwright keeps a trace and screenshot only for failed tests, produces an HTML report, and records no video. Successful test traces are discarded. Generated `test-results/` and `playwright-report/` stay ignored and outside `dist`.
+Playwright automatically retains a trace and failure screenshot only for failed tests, produces an HTML report, and records no video. Successful test traces are discarded. Existing map and large-text scenarios also explicitly save bounded synthetic screenshots, including on passing runs. Generated `test-results/` and `playwright-report/` stay ignored and outside `dist`.
 
 The CI validation job uploads these two folders only when the browser step fails. Artifacts are named `browser-failure-<run-id>-<attempt>` and expire after five days. A failed browser step still fails validation and blocks the release gate and Pages deployment; an upload does not turn a failed test into success. Cancelled runs may not retain artifacts, and failures before browser tests begin may have only the Actions log. No other workspace directories or hidden files are uploaded. The public repository's artifacts contain only synthetic test data.
 
