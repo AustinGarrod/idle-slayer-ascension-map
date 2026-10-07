@@ -146,3 +146,7 @@ Keep motion brief and purposeful, such as centering a selected node. Respect red
 - Search and detail panels are usable on narrow screens and at increased text size.
 - A spoiler-hidden screen exposes only content allowed by the shared visibility rules.
 - Added fonts, icons and wiki text have recorded provenance and attribution.
+
+## Portable reference selection
+
+A secondary action in expanded details adds an explicit visible upgrade to a four-entry visit-only sheet. Map options opens the private selection and complete outgoing document preview. Wrapped 44px controls support removal, clearing, review, saving and a separate print tab without adding a persistent map rail. The self-contained document uses readable native text, full exact costs and grouped visible requirements; it labels the excerpt limits and version. No private progress or inferred routes enter the sheet.

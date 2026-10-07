@@ -66,3 +66,5 @@ V1 defaults: English, one local progress profile, spoilers hidden, no applicatio
 ## Windows handoff
 
 See `README.md` for exact clone and plain `yarn` commands. Use Node.js 24 with the repository's Yarn 4.13.0 release, the committed `yarn.lock` and Yarn's `node-modules` linker. If no global launcher is installed, use `node .yarn/releases/yarn-4.13.0.cjs <command>`. Place optional copied inputs at `.local-game/Idle Slayer/` and `.local-game/appmanifest_1353300.acf`. Keep raw game inputs outside Git and outside the served site; do not infer that a public code repository authorizes redistribution of the complete game.
+
+Reference-sheet issue #89 adds bounded explicit public catalog selections, exact outgoing preview and local static HTML save/print. Native profile/Undo contracts remain unchanged, and default output is filtered before selection counts or content. No private annotations, ownership snapshot, connection excerpt, backend conversion or full-tree printing is included.

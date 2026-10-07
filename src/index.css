@@ -473,3 +473,10 @@ dialog:has(.purchase-confirm-actions) { overflow-wrap: anywhere; }
 @media (max-width: 15rem) {
   .detail-actions { position: static; }
 }
+
+.reference-sheet-panel, .sheet-add { min-width: 0; overflow-wrap: anywhere; font-size: .875rem; }
+.reference-sheet-panel li { margin: 12px 0; }
+.reference-sheet-panel li small { display: block; }
+.reference-sheet-panel button, .sheet-add button { min-height: 44px; max-width: 100%; overflow-wrap: anywhere; font: inherit; margin: 6px 0; }
+.reference-sheet-panel iframe { width: 100%; height: 26rem; border: 1px solid var(--muted); background: white; }
+.reference-sheet-actions { display: flex; flex-wrap: wrap; gap: 8px; }

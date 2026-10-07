@@ -1064,3 +1064,35 @@ test('continuing the final eligible suggestion reports the fresh all-owned reaso
   expect(capture.submissions.filter((submission) => submission.payload.name === 'recommendation_purchase_applied')).toHaveLength(1)
   expect(capture.unexpected).toEqual([])
 })
+
+test('reference sheet selections and full outgoing document stay blocked in actual recorder evidence', async ({ page, context, baseURL }) => {
+  const origin = new URL(baseURL!).origin
+  let releaseRecorder!: () => void
+  const recorderReady = new Promise<void>((resolve) => { releaseRecorder = resolve })
+  const capture = await installLocalRoutes(context, origin, { recorderReady })
+  await serveIsolatedApplication(context, origin)
+  await page.goto(`${origin}${appFixturePath}`); await expect(page.locator('.toolbar')).toBeVisible()
+  await page.locator(`.react-flow__node[data-id="${catalog.startId}"]`).click()
+  const expand = page.getByRole('button', { name: 'Show details', exact: true }); if (await expand.isVisible()) await expand.click()
+  await page.getByRole('button', { name: 'Add to reference sheet', exact: true }).click()
+  const menu = page.getByRole('button', { name: 'Map options', exact: true })
+  if (await menu.isVisible()) await menu.click(); else await page.getByRole('button', { name: 'Map view…', exact: true }).click()
+  await page.getByRole('dialog', { name: 'Map options', exact: true }).getByRole('button', { name: 'Reference sheet', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Upgrade reference sheet', exact: true })
+  await dialog.getByRole('button', { name: 'Review outgoing sheet', exact: true }).click()
+  const marker = 'REFERENCE_SHEET_PRIVATE_SNAPSHOT'
+  const snapshotProof = 'REFERENCE_SHEET_PUBLIC_SNAPSHOT'
+  const mutationProof = 'REFERENCE_SHEET_PUBLIC_MUTATION'
+  await dialog.locator('.reference-sheet-panel').evaluate((panel, marker) => { const node = document.createElement('p'); node.textContent = marker; panel.appendChild(node) }, marker)
+  await dialog.evaluate((element, proof) => { const node = document.createElement('p'); node.id = 'reference-sheet-proof'; node.textContent = proof; element.appendChild(node) }, snapshotProof)
+  await waitForActive(page); releaseRecorder()
+  const snapshot = await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 2 && JSON.stringify(event).includes(snapshotProof)))
+  expect(blockedReplayNodes(snapshot).some((node) => node.attributes.class.includes('reference-sheet-panel') && !(node.childNodes?.length))).toBe(true)
+  await page.locator('#reference-sheet-proof').evaluate((node, proof) => { node.textContent = proof }, mutationProof)
+  await page.locator('#reference-sheet-proof').click()
+  const events = await waitForReplayEvents(capture, (events) => events.some((event) => event.type === 3 && JSON.stringify(event).includes(mutationProof)))
+  const evidence = JSON.stringify({ submissions: capture.submissions, replay: events })
+  expect(evidence).not.toContain(marker); expect(evidence).not.toContain('srcdoc'); expect(evidence).not.toContain('This bounded sheet contains')
+  expect(capture.submissions.some((submission) => String(submission.payload.name).includes('reference'))).toBe(false)
+  expect(capture.unexpected).toEqual([])
+})
