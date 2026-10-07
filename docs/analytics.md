@@ -58,7 +58,7 @@ Search events follow deliberate input edits after 500 ms of idle input. Rapid ed
 | Backups | `backup_download_requested`, `backup_error` | Error accepts a fixed `reason`; requested has only common context. Requested means the browser download was initiated; it does not prove the visitor saved the file. |
 | Game-save import | `game_import_started`, `game_import_previewed`, `game_import_applied`, `game_import_cancelled`, `game_import_error` | Error accepts a fixed `reason`; other stages have only common context. No imported ownership, counter or file metadata. Cancelled/stale reads cannot emit applied. |
 
-Keyboard map help uses the bounded `keyboard-help` panel value. Focus browsing emits no upgrade selection or progress event.
+Map help retains the bounded `keyboard-help` panel value for setup, state and keyboard guidance. Focus browsing emits no upgrade selection or progress event.
 
 Prior Ultra Ascension drafts, validation feedback and count confirmation remain replay-blocked. `prior_ascensions_recorded` fires only after **Record history** applies the confirmed change. Editing, reviewing and cancelling emit no history application event; the existing bounded event contract is unchanged.
 
