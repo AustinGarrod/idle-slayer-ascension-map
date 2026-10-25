@@ -1,7 +1,7 @@
 import type { getTrackingStatus } from './analytics'
 import type { ReactNode } from 'react'
 
-export const trackingDisclosure = 'Companion progress is stored in this browser when saving succeeds. This site uses self-hosted Umami for usage analytics and session recordings, which may include visible map progress. Save files, backups and transfer contents are never uploaded. You can disable tracking in Privacy & tracking.'
+export const trackingDisclosure = 'Companion progress is stored in this browser when saving succeeds. Technical error reports, diagnostic logs and performance traces are sent to reports.garrod.house independently of the usage-tracking setting. This site uses self-hosted Umami for usage analytics and session recordings, which may include visible map progress. Save files, backups and transfer contents are never uploaded. You can disable tracking in Privacy & tracking.'
 
 export function PrivacyPanel({ status, onChange, progressStatus = 'Progress saving is checked after the companion loads.', additionalActions }: {
   status: ReturnType<typeof getTrackingStatus>

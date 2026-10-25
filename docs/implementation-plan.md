@@ -1,5 +1,9 @@
 # Accepted implementation plan: Idle Slayer Companion
 
+## Approved technical reporting
+
+The 2026-10-25 task authorizes comprehensive browser errors, diagnostic logs and performance traces in the self-hosted GlitchTip project `garrod-house/idle-slayer-companion` at `reports.garrod.house`, independently of Umami usage controls. [reporting.md](reporting.md) defines collection, source maps, release/commit association, service retention and local verification. Existing progress, import, replay and game-data contracts remain in force. This implementation does not authorize a new site publication.
+
 ## Approved companion expansion
 
 The first combined release includes Overview, Ascension, achievements, crafting/materials, regular quests/Village, Bestiary, and all three Divinity families. It rebrands the application and prepares the `idle-slayer-companion` repository/Pages migration while preserving old storage, map backups/QRs, public references, and installed-app identity. Current native review covers 7.3.4 / build 25810322. [companion.md](companion.md) defines the implementation contract and [site-migration.md](site-migration.md) defines rollout gates.

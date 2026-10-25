@@ -1,5 +1,7 @@
 # Idle Slayer Companion
 
+Technical errors, diagnostic logs and performance traces use self-hosted GlitchTip at reports.garrod.house. See [reporting setup, source maps and Windows verification](docs/reporting.md). Usage analytics and recording remain in Umami.
+
 An unofficial, static utility for **Idle Slayer 7.3.4 / Steam build 25810322**. It combines the reviewed Ascension Map with achievements, crafting and materials, regular quests and Village, Bestiary, and normal, Dark, and Elemental Divinities.
 
 The map has **288 upgrades / 318 connections**. The companion catalog adds **1,293 entries** and **1,205 reviewed icons**. The game remains authoritative. Unsupported native predicates are marked unknown and do not reveal content by default.

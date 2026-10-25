@@ -304,6 +304,84 @@
           "sha256": "c1e6e266563517467b1bf874817d23e426f3149252bd7d42758cd697514b8417"
         }
       ]
+    },
+    {
+      "name": "@sentry/react",
+      "version": "11.9.0",
+      "license": "MIT",
+      "inclusion": "module",
+      "notices": [
+        {
+          "source": "LICENSE",
+          "file": "sentry-react-MIT.txt",
+          "sha256": "f3df0b92efcd9d8cc0de5a36c151569a12a647d65b851abbb696ef7b13dee10b"
+        }
+      ]
+    },
+    {
+      "name": "@sentry/browser",
+      "version": "11.9.0",
+      "license": "MIT",
+      "inclusion": "module",
+      "notices": [
+        {
+          "source": "LICENSE",
+          "file": "sentry-browser-MIT.txt",
+          "sha256": "f3df0b92efcd9d8cc0de5a36c151569a12a647d65b851abbb696ef7b13dee10b"
+        }
+      ]
+    },
+    {
+      "name": "@sentry/browser-utils",
+      "version": "11.9.0",
+      "license": "MIT",
+      "inclusion": "module",
+      "notices": [
+        {
+          "source": "LICENSE",
+          "file": "sentry-browser-utils-MIT.txt",
+          "sha256": "9d45329f27eee77d23ab9b4a62cea6247e3e7402cf5bb04d77b9279f2c1e1be3"
+        }
+      ]
+    },
+    {
+      "name": "@sentry/core",
+      "version": "11.9.0",
+      "license": "MIT",
+      "inclusion": "module",
+      "notices": [
+        {
+          "source": "LICENSE",
+          "file": "sentry-core-MIT.txt",
+          "sha256": "f3df0b92efcd9d8cc0de5a36c151569a12a647d65b851abbb696ef7b13dee10b"
+        }
+      ]
+    },
+    {
+      "name": "@sentry/conventions",
+      "version": "0.27.0",
+      "license": "MIT",
+      "inclusion": "module",
+      "notices": [
+        {
+          "source": "LICENSE",
+          "file": "sentry-conventions-MIT.txt",
+          "sha256": "6c459083310e285797954222cc75bb33a56c04512d4f07c8b1b80258f99b0278"
+        }
+      ]
+    },
+    {
+      "name": "web-vitals",
+      "version": "6.2.3",
+      "license": "Apache-2.0",
+      "inclusion": "module",
+      "notices": [
+        {
+          "source": "LICENSE",
+          "file": "web-vitals-Apache.txt",
+          "sha256": "bfdeded4040e05da31ca9b6239dc83bd23fa26ac8db87342a7ca4363f68916ff"
+        }
+      ]
     }
   ]
 }

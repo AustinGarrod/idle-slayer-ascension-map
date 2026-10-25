@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createCheckpointSession } from './domain/checkpoint-session'
 import { CHECKPOINT_STORAGE_KEY } from './domain/checkpoints'
+import { diagnosticStorage } from './reporting-storage'
 
 export function useCheckpointSession(revision: string) {
-  const session = useMemo(() => createCheckpointSession({ revision, storage: () => window.localStorage, locks: () => window.navigator.locks, id: () => window.crypto.randomUUID() }), [revision])
+  const session = useMemo(() => createCheckpointSession({ revision, storage: diagnosticStorage('checkpoints'), locks: () => window.navigator.locks, id: () => window.crypto.randomUUID() }), [revision])
   const [state, setState] = useState(session.getState)
   useEffect(() => {
     const unsubscribe = session.subscribe(setState)

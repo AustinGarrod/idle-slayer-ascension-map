@@ -27,8 +27,8 @@ const modules = [
 describe('complete bundled runtime notices', () => {
   it('preserves every complete installed upstream notice and generates an index without local paths', () => {
     expect(() => validateNoticeSources(root, manifest)).not.toThrow()
-    expect(manifest.packages).toHaveLength(23)
-    expect(manifest.packages.reduce((count, item) => count + item.notices.length, 0)).toBe(24)
+    expect(manifest.packages).toHaveLength(29)
+    expect(manifest.packages.reduce((count, item) => count + item.notices.length, 0)).toBe(30)
     expect(renderNoticeIndex(manifest)).toBe(readFileSync('public/licenses/index.html', 'utf8'))
     expect(JSON.stringify(manifest)).not.toMatch(/node_modules|[A-Z]:\\|\/Users\/|\/home\//)
     expect(manifest.packages.find((item) => item.name === 'rolldown')?.notices.map((notice) => notice.source)).toContain('THIRD-PARTY-LICENSE')

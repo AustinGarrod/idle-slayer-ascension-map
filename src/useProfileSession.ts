@@ -3,6 +3,7 @@ import { CompanionProfileContext } from './CompanionRuntimeContext'
 import { createProfileSession } from './domain/profile-session'
 import type { ProfileSessionState } from './domain/profile-session'
 import { PROFILE_STORAGE_KEY } from './domain/storage'
+import { diagnosticStorage } from './reporting-storage'
 
 type SessionObservers = {
   onState: (state: ProfileSessionState) => void
@@ -18,7 +19,7 @@ export function useProfileSession(revision: string, observers: SessionObservers)
   const providedSession = useContext(CompanionProfileContext)
   const session = useMemo(() => providedSession ?? createProfileSession({
     revision,
-    storage: () => window.localStorage,
+    storage: diagnosticStorage('legacy-map'),
     locks: () => window.navigator.locks,
   }), [revision, providedSession])
   const [state, setState] = useState(session.getState)

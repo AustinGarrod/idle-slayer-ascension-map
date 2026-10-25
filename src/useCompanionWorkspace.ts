@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useSyncExternalStore } from 'react'
 import { createCompanionWorkspaceSession, COMPANION_WORKSPACE_KEY, type CompanionWorkspace } from './domain/companion-workspace'
 import { GOALS_STORAGE_KEY } from './domain/goals'
+import { diagnosticStorage } from './reporting-storage'
 export { COMPANION_WORKSPACE_KEY, parseCompanionWorkspace } from './domain/companion-workspace'
 export type { CompanionGoal, CompanionWorkspace, CompanionWorkspaceReview } from './domain/companion-workspace'
 
 /** Intentions stay outside actual progress and its Undo history. */
 export function useCompanionWorkspace() {
-  const session = useMemo(() => createCompanionWorkspaceSession({ storage: () => localStorage, locks: () => navigator.locks }), [])
+  const session = useMemo(() => createCompanionWorkspaceSession({ storage: diagnosticStorage('intentions'), locks: () => navigator.locks }), [])
   const state = useSyncExternalStore(session.subscribe, session.getState)
   useEffect(() => {
     session.initialize()

@@ -30,6 +30,7 @@ import { getUpgradeReference, subscribeUpgradeReference } from './upgrade-refere
 import { sectionAtPath, sectionPath } from './domain/companion-navigation'
 import { ProgressComparison } from './ProgressComparison'
 import { SPCost } from './SPCost'
+import { reportFailure, reportingState, reportingAction, Sentry } from './reporting'
 
 type LoadedCatalogs = { map: Catalog | null; companion: CompanionCatalog | null }
 type Panel = 'import' | 'backup' | 'settings' | 'help' | 'install' | 'reset' | 'correction' | null
@@ -56,7 +57,17 @@ export default function App({ transferInbox, initialMapIntent = false }: { trans
     const controller = new AbortController()
     async function load<T>(file: string, validate: (value: unknown) => string[]) {
       let failure: 'network' | 'validation' = 'network'
-      try { const response = await fetch(`${import.meta.env.BASE_URL}${file}`, { signal: controller.signal }); if (!response.ok) throw new Error(); failure = 'validation'; const value: unknown = await response.json(); if (validate(value).length) throw new Error(); return value as T } catch { if (!controller.signal.aborted) trackEvent('catalog_error', { reason: failure }); return null }
+      return Sentry.startSpan({ name: `catalog.load ${file}`, op: 'catalog.load' }, async () => {
+        try {
+          const response = await fetch(`${import.meta.env.BASE_URL}${file}`, { signal: controller.signal })
+          if (!response.ok) throw new Error(`Catalog HTTP ${response.status} ${response.statusText}`)
+          failure = 'validation'
+          const value: unknown = await response.json(), errors = validate(value)
+          if (errors.length) throw new Error(`Catalog validation: ${errors.join('; ')}`)
+          reportingAction('catalog.loaded', { file })
+          return value as T
+        } catch (error) { if (!controller.signal.aborted) { reportFailure(error, 'catalog.load', { file, phase: failure, online: navigator.onLine }); trackEvent('catalog_error', { reason: failure }) }; return null }
+      })
     }
     void Promise.all([load<Catalog>('catalog.json', (value) => catalogErrors(value as Catalog)), load<CompanionCatalog>('companion-catalog.json', companionCatalogErrors)])
       .then(([map, companion]) => { if (!controller.signal.aborted) setCatalogs({ map, companion }) })
@@ -69,8 +80,12 @@ export default function App({ transferInbox, initialMapIntent = false }: { trans
 function Companion({ catalogs, transferInbox, initialMapIntent }: { catalogs: LoadedCatalogs; transferInbox: ProgressTransferInbox; initialMapIntent: boolean }) {
   const { map, companion } = catalogs
   const revision = map?.revision ?? companion?.revision ?? 'unavailable'
-  const session = useMemo(() => createCompanionSession({ revision, storage: () => localStorage, locks: () => navigator.locks, mapCatalog: map ?? undefined, companionCatalog: companion ?? undefined, mapMilestoneIds: map?.milestones.map((item) => item.id), companionItemIds: companion?.entities.filter((entity) => entity.system === 'craft' || entity.system === 'village').map((entity) => entity.id) }), [revision, map, companion])
+  const session = useMemo(() => createCompanionSession({ onFailure: reportFailure, revision, storage: () => localStorage, locks: () => navigator.locks, mapCatalog: map ?? undefined, companionCatalog: companion ?? undefined, mapMilestoneIds: map?.milestones.map((item) => item.id), companionItemIds: companion?.entities.filter((entity) => entity.system === 'craft' || entity.system === 'village').map((entity) => entity.id) }), [revision, map, companion])
   const state = useSyncExternalStore(session.subscribe, session.getState)
+  useEffect(() => {
+    reportingState({ revision, persistence: state.persistence, dirty: state.dirty, pending: state.pending, conflict: state.conflict?.kind, errorKind: state.errorKind })
+    if (state.error) reportFailure(new Error(state.error), 'progress.persistence', { kind: state.errorKind, persistence: state.persistence })
+  }, [revision, state.persistence, state.error, state.errorKind, state.dirty, state.pending, state.conflict?.kind])
   const workspace = useCompanionWorkspace()
   const [section, setSection] = useState<CompanionSection>(() => initialMapIntent || transferInbox.getKind?.() === 'transfer' ? 'ascension' : sectionAtPath(location.pathname, import.meta.env.BASE_URL) ?? 'overview')
   useEffect(() => { if (initialMapIntent || transferInbox.getKind?.() === 'transfer') { try { history.replaceState(history.state, '', sectionPath('ascension', import.meta.env.BASE_URL) + (location.hash === '#analytics=off' ? '#analytics=off' : '')) } catch { /* The incoming-link reader preserves its bounded cleanup error and keeps tracking off. */ } } }, [initialMapIntent, transferInbox])
@@ -109,6 +124,7 @@ function Companion({ catalogs, transferInbox, initialMapIntent }: { catalogs: Lo
   const previewBefore = preview?.kind === 'local-recovery' && state.conflict?.kind === 'valid' ? state.conflict.progress : state.progress
   const resetTree = map && preview?.kind === 'reset' ? planUltraAscension(map, state.profile) : null
   function navigate(next: CompanionSection, ref?: CompanionEntityRef) {
+    reportingAction('navigation', { section: next })
     if (!cancelRepair()) return
     if (panel === 'import') trackEvent('game_import_cancelled')
     setPanel(null); setMapAction(null); setPreview(null); setWorkspaceReview(null); setWorkspaceRestore(null); setReloadAction(null); request.current++; setBusy(false); setSection(next)
@@ -143,8 +159,9 @@ function Companion({ catalogs, transferInbox, initialMapIntent }: { catalogs: Lo
     } else session.command(current.version, () => result.progress, 'companion_record')
   }
   function exportProgress() {
+    reportingAction('progress.export.start')
     const result = exportCompanionBackup(session.getState().progress)
-    if (!result.ok) { setFeedback(result.error.message); return false }
+    if (!result.ok) { reportFailure(new Error(result.error.message), 'progress.export', { kind: result.error.kind }); setFeedback(result.error.message); return false }
     download(result.value, `idle-slayer-companion-${new Date().toISOString().replace(/[:.]/g, '-')}.json`); setFeedback('Companion progress backup exported.'); return true
   }
   function exportChangedLegacy() {
@@ -197,6 +214,7 @@ function Companion({ catalogs, transferInbox, initialMapIntent }: { catalogs: Lo
     finally { if (ticket === request.current) setBusy(false) }
   }
   async function readFile(file: File, kind: 'save' | 'backup') {
+    reportingAction('progress.import.start', { kind, bytes: file.size })
     const ticket = ++request.current, version = session.getState().version
     setBusy(true); setPreview(null); setWorkspaceRestore(null); setWorkspaceReview(null); setFeedback('')
     try {
@@ -205,12 +223,12 @@ function Companion({ catalogs, transferInbox, initialMapIntent }: { catalogs: Lo
         ? map && companion ? importCompanionGameSave(map, companion, session.getState().progress, new Uint8Array(await file.arrayBuffer())) : { ok: false as const, error: 'Both reviewed catalogs are required to import a game save.' }
         : parseCompanionBackup(await file.text(), revision)
       if (ticket !== request.current || version !== session.getState().version) { if (ticket === request.current) setFeedback('Progress changed while reading the file. Choose it again for a fresh preview.'); return }
-      if (!result.ok) { setFeedback(typeof result.error === 'string' ? result.error : result.error.message); if (kind === 'save') trackEvent('game_import_error', { reason: 'validation' }); return }
+      if (!result.ok) { const message = typeof result.error === 'string' ? result.error : result.error.message; reportFailure(new Error(message), 'progress.import.validation', { kind, bytes: file.size }); setFeedback(message); if (kind === 'save') trackEvent('game_import_error', { reason: 'validation' }); return }
       const candidate = 'progress' in result ? result.progress : result.value
       candidate.ascension.showSpoilers = session.getState().profile.showSpoilers
       setPreview({ progress: candidate, version, kind, warnings: 'warnings' in result ? result.warnings : [] })
       if (kind === 'save') trackEvent('game_import_previewed')
-    } catch { if (ticket === request.current) { setFeedback(file.size > MAX_GAME_SAVE_BYTES ? 'This file exceeds the 4 MiB import limit. Progress was kept.' : 'This file could not be read. Progress was kept.'); if (kind === 'save') trackEvent('game_import_error', { reason: file.size > MAX_GAME_SAVE_BYTES ? 'size' : 'read' }) } }
+    } catch (error) { reportFailure(error, 'progress.import', { kind, bytes: file.size }); if (ticket === request.current) { setFeedback(file.size > MAX_GAME_SAVE_BYTES ? 'This file exceeds the 4 MiB import limit. Progress was kept.' : 'This file could not be read. Progress was kept.'); if (kind === 'save') trackEvent('game_import_error', { reason: file.size > MAX_GAME_SAVE_BYTES ? 'size' : 'read' }) } }
     finally { if (ticket === request.current) setBusy(false) }
   }
   function startReset() {

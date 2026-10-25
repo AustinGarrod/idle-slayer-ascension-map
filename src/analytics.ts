@@ -1,3 +1,4 @@
+import { reportingAction } from './reporting'
 /** Bounded, optional Umami integration. Progress persistence never depends on telemetry. */
 import { isAnalyticsEventName, isAnalyticsLayout, sanitizeAnalyticsProperties } from './analytics-contract'
 import type { AnalyticsEventName, AnalyticsLayout, AnalyticsTrackEvent } from './analytics-contract'
@@ -386,6 +387,6 @@ function controller() {
 }
 export const initializeAnalytics = () => controller().initializeAnalytics()
 export const updateAnalyticsContext = (context: AnalyticsContext) => controller().updateAnalyticsContext(context)
-export const trackEvent: AnalyticsTrackEvent = (name, properties) => controller().trackEvent(name, properties)
+export const trackEvent: AnalyticsTrackEvent = (name, properties) => { reportingAction(name, properties as Record<string, string | number | boolean>); controller().trackEvent(name, properties) }
 export const getTrackingStatus = () => controller().getTrackingStatus()
 export const setTrackingPreference = (enabled: boolean) => controller().setTrackingPreference(enabled)

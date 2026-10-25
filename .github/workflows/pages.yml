@@ -28,6 +28,11 @@ jobs:
       - run: node .yarn/releases/yarn-4.13.0.cjs test:tools
       - run: node .yarn/releases/yarn-4.13.0.cjs build
       - run: node .yarn/releases/yarn-4.13.0.cjs check:release
+      - name: Upload GlitchTip release and source maps before publication
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.GLITCHTIP_AUTH_TOKEN }}
+        run: node scripts/upload-reporting.mjs
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: companion-build

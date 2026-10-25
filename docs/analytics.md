@@ -1,5 +1,7 @@
 # Umami analytics and operator guide
 
+The separately authorized [technical reporting integration](reporting.md) sends errors, diagnostic logs and performance traces to reports.garrod.house independently of this Umami preference. Statements below about tracking controls and allowed usage-analytics providers describe Umami; they do not disable technical reporting. No saves, backups or reference contents are attached to technical reports.
+
 ## Companion additions
 
 The canonical production base is now `/idle-slayer-companion/`. Only its exact root and six static section routes (including `index.html` aliases) are allowed by URL sanitization; arbitrary subpaths, query/hash values, private transfers and references keep the existing cleanup/suspension rules. No new analytics provider, player identity, module record, goal, recipe, counter, or event payload has been added.

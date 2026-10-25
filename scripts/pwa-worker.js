@@ -24,6 +24,12 @@ document.getElementById('repair').onclick=async()=>{
  }catch{note.textContent='Repair could not start. Reconnect and try again. Do not clear browser data if you want to keep saved progress.';}
 };
 </script></body></html>`;
+async function reportWorkerFailure(error, phase, url = '') {
+ try {
+  const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+  for (const client of windows) if (client.url.startsWith(self.registration.scope)) client.postMessage({ type: 'REPORTING_FAILURE', error, message: error instanceof Error ? error.message : String(error), phase, url, version: RELEASE.version });
+ } catch { /* Reporting cannot break offline recovery. */ }
+}
 async function sha256(bytes) {
   return [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
@@ -34,10 +40,10 @@ self.addEventListener('install', (event) => {
       // A failed or racing deployment cannot publish a partly populated cache.
       for (const [url, asset] of allowed) {
         const response = await fetch(url, { cache: 'no-store', credentials: 'omit', redirect: 'error' });
-        if (!response.ok || response.type === 'opaque' || await sha256(await response.clone().arrayBuffer()) !== asset.sha256) throw new Error('Incomplete release');
+        if (!response.ok || response.type === 'opaque' || await sha256(await response.clone().arrayBuffer()) !== asset.sha256) throw new Error('Incomplete release: ' + asset.file + ' HTTP ' + response.status);
         await cache.put(url, response);
       }
-    } catch (error) { await caches.delete(cacheName); throw error; }
+    } catch (error) { await reportWorkerFailure(error, 'install'); await caches.delete(cacheName); throw error; }
   })());
 });
 self.addEventListener('activate', (event) => {
@@ -73,6 +79,7 @@ self.addEventListener('fetch', (event) => {
   event.respondWith((async () => {
     const cached = await (await caches.open(cacheName)).match(key);
     if (cached) return cached;
+    await reportWorkerFailure(new Error('Cached app file missing'), 'cache-miss', key);
     // Do not fetch newer bytes into an older running release after eviction.
     if (navigation) return new Response(recoveryHTML, { status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
     return new Response('This app file is unavailable. Reconnect and reopen your companion.', { status: 503 });

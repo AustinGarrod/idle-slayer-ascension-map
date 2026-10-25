@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createComparisonSession } from './domain/comparison-session'
+import { diagnosticStorage } from './reporting-storage'
 import { COMPARISON_STORAGE_KEY } from './domain/saved-comparison'
 
 export function useComparisonSession() {
-  const session = useMemo(() => createComparisonSession({ storage: () => window.localStorage, locks: () => window.navigator.locks }), [])
+  const session = useMemo(() => createComparisonSession({ storage: diagnosticStorage('saved-comparison'), locks: () => window.navigator.locks }), [])
   const [state, setState] = useState(session.getState)
   useEffect(() => {
     const unsubscribe = session.subscribe(setState)

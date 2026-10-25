@@ -1,5 +1,7 @@
 # Architecture and progress contract
 
+[Technical reporting](reporting.md) lives in browser adapters and startup, outside game rules and persisted documents. GlitchTip uses release-bound source maps and the existing Pages pipeline; no application backend is added.
+
 ## Companion release contract
 
 The application is now **Idle Slayer Companion**. [companion.md](companion.md) defines the canonical cross-system progress envelope, separate intentions workspace, shared ownership, guarded legacy migration, tri-state rules, whole-snapshot import/Undo, and actual reset behavior. The Ascension sections below remain the tree-specific contracts. Tree checkpoints, comparisons, route plans, and hypothetical UA plans have not become full companion snapshots.

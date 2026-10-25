@@ -6,6 +6,9 @@ import { initializeAnalytics } from './analytics'
 import { createProgressTransferInbox } from './progress-transfer-inbox'
 import { initializeUpgradeReferences } from './upgrade-reference-receiver'
 import { initializePwa } from './pwa'
+import { initializeReporting, Sentry } from './reporting'
+
+initializeReporting()
 
 const initialMapIntent = window.location.hash.startsWith('#transfer=') || window.location.hash.startsWith('#upgrade=')
 const transferInbox = createProgressTransferInbox(window)
@@ -14,8 +17,14 @@ if (transferInbox.trackingSafe) initializeAnalytics()
 references.cleanAddress()
 initializePwa()
 
-createRoot(document.getElementById('root')!).render(
+createRoot(document.getElementById('root')!, {
+  onUncaughtError: Sentry.reactErrorHandler(),
+  onCaughtError: Sentry.reactErrorHandler(),
+  onRecoverableError: Sentry.reactErrorHandler(),
+}).render(
   <StrictMode>
-    <App transferInbox={transferInbox} initialMapIntent={initialMapIntent} />
+    <Sentry.ErrorBoundary fallback={<main className="loading"><h1>Companion could not render</h1><p>Reload to retry. Saved progress remains in this browser.</p></main>}>
+      <App transferInbox={transferInbox} initialMapIntent={initialMapIntent} />
+    </Sentry.ErrorBoundary>
   </StrictMode>,
 )

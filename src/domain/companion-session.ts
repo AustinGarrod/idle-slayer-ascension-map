@@ -24,7 +24,7 @@ type StorageAccess = Pick<Storage, 'getItem' | 'setItem'>
 const sameBaseline = (first: Baseline, second: Baseline) => first.companionText === second.companionText && first.legacyText === second.legacyText
 
 /** One coordinated envelope, one bounded history, and a read-only legacy migration boundary. */
-export function createCompanionSession(options: { revision: string; storage: () => StorageAccess; locks: () => ProfileLocks | undefined; mapMilestoneIds?: readonly string[]; companionItemIds?: readonly string[]; mapCatalog?: Catalog; companionCatalog?: CompanionCatalog }) {
+export function createCompanionSession(options: { onFailure?: (error: unknown, operation: string) => void; revision: string; storage: () => StorageAccess; locks: () => ProfileLocks | undefined; mapMilestoneIds?: readonly string[]; companionItemIds?: readonly string[]; mapCatalog?: Catalog; companionCatalog?: CompanionCatalog }) {
   let baseline: Baseline | undefined
   let persisted: CompanionProgress | undefined
   let initialized = false, adoptedCompanion = false, operation = 0
@@ -40,6 +40,7 @@ export function createCompanionSession(options: { revision: string; storage: () 
     projected.set(profile, result)
     return result
   }
+  const failure = (cause: unknown, operation: string) => { try { options.onFailure?.(cause, operation) } catch { /* Diagnostics cannot change persistence. */ } }
   let state: CompanionSessionState = { progress: initial, profile: initial.ascension, history: [], redoHistory: [], version: 0, externalVersion: 0, pending: false, dirty: false, persistence: 'loading', writable: false, error: '', conflict: null }
   const listeners = new Set<(state: CompanionSessionState) => void>()
   function emit() {
@@ -52,7 +53,7 @@ export function createCompanionSession(options: { revision: string; storage: () 
   function error(message: string, errorKind: CompanionSessionState['errorKind']) { state = { ...state, error: message, errorKind }; emit() }
   function read(): CompanionStoredSnapshot {
     let pair: Baseline
-    try { const storage = options.storage(); pair = { companionText: storage.getItem(COMPANION_STORAGE_KEY), legacyText: storage.getItem(PROFILE_STORAGE_KEY) } } catch {
+    try { const storage = options.storage(); pair = { companionText: storage.getItem(COMPANION_STORAGE_KEY), legacyText: storage.getItem(PROFILE_STORAGE_KEY) } } catch (cause) { failure(cause, 'storage.read')
       return { kind: 'unavailable', error: 'Saved Companion progress could not be read. Current progress remains available in this session.', errorKind: 'storage-read' }
     }
     if (pair.companionText !== null) {
@@ -120,7 +121,7 @@ export function createCompanionSession(options: { revision: string; storage: () 
     const backup = exportCompanionStored({ progress: state.progress, legacyBaseline: expected.legacyText })
     if (!backup.ok) { error(backup.error.message, backup.error.kind); return false }
     let locks: ProfileLocks | undefined
-    try { locks = options.locks() } catch { /* Safe in-memory progress remains available. */ }
+    try { locks = options.locks() } catch (cause) { failure(cause, 'storage.lock'); /* Safe in-memory progress remains available. */ }
     if (!locks) { error('Safe saving is unavailable in this browser. Current Companion progress remains available in this session; export a backup to keep it.', 'unavailable'); return false }
     const ticket = ++operation, version = state.version, progress = state.progress
     state = { ...state, pending: true }; emit()
@@ -131,14 +132,14 @@ export function createCompanionSession(options: { revision: string; storage: () 
         if (!lock) { error('Another tab is saving progress. Retry saving or export a Companion backup.', 'unavailable'); return false }
         const current = read()
         if (current.kind === 'unavailable' || !sameBaseline(current, expected)) { observe(current); return false }
-        try { options.storage().setItem(COMPANION_STORAGE_KEY, backup.value) } catch {
+        try { options.storage().setItem(COMPANION_STORAGE_KEY, backup.value) } catch (cause) { failure(cause, 'storage.write')
           error('Companion progress could not be saved on this device. Current progress remains available in this session; export a backup to keep it.', 'storage-write'); return false
         }
         adoptedCompanion = true
         baseline = { companionText: backup.value, legacyText: expected.legacyText }; persisted = progress
         state = { ...state, conflict: null, writable: true, error: '', errorKind: undefined }; emit(); return true
       })
-    } catch {
+    } catch (cause) { failure(cause, 'storage.lock-request')
       if (ticket === operation) error('Safe saving is unavailable in this browser. Current Companion progress remains available in this session; export a backup to keep it.', 'unavailable')
       return false
     } finally { if (ticket === operation) { state = { ...state, pending: false }; emit() } }
