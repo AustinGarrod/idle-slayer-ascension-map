@@ -1,5 +1,10 @@
 # Idle Slayer Companion
 
+> **Moved to AustinGarrod.ca.** The maintained application and source now live in the [AustinGarrod.ca website repository](https://github.com/AustinGarrod/austingarrod-ca/tree/main/apps/idle-slayer-companion). [Open Idle Slayer Companion](https://austingarrod.ca/utilities/idle-slayer-companion/).
+>
+> This repository is retained as historical source. The [old GitHub Pages copy](https://austingarrod.github.io/idle-slayer-companion/) remains available for backup and recovery. Browser progress does not transfer automatically: export Companion progress, intentions, checkpoints, and saved comparison separately, then restore them in that order on the new site. Keep the old files and browser data until you have verified the result.
+
+
 Technical errors, diagnostic logs and performance traces use self-hosted GlitchTip at reports.garrod.house. See [reporting setup, source maps and Windows verification](docs/reporting.md). Usage analytics and recording remain in Umami.
 
 An unofficial, static utility for **Idle Slayer 7.3.4 / Steam build 25810322**. It combines the reviewed Ascension Map with achievements, crafting and materials, regular quests and Village, Bestiary, and normal, Dark, and Elemental Divinities.
